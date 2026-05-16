@@ -1,0 +1,130 @@
+name: CI/CD – ATD Helpdesk
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Build & test the React frontend
+  frontend:
+    name: Frontend Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload dist artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+          retention-days: 7
+
+  # ── Lint & test the Node.js backend
+  backend:
+    name: Backend Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: atd_helpdesk_test
+          POSTGRES_USER: atd_user
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run migrations
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: atd_helpdesk_test
+          DB_USER: atd_user
+          DB_PASSWORD: test_password
+          JWT_SECRET: ci_test_secret_not_for_production
+        run: node src/db/migrate.js
+
+  # ── Deploy (runs only on push to main, not PRs)
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    needs: [frontend, backend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download frontend dist
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -e
+            cd /var/www/atd-helpdesk
+
+            # Pull latest code
+            git pull origin main
+
+            # Install/update backend dependencies
+            cd backend && npm ci --omit=dev && cd ..
+
+            # Build frontend on server (alternatively rsync the dist artifact)
+            cd frontend && npm ci && npm run build && cd ..
+
+            # Copy built files to PHP web root
+            rsync -av --delete frontend/dist/ /var/www/html/portal/dist/
+            cp proxy.php /var/www/html/portal/
+            cp .htaccess /var/www/html/portal/
+
+            # Restart Node.js via PM2
+            pm2 reload atd-helpdesk-api || pm2 start backend/src/server.js --name atd-helpdesk-api
+
+            echo "Deployment complete ✅"

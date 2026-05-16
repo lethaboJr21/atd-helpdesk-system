@@ -1,0 +1,22 @@
+Options -Indexes
+RewriteEngine On
+
+# Security headers
+Header always set X-Content-Type-Options "nosniff"
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-XSS-Protection "1; mode=block"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+# Cache static assets aggressively
+<FilesMatch "\.(js|css|svg|png|ico|woff2|woff)$">
+    Header set Cache-Control "public, max-age=31536000, immutable"
+</FilesMatch>
+
+# Route everything through proxy.php
+# (PHP server acts as the router for both API calls and React SPA)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ proxy.php [L,QSA]
+
+# If proxy.php is missing, show a helpful error
+ErrorDocument 404 /proxy.php
