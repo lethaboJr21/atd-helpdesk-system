@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { productionApi, logsApi } from "../services/api";
+import { useCallback, useEffect, useState } from "react";
+import { io } from "socket.io-client";
+import { productionApi, logsApi, notificationApi } from "../services/api";
 import ProductionForm from "../components/ProductionForm";
 import ProductionChart from "../components/ProductionChart";
 
@@ -7,16 +8,62 @@ export default function ProductionDashboard() {
   const [data, setData] = useState([]);
   const [logs, setLogs] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
+  const [notifications, setNotifications] = useState([]);
 
-  const fetchData = async () => {
-    const prod = await productionApi.getAll();
-    const logData = await logsApi.getAll();
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
-    setData(prod.data);
-    setLogs(logData.data);
-    setLastUpdated(new Date());
-  };
+  const fetchData = useCallback(async () => {
+    try {
+      const prod = await productionApi.getAll();
+      const logData = await logsApi.getAll();
+      const notifData = await notificationApi.getAll();
 
+      setData(prod.data);
+      setLogs(logData.data);
+      setLastUpdated(new Date());
+
+      setNotifications(
+        notifData.data.map((n) => ({
+          ...n,
+          isRead: true,
+        }))
+      );
+    } catch (error) {
+      console.error("Failed to fetch production dashboard data:", error);
+    }
+  }, []);
+
+  const chartData = data.map((d) => ({
+    time: new Date(d.created_at).toLocaleTimeString(),
+    oee: Number(d.oee),
+    scrap: Number(d.scrap),
+  }));
+
+  // Real-time updates with Socket.IO
+  useEffect(() => {
+    const socket = io("http://localhost:3001");
+
+    socket.on("new-log", ({ notification }) => {
+      fetchData();
+
+      if (notification) {
+        setNotifications((prev) => [
+          {
+            id: Date.now(),
+            ...notification,
+            isRead: false,
+          },
+          ...prev.slice(0, 19),
+        ]);
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [fetchData]);
+
+  // Initial fetch + auto-refresh every 10 seconds
   useEffect(() => {
     fetchData();
 
@@ -25,11 +72,13 @@ export default function ProductionDashboard() {
     }, 10000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchData]);
 
   const avgOEE =
     data.length > 0
-      ? (data.reduce((sum, d) => sum + d.oee, 0) / data.length).toFixed(2)
+      ? (
+          data.reduce((sum, d) => sum + Number(d.oee || 0), 0) / data.length
+        ).toFixed(2)
       : 0;
 
   const exportToCSV = () => {
@@ -49,9 +98,7 @@ export default function ProductionDashboard() {
 
     const csvContent =
       "data:text/csv;charset=utf-8," +
-      [headers, ...rows]
-        .map((row) => row.join(","))
-        .join("\n");
+      [headers, ...rows].map((row) => row.join(",")).join("\n");
 
     const encodedUri = encodeURI(csvContent);
 
@@ -68,7 +115,35 @@ export default function ProductionDashboard() {
     <div className="p-6">
       <h1 className="text-2xl font-bold mb-2">Production Dashboard</h1>
 
-      {/* ✅ Last Updated */}
+      <div className="mb-4">
+        <div className="flex items-center gap-3 mb-2">
+          <h2 className="font-bold">Notifications</h2>
+
+          {unreadCount > 0 && (
+            <span className="bg-red-500 text-white text-xs rounded-full px-2 py-1">
+              {unreadCount}
+            </span>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          {notifications.map((n) => (
+            <div
+              key={n.id}
+              className={`p-2 rounded text-sm ${
+                n.type === "critical"
+                  ? "bg-red-100 border border-red-400"
+                  : n.type === "warning"
+                  ? "bg-yellow-100 border border-yellow-400"
+                  : "bg-green-100 border border-green-400"
+              } ${!n.isRead ? "ring-2 ring-blue-400" : ""}`}
+            >
+              {n.message}
+            </div>
+          ))}
+        </div>
+      </div>
+
       <p className="text-xs text-slate-500 mb-3">
         Last updated:{" "}
         {lastUpdated
@@ -80,7 +155,6 @@ export default function ProductionDashboard() {
           : "Never"}
       </p>
 
-      {/* ✅ Buttons */}
       <div className="flex gap-3 mb-4">
         <button
           onClick={fetchData}
@@ -97,10 +171,8 @@ export default function ProductionDashboard() {
         </button>
       </div>
 
-      {/* ✅ Form */}
       <ProductionForm onSuccess={fetchData} />
 
-      {/* KPI */}
       <div className="flex gap-4 mb-6">
         <div className="bg-green-100 p-4 rounded shadow">
           <p className="text-gray-600">Avg OEE</p>
@@ -120,10 +192,8 @@ export default function ProductionDashboard() {
         </div>
       </div>
 
-      {/* Chart */}
-      <ProductionChart data={data} />
+      <ProductionChart data={chartData} />
 
-      {/* Production Table */}
       <div className="bg-white p-4 shadow rounded mb-6">
         <h2 className="font-bold mb-2">Production Metrics</h2>
 
@@ -152,7 +222,6 @@ export default function ProductionDashboard() {
         </table>
       </div>
 
-      {/* Logs Table */}
       <div className="bg-white p-4 shadow rounded">
         <h2 className="font-bold mb-2">Production Logs</h2>
 
@@ -167,12 +236,12 @@ export default function ProductionDashboard() {
           </thead>
 
           <tbody>
-            {logs.map((l) => (
-              <tr key={l.id}>
-                <td>{l.hour}</td>
-                <td>{l.problem}</td>
-                <td>{l.ng_pcs}</td>
-                <td>{l.scrap_desc}</td>
+            {logs.map((log) => (
+              <tr key={log.id}>
+                <td>{log.hour}</td>
+                <td>{log.problem}</td>
+                <td>{log.ng_pcs}</td>
+                <td>{log.scrap_desc}</td>
               </tr>
             ))}
           </tbody>

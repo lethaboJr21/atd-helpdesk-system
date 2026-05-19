@@ -1,60 +1,101 @@
-require('dotenv').config()
-const express  = require('express')
-const cors     = require('cors')
-const helmet   = require('helmet')
-const rateLimit = require('express-rate-limit')
-const path     = require('path')
+require("dotenv").config();
 
-const authRoutes    = require('./routes/auth')
-const ticketRoutes  = require('./routes/tickets')
-const statsRoutes   = require('./routes/stats')
+const express = require("express");
+const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
+const path = require("path");
+const http = require("http");
+const { Server } = require("socket.io");
 
-const app  = express()
-const PORT = parseInt(process.env.PORT) || 3001
+const authRoutes = require("./routes/auth");
+const ticketRoutes = require("./routes/tickets");
+const statsRoutes = require("./routes/stats");
+const productionRoutes = require("./routes/production");
+const logRoutes = require("./routes/logs");
+const notificationRoutes = require("./routes/notifications");
 
-// ── Security headers
-app.use(helmet())
+const app = express();
+const PORT = parseInt(process.env.PORT, 10) || 3001;
 
-// ── CORS  (adjust CORS_ORIGIN in .env)
-app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
-  credentials: true,
-}))
+const server = http.createServer(app);
 
-// ── Body parsing
-app.use(express.json({ limit: '1mb' }))
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    credentials: true,
+  },
+});
 
-// ── Rate limiting (login endpoint especially)
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: { error: 'Too many login attempts' } })
-const apiLimiter   = rateLimit({ windowMs: 1  * 60 * 1000, max: 200 })
+app.set("io", io);
 
-app.use('/api/auth/login', loginLimiter)
-app.use('/api', apiLimiter)
+io.on("connection", (socket) => {
+  console.log("Socket connected:", socket.id);
 
-// ── API routes
-app.use('/api/auth',    authRoutes)
-app.use('/api/tickets', ticketRoutes)
-app.use('/api/stats',   statsRoutes)
+  socket.on("disconnect", () => {
+    console.log("Socket disconnected:", socket.id);
+  });
+});
 
-const productionRoutes = require('./routes/production');
-const logRoutes = require('./routes/logs');
+// Security headers
+app.use(helmet());
 
-app.use('/api/production', productionRoutes);
-app.use('/api/logs', logRoutes);
-// ── Health check (for PHP reverse proxy / uptime monitors)
-app.get('/api/health', (_req, res) => res.json({ status: 'ok', ts: new Date().toISOString() }))
+// CORS
+app.use(
+  cors({
+    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    credentials: true,
+  })
+);
 
-// ── Serve the compiled React frontend in production
-if (process.env.NODE_ENV === 'production') {
-  const distPath = path.join(__dirname, '../../frontend/dist')
-  app.use(express.static(distPath))
-  app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')))
+// Body parsing
+app.use(express.json({ limit: "1mb" }));
+
+// Rate limiting
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: "Too many login attempts" },
+});
+
+const apiLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 200,
+});
+
+app.use("/api/auth/login", loginLimiter);
+app.use("/api", apiLimiter);
+
+// API routes
+app.use("/api/auth", authRoutes);
+app.use("/api/tickets", ticketRoutes);
+app.use("/api/stats", statsRoutes);
+app.use("/api/production", productionRoutes);
+app.use("/api/logs", logRoutes);
+app.use("/api/notifications", notificationRoutes);
+
+// Health check
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
+    ts: new Date().toISOString(),
+  });
+});
+
+// Serve frontend in production
+if (process.env.NODE_ENV === "production") {
+  const distPath = path.join(__dirname, "../../frontend/dist");
+  app.use(express.static(distPath));
+
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(distPath, "index.html"));
+  });
 }
 
-// ── Start
-app.listen(PORT, '127.0.0.1', () => {
-  console.log(`✅  ATD Helpdesk API running on port ${PORT}`)
-  console.log(`   ENV: ${process.env.NODE_ENV || 'development'}`)
-})
+// Start
+server.listen(PORT, "127.0.0.1", () => {
+  console.log(`✅  ATD Helpdesk API running on port ${PORT}`);
+  console.log(`   ENV: ${process.env.NODE_ENV || "development"}`);
+});
 
-module.exports = app
+module.exports = app;

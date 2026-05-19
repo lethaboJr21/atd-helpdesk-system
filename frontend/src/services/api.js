@@ -23,6 +23,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem("token");
     }
+
     return Promise.reject(error);
   }
 );
@@ -58,6 +59,18 @@ export const productionApi = {
 export const logsApi = {
   getAll: () => api.get("/logs"),
   create: (data) => api.post("/logs", data),
+};
+
+export const notificationApi = {
+  getAll: () => api.get("/notifications"),
+  markRead: (id) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch("/notifications/read-all"),
+  clearAll: () => api.delete("/notifications/clear"),
+};
+
+export const userApi = {
+  getUsers: () => api.get("/auth/users"),
+  approveUser: (id, role) => api.put(`/auth/approve/${id}`, { role }),
 };
 
 export default api;

@@ -101,6 +101,14 @@ router.post("/signup", async (req, res) => {
     );
 
     const user = rows[0];
+    const { sendApprovalEmail } = require("../services/email");
+
+    await sendApprovalEmail({
+     id: user.id,
+     email: user.email,
+     name: user.name,
+    });
+
     const token = signToken(user);
 
     return res.status(201).json({
@@ -140,36 +148,43 @@ router.get("/me", auth, async (req, res) => {
 });
 
 // ✅ PUT /api/auth/approve/:id
-router.put("/approve/:id", auth, async (req, res) => {
-  const { role } = req.body;
 
-  // ✅ Only superadmin/admin can approve users
+router.put("/approve/:id", auth, async (req, res) => {
+  const role = req.body.role || req.query.role;
+
   if (!["superadmin", "admin"].includes(req.user.role)) {
     return res.status(403).json({ error: "Access denied" });
   }
 
+  const allowedRoles = ["operator", "manager", "admin", "superadmin"];
+
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({ error: "Invalid role" });
+  }
+
   try {
     const result = await pool.query(
-      `UPDATE users 
-       SET role = $1 
-       WHERE id = $2 
-       RETURNING id, name, email, role`,
+      `UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, role`,
       [role, req.params.id]
     );
 
-    if (!result.rows[0]) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    return res.json({
-      message: "User approved successfully",
+    res.json({
+      message: "User approved",
       user: result.rows[0],
     });
   } catch (err) {
-    console.error("Approval error:", err);
-    return res.status(500).json({ error: "Server error" });
+    console.error(err);
+    res.status(500).json({ error: "Approval failed" });
   }
 });
+
+// ✅ GET /api/auth/reject/:id
+router.get("/reject/:id", async (req, res) => {
+  await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
+  res.send("User rejected and removed");
+});
+
+
 module.exports = router;
 
 

@@ -9,19 +9,42 @@ const transporter = nodemailer.createTransport({
 });
 
 async function sendApprovalEmail(data) {
-  const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: "manager@company.com", // 🔥 replace dynamically later
-    subject: "Production Alert - Approval Needed",
-    html: `
-      <h3>Production Log Alert</h3>
-      <p><b>Hour:</b> ${data.hour}</p>
-      <p><b>Problem:</b> ${data.problem}</p>
-      <p><b>NG:</b> ${data.ng_pcs}</p>
-      <p><b>Scrap:</b> ${data.scrap_desc}</p>
-      <p>Please review this request.</p>
-    `,
-  };
+  
+const mailOptions = {
+  from: process.env.EMAIL_USER,
+  to: "jeffreym@atdalliance.co.za", // later make dynamic
+  subject: "New User Approval Required",
+  html: `
+    <h2>New User Registration</h2>
+    <p><b>Name:</b> ${data.name}</p>
+    <p><b>Email:</b> ${data.email}</p>
+
+    <p>Approve this user:</p>
+
+    <a href="http://localhost:3001/api/auth/approve/${data.id}?role=operator">
+      ✅ Approve as Operator
+    </a>
+
+    <br/><br/>
+
+    <a href="http://localhost:3001/api/auth/approve/${data.id}?role=manager">
+      📊 Approve as Manager
+    </a>
+
+    <br/><br/>
+
+    <a href="http://localhost:3001/api/auth/approve/${data.id}?role=admin">
+      👑 Approve as Admin
+    </a>
+
+    <br/><br/>
+
+    <a href="http://localhost:3001/api/auth/reject/${data.id}">
+      ❌ Reject User
+    </a>
+  `,
+};
+
 
   await transporter.sendMail(mailOptions);
 }

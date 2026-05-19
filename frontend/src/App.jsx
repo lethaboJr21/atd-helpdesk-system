@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
 import ProductionDashboard from "./pages/ProductionDashboard";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import AdminUsers from "./pages/AdminUsers";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -58,6 +59,12 @@ function AppRoutes() {
        <ProductionDashboard />
       } 
       />
+      <Route path="/admin/users"
+       element={
+       <AdminUsers />
+       } 
+       />
+
       <Route
         path="/"
         element={

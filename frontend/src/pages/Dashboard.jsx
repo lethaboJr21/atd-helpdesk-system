@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState,useEffect } from "react";
 import { motion } from "framer-motion";
-import { replace, useNavigate } from "react-router-dom";
+import { replace, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { Link } from "react-router-dom";
+import { notificationApi } from "../services/api";
+import { io } from "socket.io-client";
 import {
   Activity,
   AlertTriangle,
@@ -168,10 +169,6 @@ const knowledge = [
   "Factory-floor Wi-Fi escalation matrix",
 ];
 
-const handleLogout = async () => {
-  await logout();
-  navigate("/login", { replace: true });
-};
 function classNames(...items) {
   return items.filter(Boolean).join(" ");
 }
@@ -228,11 +225,60 @@ function StatCard({ title, value, delta, icon: Icon, accent, subtext }) {
 }
 
 export default function Dashboard() {
-  const navigate  = useNavigate();
+  // For navigation
+const navigate  = useNavigate();
+// For authentication context
 const { logout, user } = useAuth();
-  const [query, setQuery] = useState("");
-  const [category, setCategory] = useState("All");
-  const [selectedTicket, setSelectedTicket] = useState(tickets[0]);
+// For search filter
+const [query, setQuery] = useState("");
+// For category filter
+const [category, setCategory] = useState("All");
+// For ticket detail view
+const [selectedTicket, setSelectedTicket] = useState(tickets[0]);
+// ✅ Track last update time
+const [lastUpdated, setLastUpdated] = useState(null);
+//1. For notifications panel 2. ✅ Fetch notifications from API
+const [showNotifications, setShowNotifications] = useState(false);
+const [notifications, setNotifications] = useState([]);
+
+// ✅ Calculate unread notifications count
+const unreadCount = notifications.filter((n) => !n.isRead).length;
+// ✅ Fetch notifications from API
+useEffect(() => {
+  const fetchNotifications = async () => {
+    try {
+      const res = await notificationApi.getAll();
+      setNotifications(
+res.data.map((n) => ({
+    ...n,
+    isRead: true,
+  }))
+      );
+    } catch (err) {
+      console.error("Failed to fetch notifications", err);
+    }
+  };
+
+  fetchNotifications();
+}, []);
+
+// ✅ Real-time updates with Socket.IO
+useEffect(() => {
+  const socket = io("http://localhost:3001");
+
+  socket.on("new-log", ({ notification }) => {
+    setNotifications((prev) => [
+      {
+        id: Date.now(),
+        ...notification,
+        isRead: false,
+      },
+      ...prev.slice(0, 19),
+    ]);
+  });
+
+  return () => socket.disconnect(); 
+}, []);
 
   const handleLogout = async () => {
   await logout();
@@ -343,6 +389,63 @@ const { logout, user } = useAuth();
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 />
               </div>
+              
+              <div className="relative">
+  <button
+    onClick={handleOpenNotifications}
+    className="relative inline-flex items-center p-3 bg-white border rounded-2xl shadow-sm"
+  >
+    <Bell className="h-5 w-5" />
+
+    {unreadCount > 0 && (
+      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-2 rounded-full">
+        {unreadCount}
+      </span>
+    )}
+  </button>
+
+  {showNotifications && (
+    <div className="absolute right-0 mt-2 w-80 bg-white shadow-lg rounded-lg p-3 z-50">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="font-bold">Notifications</h3>
+
+        <button
+          onClick={handleClearNotifications}
+          className="text-xs font-semibold text-red-500 hover:text-red-700"
+        >
+          Clear all
+        </button>
+      </div>
+
+      <div className="space-y-2 max-h-60 overflow-y-auto">
+        {notifications.length === 0 ? (
+          <p className="text-sm text-slate-500">No notifications</p>
+        ) : (
+          notifications.map((n) => (
+            <div
+              key={n.id}
+              className={`p-2 rounded text-sm ${
+                n.type === "critical"
+                  ? "bg-red-100 border border-red-400"
+                  : n.type === "warning"
+                  ? "bg-yellow-100 border border-yellow-400"
+                  : "bg-green-100 border border-green-400"
+              } ${!n.is_read ? "ring-2 ring-blue-400" : ""}`}
+            >
+              <p>{n.message}</p>
+
+              {n.created_at && (
+                <p className="mt-1 text-xs text-slate-500">
+                  {new Date(n.created_at).toLocaleString()}
+                </p>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  )}
+</div>
 
               <button className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50">
                 <Bell className="h-4 w-4" />
@@ -355,6 +458,13 @@ const { logout, user } = useAuth();
                 Logout
               </button>
               
+               <Link
+                to="/admin/users"
+                className="inline-flex items-center gap-2 rounded-2xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-purple-700"
+              >
+                Manage Users
+              </Link>
+
               <div className="text-sm text-slate-600">
                 {user?.name || user?.email}
               </div>
