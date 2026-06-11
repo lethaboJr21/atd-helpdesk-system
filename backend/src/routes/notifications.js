@@ -2,87 +2,82 @@ const router = require("express").Router();
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 
-// GET /api/notifications
-router.get("/", auth, async (req, res) => {
+router.use(auth);
+
+// ✅ GET /api/notifications
+// Returns notifications visible to current user by user_id, role, or global notifications.
+router.get("/", async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT id, user_id, message, type, is_read, created_at
+      SELECT *
       FROM notifications
-      WHERE user_id = $1 OR user_id IS NULL
+      WHERE
+        user_id = $1
+        OR target_role = $2
+        OR target_role IS NULL
       ORDER BY created_at DESC
       LIMIT 50
       `,
-      [req.user.id]
+      [req.user.id, req.user.role]
     );
 
     return res.json(rows);
   } catch (err) {
     console.error("Fetch notifications error:", err);
-    return res.status(500).json({ error: "Failed to fetch notifications" });
+    return res.status(500).json({
+      error: "Failed to fetch notifications",
+    });
   }
 });
 
-// PATCH /api/notifications/:id/read
-router.patch("/:id/read", auth, async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `
-      UPDATE notifications
-      SET is_read = true
-      WHERE id = $1 AND (user_id = $2 OR user_id IS NULL)
-      RETURNING id, user_id, message, type, is_read, created_at
-      `,
-      [req.params.id, req.user.id]
-    );
-
-    if (!rows[0]) {
-      return res.status(404).json({ error: "Notification not found" });
-    }
-
-    return res.json(rows[0]);
-  } catch (err) {
-    console.error("Mark notification read error:", err);
-    return res.status(500).json({ error: "Failed to mark notification as read" });
-  }
-});
-
-// PATCH /api/notifications/read-all
-router.patch("/read-all", auth, async (req, res) => {
+// ✅ PATCH /api/notifications/read-all
+// Marks all visible notifications as read.
+router.patch("/read-all", async (req, res) => {
   try {
     await pool.query(
       `
       UPDATE notifications
       SET is_read = true
-      WHERE user_id = $1 OR user_id IS NULL
+      WHERE
+        user_id = $1
+        OR target_role = $2
+        OR target_role IS NULL
       `,
-      [req.user.id]
+      [req.user.id, req.user.role]
     );
 
     return res.json({ ok: true });
   } catch (err) {
-    console.error("Mark all notifications read error:", err);
-    return res.status(500).json({ error: "Failed to mark all notifications as read" });
+    console.error("Mark notifications read error:", err);
+    return res.status(500).json({
+      error: "Failed to mark notifications read",
+    });
   }
 });
 
-// DELETE /api/notifications/clear
-router.delete("/clear", auth, async (req, res) => {
+// ✅ DELETE /api/notifications/clear
+// Clears all visible notifications.
+router.delete("/clear", async (req, res) => {
   try {
     await pool.query(
       `
       DELETE FROM notifications
-      WHERE user_id = $1 OR user_id IS NULL
+      WHERE
+        user_id = $1
+        OR target_role = $2
+        OR target_role IS NULL
       `,
-      [req.user.id]
+      [req.user.id, req.user.role]
     );
 
     return res.json({ ok: true });
   } catch (err) {
     console.error("Clear notifications error:", err);
-    return res.status(500).json({ error: "Failed to clear notifications" });
+    return res.status(500).json({
+      error: "Failed to clear notifications",
+    });
   }
 });
 
 module.exports = router;
-``

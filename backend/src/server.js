@@ -1,5 +1,5 @@
 require("dotenv").config();
-
+const pool = require("./db/pool");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -14,6 +14,8 @@ const statsRoutes = require("./routes/stats");
 const productionRoutes = require("./routes/production");
 const logRoutes = require("./routes/logs");
 const notificationRoutes = require("./routes/notifications");
+const groupRoutes = require("./routes/groups");
+const azureRoutes = require("./routes/azure");
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 3001;
@@ -73,12 +75,55 @@ app.use("/api/stats", statsRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/logs", logRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/groups", groupRoutes);
+app.use("/api/azure", azureRoutes);
+
+// Additional endpoints
+app.get("/api/assets", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM asset_health");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Assets fetch error:", err.message);
+    res.status(500).json({ error: "Failed to fetch assets" });
+  }
+});
+//
+app.get("/api/notifications", async (req, res) => {
+  const result = await pool.query(
+    "SELECT * FROM notifications ORDER BY created_at DESC"
+  );
+  res.json(result.rows);
+});
+
+app.get("/api/knowledge", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM knowledge_base");
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Knowledge fetch error:", err.message);
+    res.status(500).json({ error: "Failed to fetch knowledge" });
+  }
+});
+
+// API status
+app.get("/api", (_req, res) => {
+  res.json({
+    ok: true,
+    message: "ATD Helpdesk API is running",
+    environment: process.env.NODE_ENV || "development",
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Health check
 app.get("/api/health", (_req, res) => {
   res.json({
-    status: "ok",
-    ts: new Date().toISOString(),
+    ok: true,
+    service: "ATD Helpdesk API",
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+
   });
 });
 

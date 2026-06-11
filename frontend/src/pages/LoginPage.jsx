@@ -16,25 +16,33 @@ export default function LoginPage() {
     return <Navigate to="/" replace />;
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError("");
     setSubmitting(true);
 
     try {
       await login(email, password);
-      navigate("/", { replace: true });
+      navigate("/");
     } catch (err) {
-      setError(
+      const msg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
         err?.message ||
-        "Login failed. Please try again."
-      );
+        "Login failed.";
+
+      if (msg.toLowerCase().includes("pending")) {
+        setError("⏳ Your account is still awaiting admin approval.");
+      } else {
+        setError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
   };
+
+
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4">
@@ -98,7 +106,7 @@ export default function LoginPage() {
 
         
         <p className="mt-6 text-center text-sm text-slate-500">
-          Don&apos;t have an account?{" "}
+          Don&aacute;t have an account?{" "}
           <Link to="/signup" className="font-semibold text-blue-600 hover:text-blue-700">
             Sign Up
           </Link>

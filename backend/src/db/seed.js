@@ -23,13 +23,30 @@ async function seed() {
       { ref: 'CHG-09031', title: 'Deploy supplier portal patch to staging', requester: 'Application Owner', cat: 'Application Development', svc: 'Change Management', pri: 'Medium', status: 'Change Window', owner: 'DevOps', site: 'Azure', sla: 64 },
     ]
 
-    for (const t of sampleTickets) {
-      await client.query(`
-        INSERT INTO tickets (ticket_ref, title, requester, category, service, priority, status, owner, site, sla_pct)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-        ON CONFLICT (ticket_ref) DO NOTHING
-      `, [t.ref, t.title, t.requester, t.cat, t.svc, t.pri, t.status, t.owner, t.site, t.sla])
-    }
+   for (const t of sampleTickets) {
+  await client.query(`
+    INSERT INTO tickets (
+      ticket_ref,
+      title,
+      description,
+      requester_id,
+      priority,
+      status,
+      workspace
+    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT (ticket_ref) DO NOTHING
+  `, [
+    t.ref,
+    t.title,
+    "",
+    1,
+    t.pri,
+    t.status,
+    "IT"
+  ]);
+}
+
 
     // Asset health
     const assets = [

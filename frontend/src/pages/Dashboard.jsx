@@ -1,9 +1,8 @@
-import React, { useMemo, useState,useEffect } from "react";
-import { motion } from "framer-motion";
-import { replace, Link, useNavigate } from "react-router-dom";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { notificationApi } from "../services/api";
-import { io } from "socket.io-client";
+import api, { notificationApi, ticketsApi } from "../services/api";
+
 import {
   Activity,
   AlertTriangle,
@@ -33,13 +32,12 @@ import {
   Wrench,
   Zap,
 } from "lucide-react";
+
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
-  Line,
-  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -47,127 +45,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-const tickets = [
-  {
-    id: "INC-24081",
-    title: "MES terminal cannot sync production orders",
-    requester: "Body Shop - Line 2",
-    category: "Application Development",
-    service: "MES / Production Apps",
-    priority: "Critical",
-    status: "In Progress",
-    owner: "AppDev Team",
-    site: "Plant A",
-    sla: 18,
-    age: "42m",
-  },
-  {
-    id: "INC-24077",
-    title: "Wi-Fi dropouts affecting handheld scanners",
-    requester: "Warehouse Operations",
-    category: "Infrastructure",
-    service: "Network",
-    priority: "High",
-    status: "Assigned",
-    owner: "Infrastructure Team",
-    site: "Parts Warehouse",
-    sla: 39,
-    age: "1h 15m",
-  },
-  {
-    id: "REQ-11892",
-    title: "Create new VPN profile for engineering supplier",
-    requester: "Engineering Systems",
-    category: "Infrastructure",
-    service: "Access / Security",
-    priority: "Medium",
-    status: "Waiting Approval",
-    owner: "Security Admin",
-    site: "HQ",
-    sla: 71,
-    age: "3h 20m",
-  },
-  {
-    id: "INC-24069",
-    title: "Warranty claims API returning timeout errors",
-    requester: "Dealer Support",
-    category: "Application Development",
-    service: "Integration/API",
-    priority: "High",
-    status: "Investigating",
-    owner: "Integration Squad",
-    site: "Cloud",
-    sla: 26,
-    age: "2h 05m",
-  },
-  {
-    id: "REQ-11888",
-    title: "Install CAD workstation software bundle",
-    requester: "Product Design",
-    category: "Infrastructure",
-    service: "End-user Computing",
-    priority: "Low",
-    status: "Scheduled",
-    owner: "Desktop Support",
-    site: "R&D Centre",
-    sla: 92,
-    age: "1d 4h",
-  },
-  {
-    id: "CHG-09031",
-    title: "Deploy supplier portal patch to staging",
-    requester: "Application Owner",
-    category: "Application Development",
-    service: "Change Management",
-    priority: "Medium",
-    status: "Change Window",
-    owner: "DevOps",
-    site: "Azure",
-    sla: 64,
-    age: "5h 45m",
-  },
-];
-
-const volumeData = [
-  { day: "Mon", incidents: 42, requests: 28, changes: 7 },
-  { day: "Tue", incidents: 51, requests: 32, changes: 9 },
-  { day: "Wed", incidents: 47, requests: 35, changes: 6 },
-  { day: "Thu", incidents: 62, requests: 29, changes: 11 },
-  { day: "Fri", incidents: 55, requests: 38, changes: 8 },
-  { day: "Sat", incidents: 24, requests: 12, changes: 4 },
-  { day: "Sun", incidents: 19, requests: 8, changes: 2 },
-];
-
-const slaTrend = [
-  { hour: "06:00", score: 88 },
-  { hour: "08:00", score: 84 },
-  { hour: "10:00", score: 81 },
-  { hour: "12:00", score: 79 },
-  { hour: "14:00", score: 86 },
-  { hour: "16:00", score: 91 },
-];
-
-const categoryData = [
-  { name: "Infrastructure", value: 48, color: "#2563eb" },
-  { name: "Applications", value: 34, color: "#7c3aed" },
-  { name: "Access", value: 12, color: "#16a34a" },
-  { name: "Change", value: 6, color: "#f97316" },
-];
-
-const assets = [
-  { name: "Core Network", status: "Healthy", score: 98, icon: Network },
-  { name: "Production Servers", status: "Warning", score: 82, icon: Server },
-  { name: "MES Applications", status: "Degraded", score: 76, icon: Factory },
-  { name: "SQL Cluster", status: "Healthy", score: 94, icon: Database },
-];
-
-const knowledge = [
-  "MES scanner login troubleshooting checklist",
-  "Standard VPN onboarding workflow",
-  "Dealer portal API incident runbook",
-  "Factory-floor Wi-Fi escalation matrix",
-];
 
 function classNames(...items) {
   return items.filter(Boolean).join(" ");
@@ -179,30 +56,73 @@ function priorityClass(priority) {
     High: "bg-orange-100 text-orange-700 border-orange-200",
     Medium: "bg-amber-100 text-amber-700 border-amber-200",
     Low: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  }[priority];
+  }[priority || "Medium"];
 }
 
 function statusClass(status) {
-  if (["In Progress", "Investigating"].includes(status)) {
-    return "bg-blue-100 text-blue-700";
-  }
-  if (["Assigned", "Scheduled"].includes(status)) {
-    return "bg-slate-100 text-slate-700";
-  }
-  if (["Waiting Approval", "Change Window"].includes(status)) {
-    return "bg-purple-100 text-purple-700";
-  }
-  return "bg-slate-100 text-slate-700";
+  return {
+    Open: "bg-blue-100 text-blue-700",
+    Assigned: "bg-slate-100 text-slate-700",
+    Pending: "bg-purple-100 text-purple-700",
+    Investigating: "bg-indigo-100 text-indigo-700",
+    "Waiting Approval": "bg-purple-100 text-purple-700",
+    Resolved: "bg-emerald-100 text-emerald-700",
+    Closed: "bg-slate-200 text-slate-700",
+    Escalated: "bg-red-100 text-red-700",
+  }[status || "Open"];
+}
+
+function formatDuration(ms) {
+  if (!ms || ms <= 0) return "0m";
+
+  const mins = Math.floor(ms / 60000);
+  if (mins < 60) return `${mins}m`;
+
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
+
+  return `${Math.floor(hrs / 24)}d ${hrs % 24}h`;
+}
+
+function getTicketType(ticket) {
+  const ref = String(ticket.ticket_ref || "").toUpperCase();
+
+  if (ref.startsWith("REQ")) return "requests";
+  if (ref.startsWith("CHG")) return "changes";
+
+  return "incidents";
+}
+
+
+function normalize(value) {
+  return (value || "").toString().toLowerCase();
+}
+
+function getTicketAge(ticket) {
+  if (!ticket.created_at) return "—";
+  return formatDuration(Date.now() - new Date(ticket.created_at).getTime());
+}
+
+function getSlaPercent(ticket) {
+  if (!ticket.due_at || !ticket.created_at) return 100;
+
+  const created = new Date(ticket.created_at).getTime();
+  const due = new Date(ticket.due_at).getTime();
+  const now = ticket.closed_at
+    ? new Date(ticket.closed_at).getTime()
+    : Date.now();
+
+  const total = due - created;
+  const remaining = due - now;
+
+  if (total <= 0) return 0;
+
+  return Math.max(0, Math.min(100, Math.round((remaining / total) * 100)));
 }
 
 function StatCard({ title, value, delta, icon: Icon, accent, subtext }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-      className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-    >
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-slate-500">{title}</p>
@@ -210,6 +130,7 @@ function StatCard({ title, value, delta, icon: Icon, accent, subtext }) {
             {value}
           </p>
         </div>
+
         <div className={classNames("rounded-2xl p-3", accent)}>
           <Icon className="h-6 w-6" />
         </div>
@@ -220,95 +141,307 @@ function StatCard({ title, value, delta, icon: Icon, accent, subtext }) {
         <span className="font-semibold text-emerald-600">{delta}</span>
         <span className="text-slate-500">{subtext}</span>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 export default function Dashboard() {
-  // For navigation
-const navigate  = useNavigate();
-// For authentication context
-const { logout, user } = useAuth();
-// For search filter
-const [query, setQuery] = useState("");
-// For category filter
-const [category, setCategory] = useState("All");
-// For ticket detail view
-const [selectedTicket, setSelectedTicket] = useState(tickets[0]);
-// ✅ Track last update time
-const [lastUpdated, setLastUpdated] = useState(null);
-//1. For notifications panel 2. ✅ Fetch notifications from API
-const [showNotifications, setShowNotifications] = useState(false);
-const [notifications, setNotifications] = useState([]);
+  const navigate = useNavigate();
+  const { logout, user } = useAuth();
 
-// ✅ Calculate unread notifications count
-const unreadCount = notifications.filter((n) => !n.isRead).length;
-// ✅ Fetch notifications from API
-useEffect(() => {
-  const fetchNotifications = async () => {
+  const [tickets, setTickets] = useState([]);
+  const [assets, setAssets] = useState([]);
+  const [knowledge, setKnowledge] = useState([]);
+  const [notifications, setNotifications] = useState([]);
+
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [query, setQuery] = useState("");
+  const [workspaceFilter, setWorkspaceFilter] = useState("All");
+  const [rangeDays, setRangeDays] = useState(7);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showRangeMenu, setShowRangeMenu] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const iconMap = {
+    Server,
+    Network,
+    Factory,
+    Database,
+    Code2,
+    Settings,
+    ShieldCheck,
+    Smartphone,
+    Users,
+    Wrench,
+    Headphones,
+  };
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  const fetchDashboardData = async () => {
+    setLoading(true);
+
     try {
-      const res = await notificationApi.getAll();
-      setNotifications(
-res.data.map((n) => ({
-    ...n,
-    isRead: true,
-  }))
-      );
+      const [ticketRes, notificationRes, assetRes, knowledgeRes] =
+        await Promise.allSettled([
+          ticketsApi.getAll(),
+          notificationApi.getAll(),
+          api.get("/assets"),
+          api.get("/knowledge"),
+        ]);
+
+      if (ticketRes.status === "fulfilled") {
+        const data = Array.isArray(ticketRes.value.data)
+          ? ticketRes.value.data
+          : [];
+
+        setTickets(data);
+        setSelectedTicket((current) => {
+          if (!current) return data[0] || null;
+          return data.find((ticket) => ticket.id === current.id) || data[0] || null;
+        });
+      }
+
+      if (notificationRes.status === "fulfilled") {
+        setNotifications(
+          Array.isArray(notificationRes.value.data)
+            ? notificationRes.value.data
+            : []
+        );
+      }
+
+      if (assetRes.status === "fulfilled") {
+        setAssets(Array.isArray(assetRes.value.data) ? assetRes.value.data : []);
+      }
+
+      if (knowledgeRes.status === "fulfilled") {
+        setKnowledge(
+          Array.isArray(knowledgeRes.value.data) ? knowledgeRes.value.data : []
+        );
+      }
     } catch (err) {
-      console.error("Failed to fetch notifications", err);
+      console.error("Failed to fetch dashboard data:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
-  fetchNotifications();
-}, []);
-
-// ✅ Real-time updates with Socket.IO
-useEffect(() => {
-  const socket = io("http://localhost:3001");
-
-  socket.on("new-log", ({ notification }) => {
-    setNotifications((prev) => [
-      {
-        id: Date.now(),
-        ...notification,
-        isRead: false,
-      },
-      ...prev.slice(0, 19),
-    ]);
-  });
-
-  return () => socket.disconnect(); 
-}, []);
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
   const handleLogout = async () => {
-  await logout();
-  navigate("/login", { replace: true });
-};
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
-  const filteredTickets = useMemo(() => {
-    return tickets.filter((ticket) => {
-      const matchesQuery = [
-        ticket.id,
-        ticket.title,
-        ticket.requester,
-        ticket.service,
-        ticket.owner,
-        ticket.site,
-      ]
-        .join(" ")
-        .toLowerCase()
-        .includes(query.toLowerCase());
+  const handleOpenNotifications = async () => {
+    setShowNotifications((prev) => !prev);
 
-      const matchesCategory =
-        category === "All" || ticket.category === category;
+    if (!showNotifications) {
+      try {
+        await notificationApi.markAllRead();
+        setNotifications((prev) =>
+          prev.map((notification) => ({
+            ...notification,
+            is_read: true,
+          }))
+        );
+      } catch (err) {
+        console.error("Failed to mark notifications read:", err);
+      }
+    }
+  };
 
-      return matchesQuery && matchesCategory;
+  const handleClearNotifications = async () => {
+    try {
+      await notificationApi.clearAll();
+      setNotifications([]);
+    } catch (err) {
+      console.error("Failed to clear notifications:", err);
+    }
+  };
+
+ const filteredTickets = useMemo(() => {
+  return tickets.filter((ticket) => {
+    const text = [
+      ticket.ticket_ref,
+      ticket.title,
+      ticket.description,
+      ticket.requester_name,
+      ticket.assigned_to_name,
+      ticket.assigned_group_name,
+      ticket.workspace,
+      ticket.priority,
+      ticket.status,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return (
+      text.includes(query.toLowerCase()) &&
+      (workspaceFilter === "All" || ticket.workspace === workspaceFilter)
+    );
+  });
+}, [tickets, query, workspaceFilter]);
+
+  
+const stats = useMemo(() => {
+  const open = tickets.filter(
+    (t) => !["closed", "resolved"].includes(normalize(t.status))
+  );
+
+  const critical = tickets.filter(
+    (t) =>
+      normalize(t.priority) === "critical" ||
+      getSlaPercent(t) < 30
+  );
+
+  const ticketsWithDueDate = tickets.filter((t) => t.due_at);
+
+  const withinSla = ticketsWithDueDate.filter((t) => {
+    const due = new Date(t.due_at).getTime();
+    const end = t.closed_at
+      ? new Date(t.closed_at).getTime()
+      : Date.now();
+
+    return end <= due;
+  });
+
+  const slaCompliance =
+    ticketsWithDueDate.length > 0
+      ? `${Math.round(
+          (withinSla.length / ticketsWithDueDate.length) * 100
+        )}%`
+      : "N/A";
+
+  const resolvedDurations = tickets
+    .filter((t) => t.closed_at && t.created_at)
+    .map(
+      (t) =>
+        new Date(t.closed_at) -
+        new Date(t.created_at)
+    );
+
+  const avgResolution =
+    resolvedDurations.length > 0
+      ? formatDuration(
+          resolvedDurations.reduce((a, b) => a + b, 0) /
+            resolvedDurations.length
+        )
+      : "N/A";
+
+  return {
+    open: open.length,
+    total: tickets.length,
+    critical: critical.length,
+    slaCompliance,
+    avgResolution,
+  };
+}, [tickets]);
+
+  const volumeData = useMemo(() => {
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() - (rangeDays - 1));
+    cutoff.setHours(0, 0, 0, 0);
+
+    const map = {};
+
+    for (let i = rangeDays - 1; i >= 0; i--) {
+      const d = new Date(now);
+      d.setDate(now.getDate() - i);
+
+      const key = d.toLocaleDateString("en-US", { weekday: "short" });
+
+      map[key] = {
+        day: key,
+        incidents: 0,
+        requests: 0,
+        changes: 0,
+      };
+    }
+
+    tickets.forEach((ticket) => {
+      if (!ticket.created_at) return;
+
+      const created = new Date(ticket.created_at);
+      if (created < cutoff) return;
+
+      const key = created.toLocaleDateString("en-US", { weekday: "short" });
+      const type = getTicketType(ticket);
+
+      if (!map[key]) {
+        map[key] = {
+          day: key,
+          incidents: 0,
+          requests: 0,
+          changes: 0,
+        };
+      }
+
+      map[key][type] += 1;
     });
-  }, [query, category]);
 
-  const criticalCount = tickets.filter(
-    (ticket) => ticket.priority === "Critical" || ticket.sla < 30
-  ).length;
+    return Object.values(map);
+  }, [tickets, rangeDays]);
+
+  const categoryData = useMemo(() => {
+    const colors = ["#2563eb", "#7c3aed", "#16a34a", "#f97316", "#0891b2"];
+
+    const grouped = tickets.reduce((acc, ticket) => {
+      const key =
+        ticket.assigned_group_name || ticket.workspace || "Unassigned / Other";
+
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+
+    return Object.entries(grouped).map(([name, value], index) => ({
+      name,
+      value,
+      color: colors[index % colors.length],
+    }));
+  }, [tickets]);
+
+  const workspaces = useMemo(() => {
+    const unique = new Set(tickets.map((ticket) => ticket.workspace).filter(Boolean));
+    return ["All", ...Array.from(unique)];
+  }, [tickets]);
+
+  const quickActions = [
+    {
+      icon: LifeBuoy,
+      label: "Log Incident",
+      action: () => navigate("/tickets"),
+    },
+    {
+      icon: Settings,
+      label: "Remote Assist",
+      action: () => navigate("/tickets"),
+    },
+    {
+      icon: Wrench,
+      label: "Raise Change",
+      action: () => navigate("/tickets"),
+    },
+    {
+      icon: Smartphone,
+      label: "User Access",
+      action: () => navigate("/tickets"),
+    },
+    {
+      icon: Activity,
+      label: "Major Incident",
+      action: () => navigate("/tickets"),
+    },
+    {
+      icon: CheckCircle2,
+      label: "Close Ticket",
+      action: () => navigate("/tickets"),
+    },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
@@ -318,31 +451,31 @@ useEffect(() => {
             <div className="rounded-2xl bg-blue-500 p-3 shadow-lg shadow-blue-500/30">
               <Headphones className="h-7 w-7" />
             </div>
+
             <div>
               <p className="text-lg font-bold">ATD Alliance Helpdesk</p>
-              <p className="text-xs text-slate-400">
-                Helpdesk Command Centre
-              </p>
+              <p className="text-xs text-slate-400">Helpdesk Command Centre</p>
             </div>
           </div>
 
           <nav className="flex-1 space-y-2 px-4 py-6">
             {[
-              [LayoutDashboard, "Dashboard", true],
-              [Ticket, "Ticket Workspace"],
-              [Factory, "Plant Operations"],
-              [Server, "Infrastructure"],
-              [Code2, "Applications"],
-              [ShieldCheck, "Access & Security"],
-              [HardDrive, "Assets / CMDB"],
-              [Users, "Teams & Workload"],
-              [Settings, "Admin Settings"],
-            ].map(([Icon, label, active]) => (
+              [LayoutDashboard, "Dashboard", "/"],
+              [Ticket, "Ticket Workspace", "/tickets"],
+              [Factory, "Plant Operations", "/production"],
+              [Server, "Infrastructure", "/tickets"],
+              [Code2, "Applications", "/tickets"],
+              [ShieldCheck, "Access & Security", "/tickets"],
+              [HardDrive, "Assets / CMDB", "/tickets"],
+              [Users, "Teams & Workload", "/admin/users"],
+              [Settings, "Admin Settings", "/admin/users"],
+            ].map(([Icon, label, path]) => (
               <button
                 key={label}
+                onClick={() => navigate(path)}
                 className={classNames(
                   "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
-                  active
+                  path === "/"
                     ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
                     : "text-slate-300 hover:bg-white/10 hover:text-white"
                 )}
@@ -356,11 +489,11 @@ useEffect(() => {
           <div className="m-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4">
             <div className="flex items-center gap-2 text-blue-200">
               <Zap className="h-5 w-5" />
-              <p className="font-semibold">AI Triage Engine</p>
+              <p className="font-semibold">Smart Triage</p>
             </div>
+
             <p className="mt-2 text-sm text-slate-300">
-              Auto-prioritise incidents using SLA, plant impact, service type,
-              and repeated failures.
+              Prioritise tickets using priority, SLA due date, group and status.
             </p>
           </div>
         </div>
@@ -372,8 +505,9 @@ useEffect(() => {
             <div>
               <div className="flex items-center gap-2 text-sm text-slate-500">
                 <Factory className="h-4 w-4" />
-                ATD IT Department / Infrastructure + App Development
+                ATD IT Department / Infrastructure + ERP Support
               </div>
+
               <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
                 Helpdesk Operations Dashboard
               </h1>
@@ -382,106 +516,126 @@ useEffect(() => {
             <div className="flex flex-wrap items-center gap-3">
               <div className="relative min-w-72 flex-1 xl:flex-none">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search ticket, requester, owner, site..."
+                  placeholder="Search ticket, requester, group..."
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 />
               </div>
-              
+
               <div className="relative">
-  <button
-    onClick={handleOpenNotifications}
-    className="relative inline-flex items-center p-3 bg-white border rounded-2xl shadow-sm"
-  >
-    <Bell className="h-5 w-5" />
+                <button
+                  onClick={handleOpenNotifications}
+                  className="relative inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
+                >
+                  <Bell className="h-4 w-4" />
+                  Alerts
 
-    {unreadCount > 0 && (
-      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs px-2 rounded-full">
-        {unreadCount}
-      </span>
-    )}
-  </button>
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-2 -top-2 rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
 
-  {showNotifications && (
-    <div className="absolute right-0 mt-2 w-80 bg-white shadow-lg rounded-lg p-3 z-50">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="font-bold">Notifications</h3>
+                {showNotifications && (
+                  <div className="absolute right-0 z-50 mt-2 w-96 rounded-2xl border border-slate-200 bg-white p-4 shadow-xl">
+                    <div className="mb-3 flex items-center justify-between">
+                      <h3 className="font-bold text-slate-950">
+                        Notifications
+                      </h3>
 
-        <button
-          onClick={handleClearNotifications}
-          className="text-xs font-semibold text-red-500 hover:text-red-700"
-        >
-          Clear all
-        </button>
-      </div>
+                      <button
+                        onClick={handleClearNotifications}
+                        className="text-xs font-semibold text-red-600 hover:text-red-700"
+                      >
+                        Clear all
+                      </button>
+                    </div>
 
-      <div className="space-y-2 max-h-60 overflow-y-auto">
-        {notifications.length === 0 ? (
-          <p className="text-sm text-slate-500">No notifications</p>
-        ) : (
-          notifications.map((n) => (
-            <div
-              key={n.id}
-              className={`p-2 rounded text-sm ${
-                n.type === "critical"
-                  ? "bg-red-100 border border-red-400"
-                  : n.type === "warning"
-                  ? "bg-yellow-100 border border-yellow-400"
-                  : "bg-green-100 border border-green-400"
-              } ${!n.is_read ? "ring-2 ring-blue-400" : ""}`}
-            >
-              <p>{n.message}</p>
+                    <div className="max-h-80 space-y-2 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <p className="text-sm text-slate-500">
+                          No notifications
+                        </p>
+                      ) : (
+                        notifications.map((notification) => (
+                          <div
+                            key={notification.id}
+                            className={classNames(
+                              "rounded-xl border p-3 text-sm",
+                              notification.is_read
+                                ? "border-slate-200 bg-slate-50"
+                                : notification.type === "critical"
+                                ? "border-red-300 bg-red-50"
+                                : notification.type === "warning"
+                                ? "border-amber-300 bg-amber-50"
+                                : "border-blue-200 bg-blue-50"
+                            )}
+                          >
+                            <p className="font-semibold text-slate-800">
+                              {notification.message}
+                            </p>
 
-              {n.created_at && (
-                <p className="mt-1 text-xs text-slate-500">
-                  {new Date(n.created_at).toLocaleString()}
-                </p>
-              )}
-            </div>
-          ))
-        )}
-      </div>
-    </div>
-  )}
-</div>
+                            {notification.created_at && (
+                              <p className="mt-1 text-xs text-slate-500">
+                                {new Date(
+                                  notification.created_at
+                                ).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
-              <button className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50">
-                <Bell className="h-4 w-4" />
-                Alerts
+              <button
+                onClick={fetchDashboardData}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
+              >
+                <RefreshIcon spinning={loading} />
+                Refresh
               </button>
 
               <button
                 onClick={handleLogout}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50">
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
+              >
                 Logout
               </button>
-              
-               <Link
+
+              <Link
                 to="/admin/users"
                 className="inline-flex items-center gap-2 rounded-2xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-purple-700"
               >
                 Manage Users
               </Link>
 
-              <div className="text-sm text-slate-600">
-                {user?.name || user?.email}
-              </div>
               <Link
                 to="/production"
-                   className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
-                      >
-                  <Factory className="h-4 w-4" />
-                  Production
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
+              >
+                <Factory className="h-4 w-4" />
+                Production
               </Link>
 
-              <button className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">
+              <button
+                onClick={() => navigate("/tickets")}
+                className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700"
+              >
                 <Plus className="h-4 w-4" />
                 New Ticket
               </button>
-            </div>
 
+              <div className="text-sm text-slate-600">
+                {user?.name || user?.email}
+              </div>
+            </div>
           </div>
         </header>
 
@@ -489,33 +643,36 @@ useEffect(() => {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
               title="Open Tickets"
-              value="248"
-              delta="12%"
-              subtext="higher than yesterday"
+              value={stats.open}
+              delta={`${stats.total} total`}
+              subtext="tickets in system"
               icon={Ticket}
               accent="bg-blue-100 text-blue-700"
             />
+
             <StatCard
               title="SLA Compliance"
-              value="91.4%"
-              delta="4.2%"
-              subtext="improvement this week"
+              value={stats.slaCompliance}
+              delta="live"
+              subtext="based on due dates"
               icon={Gauge}
               accent="bg-emerald-100 text-emerald-700"
             />
+
             <StatCard
               title="Critical / At Risk"
-              value={criticalCount}
-              delta="3"
-              subtext="need immediate action"
+              value={stats.critical}
+              delta="review"
+              subtext="tickets needing attention"
               icon={AlertTriangle}
               accent="bg-red-100 text-red-700"
             />
+
             <StatCard
               title="Avg Resolution"
-              value="5h 18m"
-              delta="18m"
-              subtext="faster than target"
+              value={stats.avgResolution}
+              delta="closed"
+              subtext="average closed duration"
               icon={Clock}
               accent="bg-purple-100 text-purple-700"
             />
@@ -526,19 +683,40 @@ useEffect(() => {
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-lg font-bold text-slate-950">
-                    Ticket Volume by Day
+                    Ticket Volume
                   </h2>
                   <p className="text-sm text-slate-500">
-                    Incidents, service requests, and changes across the support
-                    desk.
+                    Incidents, service requests and changes by created date.
                   </p>
                 </div>
 
-                <button className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50">
-                  <Filter className="h-4 w-4" />
-                  Last 7 days
-                  <ChevronDown className="h-4 w-4" />
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowRangeMenu((prev) => !prev)}
+                    className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+                  >
+                    <Filter className="h-4 w-4" />
+                    Last {rangeDays} days
+                    <ChevronDown className="h-4 w-4" />
+                  </button>
+
+                  {showRangeMenu && (
+                    <div className="absolute right-0 z-40 mt-2 w-40 rounded-xl border border-slate-200 bg-white p-2 shadow-lg">
+                      {[7, 14, 30].map((days) => (
+                        <button
+                          key={days}
+                          onClick={() => {
+                            setRangeDays(days);
+                            setShowRangeMenu(false);
+                          }}
+                          className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50"
+                        >
+                          Last {days} days
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="h-72">
@@ -548,24 +726,9 @@ useEffect(() => {
                     <XAxis dataKey="day" />
                     <YAxis />
                     <Tooltip />
-                    <Bar
-                      dataKey="incidents"
-                      name="Incidents"
-                      fill="#2563eb"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="requests"
-                      name="Requests"
-                      fill="#7c3aed"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="changes"
-                      name="Changes"
-                      fill="#f97316"
-                      radius={[8, 8, 0, 0]}
-                    />
+                    <Bar dataKey="incidents" fill="#2563eb" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="requests" fill="#7c3aed" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="changes" fill="#f97316" radius={[8, 8, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -574,7 +737,7 @@ useEffect(() => {
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-950">Service Mix</h2>
               <p className="text-sm text-slate-500">
-                Current workload by support domain.
+                Workload by support group or workspace.
               </p>
 
               <div className="mt-4 h-56">
@@ -597,23 +760,28 @@ useEffect(() => {
               </div>
 
               <div className="space-y-2">
-                {categoryData.map((item) => (
-                  <div
-                    key={item.name}
-                    className="flex items-center justify-between text-sm"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="h-3 w-3 rounded-full"
-                        style={{ backgroundColor: item.color }}
-                      />
-                      <span className="text-slate-600">{item.name}</span>
+                {categoryData.length === 0 ? (
+                  <p className="text-sm text-slate-500">No ticket data yet</p>
+                ) : (
+                  categoryData.map((item) => (
+                    <div
+                      key={item.name}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-3 w-3 rounded-full"
+                          style={{ backgroundColor: item.color }}
+                        />
+                        <span className="text-slate-600">{item.name}</span>
+                      </div>
+
+                      <span className="font-semibold text-slate-950">
+                        {item.value}
+                      </span>
                     </div>
-                    <span className="font-semibold text-slate-950">
-                      {item.value}%
-                    </span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -627,176 +795,199 @@ useEffect(() => {
                       Priority Ticket Queue
                     </h2>
                     <p className="text-sm text-slate-500">
-                      Smart queue for plant-impacting incidents and
-                      business-critical requests.
+                      Live queue from the ticket database.
                     </p>
                   </div>
 
                   <select
-                    value={category}
-                    onChange={(event) => setCategory(event.target.value)}
+                    value={workspaceFilter}
+                    onChange={(event) => setWorkspaceFilter(event.target.value)}
                     className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
                   >
-                    <option>All</option>
-                    <option>Infrastructure</option>
-                    <option>Application Development</option>
+                    {workspaces.map((workspace) => (
+                      <option key={workspace}>{workspace}</option>
+                    ))}
                   </select>
                 </div>
               </div>
 
               <div className="divide-y divide-slate-100">
-                {filteredTickets.map((ticket) => (
-                  <button
-                    key={ticket.id}
-                    onClick={() => setSelectedTicket(ticket)}
-                    className={classNames(
-                      "grid w-full gap-4 p-5 text-left transition hover:bg-slate-50 lg:grid-cols-[1fr_150px_130px_90px] lg:items-center",
-                      selectedTicket.id === ticket.id && "bg-blue-50/70"
-                    )}
-                  >
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-blue-700">
-                          {ticket.id}
-                        </span>
-                        <span
-                          className={classNames(
-                            "rounded-full border px-2.5 py-1 text-xs font-bold",
-                            priorityClass(ticket.priority)
-                          )}
-                        >
-                          {ticket.priority}
-                        </span>
-                        <span
-                          className={classNames(
-                            "rounded-full px-2.5 py-1 text-xs font-bold",
-                            statusClass(ticket.status)
-                          )}
-                        >
-                          {ticket.status}
-                        </span>
-                      </div>
+                {filteredTickets.length === 0 ? (
+                  <div className="p-6 text-center text-sm text-slate-500">
+                    No tickets found.
+                  </div>
+                ) : (
+                  filteredTickets.slice(0, 8).map((ticket) => {
+                    const sla = getSlaPercent(ticket);
 
-                      <p className="mt-2 font-semibold text-slate-950">
-                        {ticket.title}
-                      </p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        {ticket.requester} • {ticket.service} • {ticket.site}
-                      </p>
-                    </div>
+                    return (
+                      <button
+                        key={ticket.id}
+                        onClick={() => setSelectedTicket(ticket)}
+                        className={classNames(
+                          "grid w-full gap-4 p-5 text-left transition hover:bg-slate-50 lg:grid-cols-[1fr_150px_130px_90px] lg:items-center",
+                          selectedTicket?.id === ticket.id && "bg-blue-50/70"
+                        )}
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-bold text-blue-700">
+                              {ticket.ticket_ref || `TICKET-${ticket.id}`}
+                            </span>
 
-                    <div className="text-sm">
-                      <p className="font-semibold text-slate-950">
-                        {ticket.owner}
-                      </p>
-                      <p className="text-slate-500">Owner</p>
-                    </div>
+                            <span
+                              className={classNames(
+                                "rounded-full border px-2.5 py-1 text-xs font-bold",
+                                priorityClass(ticket.priority)
+                              )}
+                            >
+                              {ticket.priority || "Medium"}
+                            </span>
 
-                    <div>
-                      <div className="h-2 rounded-full bg-slate-100">
-                        <div
-                          className={classNames(
-                            "h-2 rounded-full",
-                            ticket.sla < 30
-                              ? "bg-red-500"
-                              : ticket.sla < 60
-                              ? "bg-amber-500"
-                              : "bg-emerald-500"
-                          )}
-                          style={{ width: `${ticket.sla}%` }}
-                        />
-                      </div>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">
-                        SLA {ticket.sla}% remaining
-                      </p>
-                    </div>
+                            <span
+                              className={classNames(
+                                "rounded-full px-2.5 py-1 text-xs font-bold",
+                                statusClass(ticket.status)
+                              )}
+                            >
+                              {ticket.status || "Open"}
+                            </span>
+                          </div>
 
-                    <div className="text-sm font-semibold text-slate-600">
-                      {ticket.age}
-                    </div>
-                  </button>
-                ))}
+                          <p className="mt-2 font-semibold text-slate-950">
+                            {ticket.title}
+                          </p>
+
+                          <p className="mt-1 text-sm text-slate-500">
+                            {ticket.requester_name || "Unknown requester"} •{" "}
+                            {ticket.assigned_group_name || ticket.workspace || "No group"}
+                          </p>
+                        </div>
+
+                        <div className="text-sm">
+                          <p className="font-semibold text-slate-950">
+                            {ticket.assigned_to_name || "Unassigned"}
+                          </p>
+                          <p className="text-slate-500">Agent</p>
+                        </div>
+
+                        <div>
+                          <div className="h-2 rounded-full bg-slate-100">
+                            <div
+                              className={classNames(
+                                "h-2 rounded-full",
+                                sla < 30
+                                  ? "bg-red-500"
+                                  : sla < 60
+                                  ? "bg-amber-500"
+                                  : "bg-emerald-500"
+                              )}
+                              style={{ width: `${sla}%` }}
+                            />
+                          </div>
+
+                          <p className="mt-1 text-xs font-semibold text-slate-500">
+                            SLA {sla}%
+                          </p>
+                        </div>
+
+                        <div className="text-sm font-semibold text-slate-600">
+                          {getTicketAge(ticket)}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
             </div>
 
             <div className="space-y-6">
-              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-slate-950">
-                    Ticket Detail
-                  </h2>
-                  <span
-                    className={classNames(
-                      "rounded-full border px-2.5 py-1 text-xs font-bold",
-                      priorityClass(selectedTicket.priority)
-                    )}
-                  >
-                    {selectedTicket.priority}
-                  </span>
-                </div>
+              {selectedTicket ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-slate-950">
+                      Ticket Detail
+                    </h2>
 
-                <p className="mt-3 text-sm font-bold text-blue-700">
-                  {selectedTicket.id}
-                </p>
-                <p className="mt-1 text-base font-semibold text-slate-950">
-                  {selectedTicket.title}
-                </p>
+                    <span
+                      className={classNames(
+                        "rounded-full border px-2.5 py-1 text-xs font-bold",
+                        priorityClass(selectedTicket.priority)
+                      )}
+                    >
+                      {selectedTicket.priority || "Medium"}
+                    </span>
+                  </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-slate-500">Category</p>
-                    <p className="font-semibold">
-                      {selectedTicket.category}
-                    </p>
+                  <p className="mt-3 text-sm font-bold text-blue-700">
+                    {selectedTicket.ticket_ref || `TICKET-${selectedTicket.id}`}
+                  </p>
+
+                  <p className="mt-1 text-base font-semibold text-slate-950">
+                    {selectedTicket.title}
+                  </p>
+
+                  <p className="mt-2 text-sm text-slate-500">
+                    {selectedTicket.description || "No description provided."}
+                  </p>
+
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <InfoBox label="Workspace" value={selectedTicket.workspace} />
+                    <InfoBox label="Status" value={selectedTicket.status} />
+                    <InfoBox
+                      label="Group"
+                      value={selectedTicket.assigned_group_name || "No group"}
+                    />
+                    <InfoBox
+                      label="Agent"
+                      value={selectedTicket.assigned_to_name || "Unassigned"}
+                    />
                   </div>
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-slate-500">Site</p>
-                    <p className="font-semibold">{selectedTicket.site}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-slate-500">Assigned To</p>
-                    <p className="font-semibold">{selectedTicket.owner}</p>
-                  </div>
-                  <div className="rounded-2xl bg-slate-50 p-3">
-                    <p className="text-slate-500">Status</p>
-                    <p className="font-semibold">{selectedTicket.status}</p>
+
+                  <div className="mt-4 flex gap-3">
+                    <button
+                      onClick={() => navigate("/tickets")}
+                      className="flex-1 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white"
+                    >
+                      Open Case
+                    </button>
+
+                    <button
+                      onClick={() => navigate("/tickets")}
+                      className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold"
+                    >
+                      Escalate
+                    </button>
                   </div>
                 </div>
-
-                <div className="mt-4 flex gap-3">
-                  <button className="flex-1 rounded-2xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-slate-800">
-                    Open Case
-                  </button>
-                  <button className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-semibold hover:bg-slate-50">
-                    Escalate
-                  </button>
+              ) : (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
+                  Select a ticket to view details.
                 </div>
-              </div>
+              )}
 
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-950">
-                  SLA Health Trend
+                  Quick Actions
                 </h2>
+
                 <p className="text-sm text-slate-500">
-                  Operational compliance across the day.
+                  Fast workflows for your internal support team.
                 </p>
 
-                <div className="mt-4 h-44">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={slaTrend}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                      <XAxis dataKey="hour" />
-                      <YAxis domain={[70, 100]} />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="score"
-                        stroke="#2563eb"
-                        strokeWidth={3}
-                        dot={{ r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  {quickActions.map(({ icon: Icon, label, action }) => (
+                    <button
+                      key={label}
+                      onClick={action}
+                      className="rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+                    >
+                      <Icon className="h-5 w-5 text-blue-700" />
+                      <p className="mt-3 text-sm font-bold text-slate-950">
+                        {label}
+                      </p>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -807,116 +998,123 @@ useEffect(() => {
               <h2 className="text-lg font-bold text-slate-950">
                 Infrastructure & App Health
               </h2>
+
               <p className="text-sm text-slate-500">
-                CMDB-style service status snapshot.
+                Live asset snapshot from the assets API.
               </p>
 
               <div className="mt-4 space-y-3">
-                {assets.map((asset) => {
-                  const Icon = asset.icon;
-                  return (
-                    <div
-                      key={asset.name}
-                      className="rounded-2xl border border-slate-100 p-4"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="rounded-2xl bg-slate-100 p-2">
-                            <Icon className="h-5 w-5 text-slate-700" />
+                {assets.length === 0 ? (
+                  <p className="text-sm text-slate-500">No assets found.</p>
+                ) : (
+                  assets.map((asset) => {
+                    const Icon = iconMap[asset.icon] || Server;
+
+                    return (
+                      <div
+                        key={asset.id || asset.name}
+                        className="rounded-2xl border border-slate-100 p-4"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="rounded-2xl bg-slate-100 p-2">
+                              <Icon className="h-5 w-5 text-slate-700" />
+                            </div>
+
+                            <div>
+                              <p className="font-semibold text-slate-950">
+                                {asset.name}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {asset.status}
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-semibold text-slate-950">
-                              {asset.name}
-                            </p>
-                            <p className="text-sm text-slate-500">
-                              {asset.status}
-                            </p>
-                          </div>
+
+                          <span className="font-bold text-slate-950">
+                            {asset.score || 0}%
+                          </span>
                         </div>
-                        <span className="font-bold text-slate-950">
-                          {asset.score}%
-                        </span>
-                      </div>
 
-                      <div className="mt-3 h-2 rounded-full bg-slate-100">
-                        <div
-                          className={classNames(
-                            "h-2 rounded-full",
-                            asset.score >= 90
-                              ? "bg-emerald-500"
-                              : asset.score >= 80
-                              ? "bg-amber-500"
-                              : "bg-red-500"
-                          )}
-                          style={{ width: `${asset.score}%` }}
-                        />
+                        <div className="mt-3 h-2 rounded-full bg-slate-100">
+                          <div
+                            className={classNames(
+                              "h-2 rounded-full",
+                              Number(asset.score || 0) >= 90
+                                ? "bg-emerald-500"
+                                : Number(asset.score || 0) >= 80
+                                ? "bg-amber-500"
+                                : "bg-red-500"
+                            )}
+                            style={{ width: `${Number(asset.score || 0)}%` }}
+                          />
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                )}
               </div>
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-950">
-                Quick Actions
-              </h2>
-              <p className="text-sm text-slate-500">
-                Fast workflows for your internal support team.
-              </p>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                {[
-                  [LifeBuoy, "Log Incident"],
-                  [Settings, "Remote Assist"],
-                  [Wrench, "Raise Change"],
-                  [Smartphone, "User Access"],
-                  [Activity, "Major Incident"],
-                  [CheckCircle2, "Close Ticket"],
-                ].map(([Icon, label]) => (
-                  <button
-                    key={label}
-                    className="rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
-                  >
-                    <Icon className="h-5 w-5 text-blue-700" />
-                    <p className="mt-3 text-sm font-bold text-slate-950">
-                      {label}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
               <h2 className="text-lg font-bold text-slate-950">
                 Knowledge Suggestions
               </h2>
+
               <p className="text-sm text-slate-500">
-                Suggested articles based on the selected case.
+                Articles from the knowledge API.
               </p>
 
-              <div className="mt-4 space-y-3">
-                {knowledge.map((item, index) => (
-                  <button
-                    key={item}
-                    className="flex w-full items-start gap-3 rounded-2xl border border-slate-100 p-4 text-left hover:bg-slate-50"
-                  >
-                    <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
-                      {index + 1}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-950">{item}</p>
-                      <p className="mt-1 text-sm text-slate-500">
-                        Use as runbook, resolution note, or auto-reply template.
-                      </p>
-                    </div>
-                  </button>
-                ))}
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {knowledge.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    No knowledge suggestions found.
+                  </p>
+                ) : (
+                  knowledge.map((item, index) => (
+                    <button
+                      key={item.id || item.title}
+                      onClick={() => navigate("/tickets")}
+                      className="flex w-full items-start gap-3 rounded-2xl border border-slate-100 p-4 text-left hover:bg-slate-50"
+                    >
+                      <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+                        {index + 1}
+                      </div>
+
+                      <div>
+                        <p className="font-semibold text-slate-950">
+                          {item.title}
+                        </p>
+
+                        <p className="mt-1 text-sm text-slate-500">
+                          Use as runbook, resolution note or reply template.
+                        </p>
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </div>
         </section>
       </main>
+    </div>
+  );
+}
+
+function RefreshIcon({ spinning }) {
+  return (
+    <Activity className={classNames("h-4 w-4", spinning && "animate-spin")} />
+  );
+}
+
+function InfoBox({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-slate-50 p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        {label}
+      </p>
+      <p className="mt-1 font-semibold text-slate-950">{value || "N/A"}</p>
     </div>
   );
 }

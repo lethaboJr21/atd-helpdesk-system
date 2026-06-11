@@ -1,11 +1,14 @@
 //This file contains the authentication routes for the backend. It handles login, logout, and fetching the current user's info. The original code used a PostgreSQL database to store users and bcrypt for password hashing, but it has been temporarily replaced with hardcoded dev users for development purposes. The JWT token is generated upon successful login and includes the user's ID, email, role, and name.
-
 const router = require("express").Router();
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 
+/**
+ * ✅ Create JWT token after successful login
+ * The token stores basic user identity and role.
+ */
 function signToken(user) {
   return jwt.sign(
     {
@@ -15,45 +18,92 @@ function signToken(user) {
       name: user.name,
     },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
+    {
+      expiresIn: process.env.JWT_EXPIRES_IN || "8h",
+    }
   );
 }
 
-// POST /api/auth/login
+/**
+ * ✅ Helper: Create non-blocking in-app notification
+ * If the notifications table has an issue, the main auth flow must not fail.
+ */
+async function createNotification(message, type = "system") {
+  try {
+    await pool.query(
+      `
+      INSERT INTO notifications (message, type, is_read)
+      VALUES ($1, $2, false)
+      `,
+      [message, type]
+    );
+  } catch (err) {
+    console.error("Notification creation failed:", err.message);
+  }
+}
+
+/**
+ * ✅ POST /api/auth/login
+ * Logs in approved users only.
+ */
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
 
+  // ✅ Validate request body
   if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
+    return res.status(400).json({
+      error: "Email and password required",
+    });
   }
 
   try {
+    // ✅ Find user by email
     const { rows } = await pool.query(
-      "SELECT * FROM users WHERE email = $1",
+      `
+      SELECT id, name, email, password_hash, role, approved
+      FROM users
+      WHERE email = $1
+      `,
       [email.toLowerCase()]
     );
 
     const user = rows[0];
-    if (!user) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
 
-    
-    //  BLOCK pending users
-    if (user.role === "pending") {
-      return res.status(403).json({
-        error: "Your account is awaiting approval. Please contact admin."
+    // ✅ Do not reveal whether email exists
+    if (!user) {
+      return res.status(401).json({
+        error: "Invalid credentials",
       });
     }
 
-
-    const valid = await bcrypt.compare(password, user.password_hash);
-    if (!valid) {
-      return res.status(401).json({ error: "Invalid credentials" });
+    // ✅ Block pending role users
+    if (user.role === "pending") {
+      return res.status(403).json({
+        message: "Your account is pending approval",
+      });
     }
 
+    // ✅ Block unapproved users
+    // Admin/superadmin exception prevents accidental admin lockout.
+    if (!user.approved && !["admin", "superadmin"].includes(user.role)) {
+      return res.status(403).json({
+        message: "Your account is pending approval",
+      });
+    }
+
+    // ✅ Validate password
+    const valid = await bcrypt.compare(password, user.password_hash);
+
+    if (!valid) {
+      return res.status(401).json({
+        error: "Invalid credentials",
+      });
+    }
+
+    // ✅ Generate JWT token
     const token = signToken(user);
 
+    // ✅ Return safe user object
     return res.json({
       token,
       user: {
@@ -61,18 +111,26 @@ router.post("/login", async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        approved: user.approved,
       },
     });
   } catch (err) {
     console.error("Login error:", err);
-    return res.status(500).json({ error: "Server error" });
+    return res.status(500).json({
+      error: "Server error",
+    });
   }
 });
 
-// POST /api/auth/signup
+/**
+ * ✅ POST /api/auth/signup
+ * Creates a pending account.
+ * Does NOT log user in immediately.
+ */
 router.post("/signup", async (req, res) => {
   const { name, email, password } = req.body;
 
+  // ✅ Validate input
   if (!name || !email || !password) {
     return res.status(400).json({
       error: "Name, email and password are required",
@@ -80,62 +138,104 @@ router.post("/signup", async (req, res) => {
   }
 
   try {
+    // ✅ Check duplicate email
     const existing = await pool.query(
-      "SELECT id FROM users WHERE email = $1",
+      `
+      SELECT id
+      FROM users
+      WHERE email = $1
+      `,
       [email.toLowerCase()]
     );
 
     if (existing.rows[0]) {
-      return res.status(409).json({ error: "User already exists" });
+      return res.status(409).json({
+        error: "User already exists",
+      });
     }
 
+    // ✅ Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
+    // ✅ Create user as pending and unapproved
     const { rows } = await pool.query(
       `
-      INSERT INTO users (name, email, password_hash, role)
-      VALUES ($1, $2, $3, $4)
-      RETURNING id, name, email, role
+      INSERT INTO users (name, email, password_hash, role, approved)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING id, name, email, role, approved, created_at
       `,
-      [name.trim(), email.toLowerCase(), passwordHash, "pending"]
+      [name.trim(), email.toLowerCase(), passwordHash, "pending", false]
     );
 
-    const user = rows[0];
-    const { sendApprovalEmail } = require("../services/email");
+    const newUser = rows[0];
 
-    await sendApprovalEmail({
-     id: user.id,
-     email: user.email,
-     name: user.name,
-    });
+    // ✅ Create in-app notification for admins
+    await createNotification(
+      `New user signup pending approval: ${newUser.email}`,
+      "user_signup"
+    );
+    //
+    console.log("Sending approval email for:", newUser.email);
+    console.log("Admin email target:", process.env.ADMIN_EMAIL);
+    // ✅ Try sending approval email, but do not break signup if email fails
+    try {
+      const { sendApprovalEmail } = require("../services/email");
 
-    const token = signToken(user);
+      await sendApprovalEmail({
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+      });
+    } catch (emailErr) {
+      console.error(
+        "Approval email failed, but signup continues:",
+        emailErr.message
+      );
+    }
 
+    // ✅ Important: do NOT return token here
     return res.status(201).json({
-      token,
-      user,
+      message:
+        "Account created successfully. Please wait for admin approval before signing in.",
+      user: newUser,
     });
   } catch (err) {
     console.error("Signup error:", err);
-    return res.status(500).json({ error: "Server error" });
+    return res.status(500).json({
+      error: "Server error",
+    });
   }
 });
 
-// POST /api/auth/logout
+/**
+ * ✅ POST /api/auth/logout
+ * Stateless JWT logout. Frontend removes token.
+ */
 router.post("/logout", auth, (_req, res) => {
-  return res.json({ ok: true });
+  return res.json({
+    ok: true,
+  });
 });
 
-// GET /api/auth/me
+/**
+ * ✅ GET /api/auth/me
+ * Returns current authenticated user.
+ */
 router.get("/me", auth, async (req, res) => {
   try {
     const { rows } = await pool.query(
-      "SELECT id, name, email, role FROM users WHERE id = $1",
+      `
+      SELECT id, name, email, role, approved
+      FROM users
+      WHERE id = $1
+      `,
       [req.user.id]
     );
 
     if (!rows[0]) {
-      return res.status(404).json({ error: "User not found" });
+      return res.status(404).json({
+        error: "User not found",
+      });
     }
 
     return res.json({
@@ -143,197 +243,189 @@ router.get("/me", auth, async (req, res) => {
     });
   } catch (err) {
     console.error("Me error:", err);
-    return res.status(500).json({ error: "Server error" });
+    return res.status(500).json({
+      error: "Server error",
+    });
   }
 });
 
-// ✅ PUT /api/auth/approve/:id
-
-router.put("/approve/:id", auth, async (req, res) => {
-  const role = req.body.role || req.query.role;
-
-  if (!["superadmin", "admin"].includes(req.user.role)) {
-    return res.status(403).json({ error: "Access denied" });
-  }
-
-  const allowedRoles = ["operator", "manager", "admin", "superadmin"];
-
-  if (!allowedRoles.includes(role)) {
-    return res.status(400).json({ error: "Invalid role" });
+/**
+ * ✅ GET /api/auth/users
+ * Admin and superadmin can view all users.
+ * Pending users are shown first.
+ */
+router.get("/users", auth, async (req, res) => {
+  // ✅ Only admin and superadmin can view users
+  if (!["admin", "superadmin"].includes(req.user.role)) {
+    return res.status(403).json({
+      error: "Access denied",
+    });
   }
 
   try {
-    const result = await pool.query(
-      `UPDATE users SET role = $1 WHERE id = $2 RETURNING id, email, role`,
+    const { rows } = await pool.query(
+      `
+      SELECT id, name, email, role, approved, created_at
+      FROM users
+      ORDER BY approved ASC, created_at DESC
+      `
+    );
+
+    return res.json(rows);
+  } catch (err) {
+    console.error("Fetch users error:", err);
+    return res.status(500).json({
+      error: "Failed to fetch users",
+    });
+  }
+});
+
+/**
+ * ✅ PUT /api/auth/approve/:id
+ * Admin approves a pending user and assigns a role.
+ */
+router.put("/approve/:id", auth, async (req, res) => {
+  const role = req.body.role || req.query.role || "user";
+
+  // ✅ Only admin and superadmin can approve
+  if (!["admin", "superadmin"].includes(req.user.role)) {
+    return res.status(403).json({
+      error: "Access denied",
+    });
+  }
+
+  // ✅ Allowed roles after approval
+  const allowedRoles = [
+    "user",
+    "agent",
+    "operator",
+    "manager",
+    "admin",
+    "superadmin",
+  ];
+
+  if (!allowedRoles.includes(role)) {
+    return res.status(400).json({
+      error: "Invalid role",
+    });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `
+      UPDATE users
+      SET role = $1,
+          approved = TRUE
+      WHERE id = $2
+      RETURNING id, name, email, role, approved
+      `,
       [role, req.params.id]
     );
 
-    res.json({
-      message: "User approved",
-      user: result.rows[0],
+    if (!rows[0]) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    // ✅ Create in-app notification
+    await createNotification(
+      `User approved: ${rows[0].email} as ${rows[0].role}`,
+      "user_approved"
+    );
+
+    return res.json({
+      message: "User approved successfully",
+      user: rows[0],
     });
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Approval failed" });
+    console.error("Approve error:", err);
+    return res.status(500).json({
+      error: "Approval failed",
+    });
   }
 });
 
-// ✅ GET /api/auth/reject/:id
-router.get("/reject/:id", async (req, res) => {
-  await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
-  res.send("User rejected and removed");
-});
-
-
-module.exports = router;
-
-
-/*
-
-const router = require("express").Router();
-const jwt = require("jsonwebtoken");
-const auth = require("../middleware/auth");
-
-// Temporary in-memory dev users (no DB yet)
-const DEV_USERS = [
-  {
-    id: 1,
-    name: "Jeffrey Motepe",
-    email: "JeffreyM@atdalliance.co.za",
-    role: "admin",
-    password: "12345",
-  },
-  {
-    id: 2,
-    name: "Samkelo Mthembu",
-    email: "SamkeloM@atdalliance.co.za",
-    role: "admin",
-    password: "12345",
-  },
-  {
-    id: 3,
-    name: "Clinton Nkwana",
-    email: "ClintonN@atdalliance.co.za",
-    role: "admin",
-    password: "12345",
-  },
-  {
-    id: 4,
-    name: "Resego Ngwenya",
-    email: "ResegoN@atdalliance.co.za",
-    role: "admin",
-    password: "12345",
-  },
-  {
-    id: 5,
-    name: "Kamogelo Masuluke",
-    email: "KamogeloM@atdalliance.co.za",
-    role: "admin",
-    password: "12345",
-  },
-];
-
-function signToken(user) {
-  return jwt.sign(
-    {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      name: user.name,
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "8h" }
-  );
-}
-
-// POST /api/auth/login
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ error: "Email and password required" });
+/**
+ * ✅ DELETE /api/auth/reject/:id
+ * Admin rejects and removes a pending user.
+ */
+router.delete("/reject/:id", auth, async (req, res) => {
+  // ✅ Only admin and superadmin can reject users
+  if (!["admin", "superadmin"].includes(req.user.role)) {
+    return res.status(403).json({
+      error: "Access denied",
+    });
   }
 
-  const user = DEV_USERS.find(
-    (u) =>
-      u.email.toLowerCase() === email.toLowerCase() &&
-      u.password === password
-  );
+  try {
+    const { rows } = await pool.query(
+      `
+      DELETE FROM users
+      WHERE id = $1
+      RETURNING id, email
+      `,
+      [req.params.id]
+    );
 
-  if (!user) {
-    return res.status(401).json({ error: "Invalid credentials" });
+    if (!rows[0]) {
+      return res.status(404).json({
+        error: "User not found",
+      });
+    }
+
+    // ✅ Create in-app notification
+    await createNotification(
+      `User rejected and removed: ${rows[0].email}`,
+      "user_rejected"
+    );
+
+    return res.json({
+      message: "User rejected and removed",
+      user: rows[0],
+    });
+  } catch (err) {
+    console.error("Reject user error:", err);
+    return res.status(500).json({
+      error: "Reject failed",
+    });
   }
-
-  const token = signToken(user);
-
-  return res.json({
-    token,
-    user: {
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    },
-  });
 });
 
-// POST /api/auth/signup
-// TEMPORARY: in-memory only (will reset when backend restarts)
-router.post("/signup", async (req, res) => {
-  const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({ error: "Name, email and password are required" });
+/**
+ * ✅ Optional backward-compatible reject link
+ * This keeps your old GET reject URL working, but protected.
+ */
+router.get("/reject/:id", auth, async (req, res) => {
+  // ✅ Only admin and superadmin can reject users
+  if (!["admin", "superadmin"].includes(req.user.role)) {
+    return res.status(403).send("Access denied");
   }
 
-  const existingUser = DEV_USERS.find(
-    (u) => u.email.toLowerCase() === email.toLowerCase()
-  );
+  try {
+    const { rows } = await pool.query(
+      `
+      DELETE FROM users
+      WHERE id = $1
+      RETURNING id, email
+      `,
+      [req.params.id]
+    );
 
-  if (existingUser) {
-    return res.status(409).json({ error: "User already exists" });
+    if (!rows[0]) {
+      return res.status(404).send("User not found");
+    }
+
+    await createNotification(
+      `User rejected and removed: ${rows[0].email}`,
+      "user_rejected"
+    );
+
+    return res.send("User rejected and removed");
+  } catch (err) {
+    console.error("Reject user error:", err);
+    return res.status(500).send("Reject failed");
   }
-
-  const newUser = {
-    id: DEV_USERS.length + 1,
-    name: name.trim(),
-    email: email.trim(),
-    role: "pending",
-    password,
-  };
-
-  DEV_USERS.push(newUser);
-
-  const token = signToken(newUser);
-
-  return res.status(201).json({
-    token,
-    user: {
-      id: newUser.id,
-      name: newUser.name,
-      email: newUser.email,
-      role: newUser.role,
-    },
-  });
-});
-
-// POST /api/auth/logout
-router.post("/logout", auth, (_req, res) => {
-  res.json({ ok: true });
-});
-
-// GET /api/auth/me
-router.get("/me", auth, async (req, res) => {
-  res.json({
-    user: {
-      id: req.user.id,
-      name: req.user.name,
-      email: req.user.email,
-      role: req.user.role,
-    },
-  });
 });
 
 module.exports = router;
-
-*/

@@ -29,11 +29,36 @@ api.interceptors.response.use(
 );
 
 export const ticketsApi = {
+  // ✅ Get all tickets
   getAll: (params) => api.get("/tickets", { params }),
+
+  // ✅ Get one ticket by ID
   getById: (id) => api.get(`/tickets/${id}`),
+
+  // ✅ Create ticket
   create: (data) => api.post("/tickets", data),
+
+  // ✅ Full ticket update
   update: (id, data) => api.put(`/tickets/${id}`, data),
+
+  // ✅ Change ticket status
+  updateStatus: (id, status) =>
+    api.patch(`/tickets/${id}/status`, { status }),
+
+  // ✅ Resolve ticket
+  resolve: (id) => api.patch(`/tickets/${id}/resolve`),
+
+  // ✅ Close ticket
   close: (id) => api.patch(`/tickets/${id}/close`),
+
+  // ✅ Assign ticket
+  assign: (id, assignedToUserId) =>
+    api.post(`/tickets/${id}/assign`, { assignedToUserId }),
+};
+
+
+export const groupsApi = {
+  getAll: () => api.get("/groups"),
 };
 
 export const statsApi = {
