@@ -67,7 +67,7 @@ function AppRoutes() {
 
       {/* ✅ Signup page */}
       <Route
-        path="/signup"
+        path="/Signup"
         element={
           <PublicRoute>
             <SignupPage />
