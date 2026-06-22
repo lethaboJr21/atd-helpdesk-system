@@ -3,7 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import Dashboard from "./pages/Dashboard";
 import LoginPage from "./pages/LoginPage";
-import SignupPage from "./pages/SignupPage.jsx";
+import SignupPage from "./pages/signupPage.jsx";
 import ProductionDashboard from "./pages/ProductionDashboard";
 import AdminUsers from "./pages/AdminUsers";
 import WaitingApproval from "./pages/WaitingApproval";
