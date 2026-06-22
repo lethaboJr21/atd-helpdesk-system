@@ -31,6 +31,35 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get("/", async (req, res) => {
+  const { module } = req.query;
+
+  try {
+    const params = [];
+    let where = "";
+
+    if (module) {
+      where = "WHERE module = $1";
+      params.push(module);
+    }
+
+    const result = await pool.query(
+      `
+      SELECT *
+      FROM notifications
+      ${where}
+      ORDER BY created_at DESC
+      `,
+      params
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Fetch notifications failed:", err);
+    res.status(500).json({ error: "Failed to fetch notifications" });
+  }
+});
+
 // ✅ PATCH /api/notifications/read-all
 // Marks all visible notifications as read.
 router.patch("/read-all", async (req, res) => {

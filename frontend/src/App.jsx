@@ -10,7 +10,7 @@ import WaitingApproval from "./pages/WaitingApproval";
 import TicketWorkspace from "./pages/TicketWorkspace";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import OperationsHubEmbed from "./pages/OperationsHubEmbed";
-
+import TicketDetailPage from "./pages/TicketDetailPage";
 /**
  * ✅ PrivateRoute
  * Protects routes that require a logged-in user.
@@ -123,6 +123,15 @@ function AppRoutes() {
        }
       />
 
+          <Route
+      path="/tickets/:id"
+      element={
+        <PrivateRoute>
+          <TicketDetailPage />
+        </PrivateRoute>
+      }
+      />
+
 
       <Route
         path="/operations-hub"
@@ -147,7 +156,7 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
+      <BrowserRouter basename="/helpdesk">
         <AppRoutes />
       </BrowserRouter>
     </AuthProvider>

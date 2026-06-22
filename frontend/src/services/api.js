@@ -1,7 +1,13 @@
 import axios from "axios";
 
+const API_BASE =
+  import.meta.env.MODE === "production"
+    ? `${window.location.origin}/helpdesk/api`
+    : "http://localhost:3001/api";
+
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: API_BASE,
+  timeout: 30000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -29,33 +35,19 @@ api.interceptors.response.use(
 );
 
 export const ticketsApi = {
-  // ✅ Get all tickets
   getAll: (params) => api.get("/tickets", { params }),
-
-  // ✅ Get one ticket by ID
   getById: (id) => api.get(`/tickets/${id}`),
-
-  // ✅ Create ticket
   create: (data) => api.post("/tickets", data),
-
-  // ✅ Full ticket update
   update: (id, data) => api.put(`/tickets/${id}`, data),
-
-  // ✅ Change ticket status
-  updateStatus: (id, status) =>
-    api.patch(`/tickets/${id}/status`, { status }),
-
-  // ✅ Resolve ticket
+  updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),
   resolve: (id) => api.patch(`/tickets/${id}/resolve`),
-
-  // ✅ Close ticket
   close: (id) => api.patch(`/tickets/${id}/close`),
-
-  // ✅ Assign ticket
-  assign: (id, assignedToUserId) =>
-    api.post(`/tickets/${id}/assign`, { assignedToUserId }),
+  assign: (id, assignedToUserId, assignedGroupId) =>
+    api.post(`/tickets/${id}/assign`, {
+      assignedToUserId,
+      assignedGroupId,
+    }),
 };
-
 
 export const groupsApi = {
   getAll: () => api.get("/groups"),
@@ -76,6 +68,14 @@ export const authApi = {
   me: () => api.get("/auth/me"),
 };
 
+export const userApi = {
+  getUsers: (params) => api.get("/users", { params }),
+  approveUser: (id, role) => api.put(`/users/${id}/approve`, { role }),
+  updateUserRole: (id, role) => api.put(`/users/${id}/role`, { role }),
+  deactivateUser: (id) => api.put(`/users/${id}/deactivate`),
+  reactivateUser: (id) => api.put(`/users/${id}/reactivate`),
+};
+
 export const productionApi = {
   getAll: () => api.get("/production"),
   create: (data) => api.post("/production", data),
@@ -87,15 +87,24 @@ export const logsApi = {
 };
 
 export const notificationApi = {
-  getAll: () => api.get("/notifications"),
+  getAll: (params) => api.get("/notifications", { params }),
   markRead: (id) => api.patch(`/notifications/${id}/read`),
-  markAllRead: () => api.patch("/notifications/read-all"),
-  clearAll: () => api.delete("/notifications/clear"),
+  markAllRead: (module) =>
+    api.patch("/notifications/read-all", null, { params: { module } }),
+  clearAll: (module) =>
+    api.delete("/notifications/clear", { params: { module } }),
 };
 
-export const userApi = {
-  getUsers: () => api.get("/auth/users"),
-  approveUser: (id, role) => api.put(`/auth/approve/${id}`, { role }),
+export const productionSyncApi = {
+  getBedlinerDaily: (params) =>
+    api.get("/production/sync/bedliner-daily", { params }),
+  syncBedlinerDaily: () => api.post("/production/sync/sync-bedliner-daily"),
+  testMssql: () => api.get("/production/sync/test-mssql"),
+};
+
+export const productionEventsApi = {
+  getAll: (params) => api.get("/production-events", { params }),
+  create: (data) => api.post("/production-events", data),
 };
 
 export default api;

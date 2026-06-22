@@ -16,6 +16,13 @@ const logRoutes = require("./routes/logs");
 const notificationRoutes = require("./routes/notifications");
 const groupRoutes = require("./routes/groups");
 const azureRoutes = require("./routes/azure");
+const userRoutes = require("./routes/users");
+const productionSyncRoutes = require("./routes/productionSync");
+const { startTicketReminderJob } = require("./services/ticketReminders");
+startTicketReminderJob();
+const {startProductionSyncScheduler,} = require("./services/productionSyncScheduler");
+startProductionSyncScheduler();
+const productionEventRoutes = require("./routes/productionEvents");
 
 const app = express();
 const PORT = parseInt(process.env.PORT, 10) || 3001;
@@ -72,11 +79,16 @@ app.use("/api", apiLimiter);
 app.use("/api/auth", authRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/stats", statsRoutes);
-app.use("/api/production", productionRoutes);
 app.use("/api/logs", logRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/azure", azureRoutes);
+app.use("/api/users", userRoutes);
+
+app.use("/api/production", productionRoutes);
+app.use("/api/production/sync", productionSyncRoutes);
+app.use("/api/production/events", productionEventRoutes);
+
 
 // Additional endpoints
 app.get("/api/assets", async (req, res) => {

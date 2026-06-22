@@ -6,6 +6,38 @@ const { sendTicketAssignmentEmail } = require("../services/email");
 
 router.use(auth);
 
+const STATUS_MAP = {
+  open: "Open",
+  assigned: "Assigned",
+  pending: "Pending",
+  investigating: "Investigating",
+  "waiting approval": "Waiting Approval",
+  resolved: "Resolved",
+  closed: "Closed",
+  escalated: "Escalated",
+};
+
+function normalizeStatus(status) {
+  if (!status) return null;
+
+  const key = String(status).trim().toLowerCase();
+  return STATUS_MAP[key] || null;
+}
+
+const PRIORITY_MAP = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  critical: "Critical",
+};
+
+function normalizePriority(priority) {
+  if (!priority) return null;
+
+  const key = String(priority).trim().toLowerCase();
+  return PRIORITY_MAP[key] || null;
+}
+
 /**
  * ✅ Formats ticket age from created_at.
  */
@@ -479,11 +511,15 @@ router.post(
 
       await client.query("COMMIT");
 
-      await notifyTicketAssignment({
+      
+      notifyTicketAssignment({
         ticket: createdTicket,
         assignedGroupId,
         assignedToUserId,
+      }).catch((err) => {
+        console.error("Ticket creation email background failure:", err.message);
       });
+
 
       return res.status(201).json({
         ...createdTicket,
@@ -507,6 +543,8 @@ router.put(
   "/:id",
   allowRoles("superadmin", "admin", "agent", "manager"),
   async (req, res) => {
+        console.log("Updating ticket:", req.params.id);
+
     const {
       title,
       description,
@@ -518,65 +556,153 @@ router.put(
       dueAt,
     } = req.body;
 
+    const client = await pool.connect();
+
     try {
-      const oldTicket = await pool.query(
+      await client.query("BEGIN");
+
+      const oldTicketResult = await client.query(
         `
         SELECT *
         FROM tickets
         WHERE id = $1
+        FOR UPDATE
         `,
         [req.params.id]
       );
 
-      if (!oldTicket.rows[0]) {
+      const oldTicket = oldTicketResult.rows[0];
+
+      if (!oldTicket) {
+        await client.query("ROLLBACK");
         return res.status(404).json({ error: "Ticket not found" });
       }
 
-      const { rows } = await pool.query(
+      const nextTitle =
+        title === undefined ? oldTicket.title : String(title).trim();
+
+      if (!nextTitle) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Ticket title is required" });
+      }
+
+      const nextDescription =
+        description === undefined ? oldTicket.description : description || "";
+
+      const nextPriority =
+        priority === undefined
+          ? oldTicket.priority
+          : normalizePriority(priority);
+
+      if (!nextPriority) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Invalid priority" });
+      }
+
+      const nextStatus =
+        status === undefined ? oldTicket.status : normalizeStatus(status);
+
+      if (!nextStatus) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Invalid status" });
+      }
+
+      const nextWorkspace =
+        workspace === undefined ? oldTicket.workspace : workspace || "IT";
+
+      const nextAssignedGroupId =
+        assignedGroupId === undefined
+          ? oldTicket.assigned_group_id
+          : assignedGroupId || null;
+
+      const nextAssignedToUserId =
+        assignedToUserId === undefined
+          ? oldTicket.assigned_to_user_id
+          : assignedToUserId || null;
+
+      const nextDueAt =
+        dueAt === undefined ? oldTicket.due_at : dueAt || null;
+
+      const nextClosedAt =
+        nextStatus === "Closed"
+          ? oldTicket.closed_at || new Date()
+          : nextStatus === "Resolved"
+          ? oldTicket.closed_at
+          : null;
+      
+      console.log(" Ticket DB update completed:", req.params.id);    
+      const updatedResult = await client.query(
         `
         UPDATE tickets
         SET
-          title = COALESCE($1, title),
-          description = COALESCE($2, description),
-          priority = COALESCE($3, priority),
-          status = COALESCE($4, status),
-          workspace = COALESCE($5, workspace),
-          assigned_group_id = COALESCE($6, assigned_group_id),
-          assigned_to_user_id = COALESCE($7, assigned_to_user_id),
-          due_at = COALESCE($8, due_at),
-          closed_at = CASE WHEN $4 = 'Closed' THEN NOW() ELSE closed_at END,
+          title = $1,
+          description = $2,
+          priority = $3,
+          status = $4,
+          workspace = $5,
+          assigned_group_id = $6,
+          assigned_to_user_id = $7,
+          due_at = $8,
+          closed_at = $9,
           updated_at = NOW()
-        WHERE id = $9
+        WHERE id = $10
         RETURNING *
         `,
         [
-          title,
-          description,
-          priority,
-          status,
-          workspace,
-          assignedGroupId,
-          assignedToUserId,
-          dueAt,
+          nextTitle,
+          nextDescription,
+          nextPriority,
+          nextStatus,
+          nextWorkspace,
+          nextAssignedGroupId,
+          nextAssignedToUserId,
+          nextDueAt,
+          nextClosedAt,
           req.params.id,
         ]
       );
+
+      const updatedTicket = updatedResult.rows[0];
 
       await addHistory(
         req.params.id,
         req.user.id,
         "updated",
-        JSON.stringify(oldTicket.rows[0]),
-        JSON.stringify(rows[0])
+        JSON.stringify(oldTicket),
+        JSON.stringify(updatedTicket)
       );
 
+      await client.query("COMMIT");
+      console.log(" Ticket transaction committed:", req.params.id);
+
+      const assignmentChanged =
+        String(oldTicket.assigned_group_id || "") !==
+          String(updatedTicket.assigned_group_id || "") ||
+        String(oldTicket.assigned_to_user_id || "") !==
+          String(updatedTicket.assigned_to_user_id || "");
+
+      if (assignmentChanged) {
+        console.log("📧 Queueing assignment email in background:", req.params.id);
+        // ✅ Do not block ticket save because of email problems
+        notifyTicketAssignment({
+          ticket: updatedTicket,
+          assignedGroupId: updatedTicket.assigned_group_id,
+          assignedToUserId: updatedTicket.assigned_to_user_id,
+        }).catch((err) => {
+          console.error("Assignment email background failure:", err.message);
+        });
+      }
+
       return res.json({
-        ...rows[0],
-        age: formatAge(rows[0].created_at),
+        ...updatedTicket,
+        age: formatAge(updatedTicket.created_at),
       });
     } catch (err) {
+      await client.query("ROLLBACK");
       console.error("Update ticket error:", err);
       return res.status(500).json({ error: "Server error" });
+    } finally {
+      client.release();
     }
   }
 );
@@ -589,20 +715,9 @@ router.patch(
   "/:id/status",
   allowRoles("superadmin", "admin", "agent", "manager"),
   async (req, res) => {
-    const { status } = req.body;
+    const normalizedStatus = normalizeStatus(req.body.status);
 
-    const allowedStatuses = [
-      "Open",
-      "Pending",
-      "Assigned",
-      "Investigating",
-      "Waiting Approval",
-      "Resolved",
-      "Closed",
-      "Escalated",
-    ];
-
-    if (!allowedStatuses.includes(status)) {
+    if (!normalizedStatus) {
       return res.status(400).json({ error: "Invalid status" });
     }
 
@@ -626,7 +741,7 @@ router.patch(
         WHERE id = $2
         RETURNING *
         `,
-        [status, req.params.id]
+        [normalizedStatus, req.params.id]
       );
 
       await addHistory(
@@ -634,7 +749,7 @@ router.patch(
         req.user.id,
         "status_changed",
         oldTicket.rows[0].status,
-        status
+        normalizedStatus
       );
 
       return res.json(rows[0]);
@@ -651,11 +766,12 @@ router.patch(
  */
 router.post(
   "/:id/assign",
-  allowRoles("superadmin", "admin", "manager"),
+  allowRoles("superadmin", "admin", "agent", "manager"),
   async (req, res) => {
     const { assignedToUserId, assignedGroupId } = req.body;
 
-    if (!assignedToUserId && !assignedGroupId) {
+    
+if (!assignedToUserId && !assignedGroupId) {
       return res.status(400).json({
         error: "assignedToUserId or assignedGroupId is required",
       });
@@ -675,18 +791,23 @@ router.post(
         return res.status(404).json({ error: "Ticket not found" });
       }
 
+      const nextAssignedToUserId = assignedToUserId || null;
+
+      const nextAssignedGroupId =
+        assignedGroupId || oldTicket.rows[0].assigned_group_id || null;
+
       const { rows } = await pool.query(
         `
         UPDATE tickets
         SET
-          assigned_to_user_id = COALESCE($1, assigned_to_user_id),
-          assigned_group_id = COALESCE($2, assigned_group_id),
+          assigned_to_user_id = $1,
+          assigned_group_id = $2,
           status = 'Assigned',
           updated_at = NOW()
         WHERE id = $3
         RETURNING *
         `,
-        [assignedToUserId || null, assignedGroupId || null, req.params.id]
+        [nextAssignedToUserId, nextAssignedGroupId, req.params.id]
       );
 
       const updatedTicket = rows[0];
@@ -702,19 +823,25 @@ router.post(
         })
       );
 
-      await notifyTicketAssignment({
+      notifyTicketAssignment({
         ticket: updatedTicket,
         assignedGroupId: updatedTicket.assigned_group_id,
         assignedToUserId: updatedTicket.assigned_to_user_id,
+      }).catch((err) => {
+        console.error("Assignment email background failure:", err.message);
       });
 
-      return res.json(updatedTicket);
+      return res.json({
+        ...updatedTicket,
+        age: formatAge(updatedTicket.created_at),
+      });
     } catch (err) {
       console.error("Assign ticket error:", err);
       return res.status(500).json({ error: "Server error" });
     }
   }
 );
+
 
 /**
  * ✅ PATCH /api/tickets/:id/resolve
@@ -768,7 +895,7 @@ router.patch(
  */
 router.patch(
   "/:id/close",
-  allowRoles("superadmin", "admin", "manager"),
+  allowRoles("superadmin", "admin", "agent", "manager"),
   async (req, res) => {
     try {
       const oldTicket = await pool.query(

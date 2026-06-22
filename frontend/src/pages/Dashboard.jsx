@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api, { notificationApi, ticketsApi } from "../services/api";
 
+console.log("✅ NEW BUILD VERSION LOADED");
 import {
   Activity,
   AlertTriangle,
@@ -161,7 +162,7 @@ export default function Dashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRangeMenu, setShowRangeMenu] = useState(false);
   const [loading, setLoading] = useState(false);
-
+  const [users, setUsers] = useState([]);
   const iconMap = {
     Server,
     Network,
@@ -182,48 +183,52 @@ export default function Dashboard() {
     setLoading(true);
 
     try {
-      const [ticketRes, notificationRes, assetRes, knowledgeRes] =
-        await Promise.allSettled([
+
+        const [
+          ticketRes,
+          notificationRes,
+          assetRes,
+          knowledgeRes,
+          userRes,
+        ] = await Promise.allSettled([
           ticketsApi.getAll(),
-          notificationApi.getAll(),
+          notificationApi.getAll({ module: "admin" }),
           api.get("/assets"),
           api.get("/knowledge"),
+          api.get("/auth/users"),
         ]);
 
-      if (ticketRes.status === "fulfilled") {
-        const data = Array.isArray(ticketRes.value.data)
-          ? ticketRes.value.data
-          : [];
+        if (ticketRes.status === "fulfilled") {
+          const data = ticketRes.value.data || [];
+          setTickets(data);
+        
+          setSelectedTicket((current) => {
+            if (!current) return data[0] || null;
+            return data.find((t) => t.id === current.id) || data[0] || null;
+          });
+        }
 
-        setTickets(data);
-        setSelectedTicket((current) => {
-          if (!current) return data[0] || null;
-          return data.find((ticket) => ticket.id === current.id) || data[0] || null;
-        });
-      }
+        if (userRes.status === "fulfilled") {
+          setUsers(userRes.value.data || []);
+        }
 
-      if (notificationRes.status === "fulfilled") {
-        setNotifications(
-          Array.isArray(notificationRes.value.data)
-            ? notificationRes.value.data
-            : []
-        );
-      }
+        if (notificationRes.status === "fulfilled") {
+          setNotifications(notificationRes.value.data || []);
+        }
 
-      if (assetRes.status === "fulfilled") {
-        setAssets(Array.isArray(assetRes.value.data) ? assetRes.value.data : []);
-      }
+        if (assetRes.status === "fulfilled") {
+          setAssets(assetRes.value.data || []);
+        }
 
-      if (knowledgeRes.status === "fulfilled") {
-        setKnowledge(
-          Array.isArray(knowledgeRes.value.data) ? knowledgeRes.value.data : []
-        );
-      }
-    } catch (err) {
-      console.error("Failed to fetch dashboard data:", err);
-    } finally {
-      setLoading(false);
-    }
+        if (knowledgeRes.status === "fulfilled") {
+          setKnowledge(knowledgeRes.value.data || []);
+        }
+
+        } catch (err) {
+          console.error("Failed to fetch dashboard data:", err);
+        } finally {
+          setLoading(false);
+        }
   };
 
   useEffect(() => {
@@ -240,7 +245,7 @@ export default function Dashboard() {
 
     if (!showNotifications) {
       try {
-        await notificationApi.markAllRead();
+        await notificationApi.markAllRead({ module: "admin" });
         setNotifications((prev) =>
           prev.map((notification) => ({
             ...notification,
@@ -340,6 +345,19 @@ const stats = useMemo(() => {
     avgResolution,
   };
 }, [tickets]);
+
+
+  const assignTicket = async (ticketId, userId) => {
+    try {
+      await api.patch(`/tickets/${ticketId}`, {
+      assigned_to: userId || null,
+      });
+
+      fetchDashboardData(); // refresh UI
+      } catch (err) {
+        console.error("Assignment failed:", err);
+      }
+    };
 
   const volumeData = useMemo(() => {
     const now = new Date();
@@ -865,11 +883,22 @@ const stats = useMemo(() => {
                         </div>
 
                         <div className="text-sm">
-                          <p className="font-semibold text-slate-950">
-                            {ticket.assigned_to_name || "Unassigned"}
-                          </p>
-                          <p className="text-slate-500">Agent</p>
-                        </div>
+                          <select
+                            className="border rounded p-1 text-sm"
+                            value={ticket.assigned_to || ""}
+                            onChange={(e) => assignTicket(ticket.id, e.target.value)}
+                          >
+                            <option value="">Unassigned</option>
+                            {users.map((user) => (
+                              <option key={user.id} value={user.id}>
+                                {user.name}
+                              </option>
+                            ))}
+                          </select>
+                          
+                          <p className="text-slate-500 mt-1">Agent</p>
+                       </div>
+
 
                         <div>
                           <div className="h-2 rounded-full bg-slate-100">

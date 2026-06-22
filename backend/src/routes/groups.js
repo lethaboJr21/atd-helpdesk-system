@@ -18,10 +18,6 @@ router.get("/", async (_req, res) => {
       SELECT
         g.id,
         g.name,
-        g.description,
-
-        COUNT(u.id)::int AS member_count,
-
         COALESCE(
           json_agg(
             json_build_object(
@@ -30,34 +26,18 @@ router.get("/", async (_req, res) => {
               'email', u.email,
               'role', u.role
             )
-            ORDER BY u.name ASC
           ) FILTER (WHERE u.id IS NOT NULL),
           '[]'
         ) AS members
-
       FROM support_groups g
-
-      LEFT JOIN support_group_members gm
-        ON gm.group_id = g.id
-
+      LEFT JOIN support_group_members gm ON gm.group_id = g.id
       LEFT JOIN users u
         ON u.id = gm.user_id
-        AND u.approved = TRUE
-        AND u.role IN (
-          'agent',
-          'operator',
-          'manager',
-          'admin',
-          'superadmin'
-        )
-
-      GROUP BY
-        g.id,
-        g.name,
-        g.description
-
-      ORDER BY
-        g.name ASC
+        AND LOWER(u.email) LIKE '%@atdalliance.co.za'
+        AND u.role IN ('agent', 'admin', 'manager', 'superadmin')
+        AND u.approved = true
+      GROUP BY g.id, g.name
+      ORDER BY g.name;
     `);
 
     return res.json(rows);
