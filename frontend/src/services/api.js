@@ -1,8 +1,18 @@
 import axios from "axios";
 
+function getModuleBase() {
+  const path = window.location.pathname.toLowerCase();
+
+  if (path.startsWith("/production")) {
+    return "/production";
+  }
+
+  return "/helpdesk";
+}
+
 const API_BASE =
   import.meta.env.MODE === "production"
-    ? `${window.location.origin}/helpdesk/api`
+    ? `${window.location.origin}${getModuleBase()}/api`
     : "http://localhost:3001/api";
 
 const api = axios.create({
