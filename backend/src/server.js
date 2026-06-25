@@ -25,6 +25,7 @@ startProductionSyncScheduler();
 const productionEventRoutes = require("./routes/productionEvents");
 
 const app = express();
+app.set("trust proxy", 1);
 const PORT = parseInt(process.env.PORT, 10) || 3001;
 
 const server = http.createServer(app);
