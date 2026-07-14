@@ -76,6 +76,9 @@ export const authApi = {
   signup: (data) => api.post("/auth/signup", data),
   logout: () => api.post("/auth/logout"),
   me: () => api.get("/auth/me"),
+  
+  microsoftLoginUrl: () => `${API_BASE}/auth/microsoft`,
+
 };
 
 export const userApi = {

@@ -55,6 +55,21 @@ export function AuthProvider({ children }) {
     return res.data.user;
   };
 
+  const completeSso = async (token) => {
+  localStorage.setItem("token", token);
+
+  const res = await authApi.me();
+  const userData = res.data.user || res.data;
+
+  setUser(userData);
+
+  return userData;
+  };
+  
+  const loginWithMicrosoft = () => {
+    window.location.href = authApi.microsoftLoginUrl();
+  };
+
   // ✅ Signup creates account only.
   // ✅ It must NOT log the user in.
   // ✅ Pending users must wait for admin approval.
@@ -92,6 +107,8 @@ export function AuthProvider({ children }) {
       login,
       signup,
       logout,
+      completeSso,
+      loginWithMicrosoft,
     }),
     [user, loading]
   );

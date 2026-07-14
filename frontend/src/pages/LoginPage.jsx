@@ -1,16 +1,55 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Navigate, useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { Headphones, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
-  const { login, isAuthenticated, loading } = useAuth();
+  const { login, completeSso, loginWithMicrosoft, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+
+// Handle Microsoft SSO callback
+  useEffect(() => {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get("token");
+  const ssoError = params.get("ssoError");
+
+  if (ssoError) {
+    setError(decodeURIComponent(ssoError));
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+
+  if (!token) return;
+
+  setSubmitting(true);
+  setError("");
+
+  completeSso(token)
+    .then(() => {
+      window.history.replaceState({}, document.title, window.location.pathname);
+      navigate("/", { replace: true });
+    })
+    .catch((err) => {
+      console.error("Microsoft SSO completion failed:", err);
+
+      localStorage.removeItem("token");
+
+      setError(
+        "Microsoft sign-in completed, but the portal session could not be created."
+      );
+
+      window.history.replaceState({}, document.title, window.location.pathname);
+    })
+    .finally(() => {
+      setSubmitting(false);
+    });
+}, [completeSso, navigate]);
 
   if (!loading && isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -65,7 +104,25 @@ export default function LoginPage() {
             <span>{error}</span>
           </div>
         )}
-
+        <button
+          type="button"
+          onClick={loginWithMicrosoft}
+          disabled={submitting}
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+        >
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-blue-600 text-xs font-black text-white">
+            M
+          </span>
+          Sign in with Microsoft 365
+        </button>
+              
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            or use local login
+          </span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">

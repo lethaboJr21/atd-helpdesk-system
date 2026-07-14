@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import api, { notificationApi, ticketsApi } from "../services/api";
-
+import Sidebar from "../components/Sidebar";
 console.log("✅ NEW BUILD VERSION LOADED");
 import {
   Activity,
@@ -162,6 +162,7 @@ export default function Dashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRangeMenu, setShowRangeMenu] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [users, setUsers] = useState([]);
   const iconMap = {
     Server,
@@ -463,61 +464,13 @@ const stats = useMemo(() => {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900">
-      <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-slate-200 bg-slate-950 text-white lg:block">
-        <div className="flex h-full flex-col">
-          <div className="flex items-center gap-3 border-b border-white/10 px-6 py-6">
-            <div className="rounded-2xl bg-blue-500 p-3 shadow-lg shadow-blue-500/30">
-              <Headphones className="h-7 w-7" />
-            </div>
+      <Sidebar
+        navigate={navigate}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((prev) => !prev)}
+      />
 
-            <div>
-              <p className="text-lg font-bold">ATD Alliance Helpdesk</p>
-              <p className="text-xs text-slate-400">Helpdesk Command Centre</p>
-            </div>
-          </div>
-
-          <nav className="flex-1 space-y-2 px-4 py-6">
-            {[
-              [LayoutDashboard, "Dashboard", "/"],
-              [Ticket, "Ticket Workspace", "/tickets"],
-              [Factory, "Plant Operations", "/production"],
-              [Server, "Infrastructure", "/tickets"],
-              [Code2, "Applications", "/tickets"],
-              [ShieldCheck, "Access & Security", "/tickets"],
-              [HardDrive, "Assets / CMDB", "/tickets"],
-              [Users, "Teams & Workload", "/admin/users"],
-              [Settings, "Admin Settings", "/admin/users"],
-            ].map(([Icon, label, path]) => (
-              <button
-                key={label}
-                onClick={() => navigate(path)}
-                className={classNames(
-                  "flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition",
-                  path === "/"
-                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20"
-                    : "text-slate-300 hover:bg-white/10 hover:text-white"
-                )}
-              >
-                <Icon className="h-5 w-5" />
-                {label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="m-4 rounded-2xl border border-blue-400/20 bg-blue-500/10 p-4">
-            <div className="flex items-center gap-2 text-blue-200">
-              <Zap className="h-5 w-5" />
-              <p className="font-semibold">Smart Triage</p>
-            </div>
-
-            <p className="mt-2 text-sm text-slate-300">
-              Prioritise tickets using priority, SLA due date, group and status.
-            </p>
-          </div>
-        </div>
-      </aside>
-
-      <main className="lg:pl-72">
+      <main className={classNames(sidebarCollapsed ? "lg:pl-20" : "lg:pl-72")}>
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/85 backdrop-blur-xl">
           <div className="flex flex-col gap-4 px-5 py-4 xl:flex-row xl:items-center xl:justify-between xl:px-8">
             <div>

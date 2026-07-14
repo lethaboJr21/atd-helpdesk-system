@@ -185,6 +185,83 @@ ATD Helpdesk
   });
 }
 
+
+/**
+ * ✅ Sends welcome email when a Microsoft 365 user signs in for the first time.
+ */
+async function sendM365WelcomeEmail(user) {
+  const portalUrl = PUBLIC_PORTAL_URL;
+
+  const safeName = escapeHtml(user?.name || "ATD user");
+  const safeEmail = escapeHtml(user?.email || "");
+
+  const subject = "Welcome to the ATD Helpdesk Portal";
+
+  const html = `
+    <div style="font-family:Segoe UI, Arial, sans-serif; color:#1f2937; font-size:14px; line-height:1.6;">
+      <p>Hi ${safeName},</p>
+
+      <p>
+        Your Microsoft 365 account has been registered on the
+        <strong>ATD Helpdesk Portal</strong>.
+      </p>
+
+      <div style="margin:18px 0; padding:14px; background:#f8fafc; border-left:4px solid #2563eb;">
+        <p style="margin:0;"><strong>Email:</strong> ${safeEmail}</p>
+        <p style="margin:0;"><strong>Default role:</strong> Standard user</p>
+      </div>
+
+      <p>
+        You can now sign in using your Microsoft 365 account to lodge support requests,
+        report problems, and track your tickets.
+      </p>
+
+      <p>
+        <a href="${portalUrl}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+          Open ATD Helpdesk
+        </a>
+      </p>
+
+      <p style="margin-top:28px;">
+        Kind regards,<br/>
+        <strong>ATD Helpdesk</strong><br/>
+        IT Support Portal
+      </p>
+
+      <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;" />
+
+      <p style="font-size:12px; color:#64748b;">
+        This is an automated notification from the ATD Alliance Helpdesk Portal.
+      </p>
+    </div>
+  `;
+
+  const text = `
+Hi ${user?.name || "ATD user"},
+
+Your Microsoft 365 account has been registered on the ATD Helpdesk Portal.
+
+Email: ${user?.email || ""}
+Default role: Standard user
+
+You can now sign in using your Microsoft 365 account.
+
+Open ATD Helpdesk:
+${portalUrl}
+
+Kind regards,
+ATD Helpdesk
+`;
+
+  return sendMailSafe({
+    to: user?.email,
+    subject,
+    html,
+    text,
+  });
+}
+
+
 /**
  * Sends ticket assignment email to group members or assigned agent.
  */
@@ -294,4 +371,5 @@ module.exports = {
   verifyEmailTransporter,
   sendApprovalEmail,
   sendTicketAssignmentEmail,
+  sendM365WelcomeEmail,
 };
