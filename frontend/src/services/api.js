@@ -82,17 +82,45 @@ export const authApi = {
 };
 
 export const userApi = {
-  getUsers: (params) => api.get("/users", { params }),
-  approveUser: (id, role) => api.put(`/users/${id}/approve`, { role }),
-  updateUserRole: (id, role) => api.put(`/users/${id}/role`, { role }),
-  deactivateUser: (id) => api.put(`/users/${id}/deactivate`),
-  reactivateUser: (id) => api.put(`/users/${id}/reactivate`),
+  getUsers: (params) =>
+    api.get("/users", { params }),
+
+  getMeta: () =>
+    api.get("/users/meta"),
+
+  getById: (id) =>
+    api.get(`/users/${id}`),
+
+  updateProfile: (id, data) =>
+    api.put(`/users/${id}/profile`, data),
+
+  approveUser: (id, role) =>
+    api.put(`/users/${id}/approve`, { role }),
+
+  updateUserRole: (id, role) =>
+    api.put(`/users/${id}/role`, { role }),
+
+  deactivateUser: (id) =>
+    api.put(`/users/${id}/deactivate`),
+
+  reactivateUser: (id) =>
+    api.put(`/users/${id}/reactivate`),
+
+  archiveUser: (id, reason) =>
+    api.put(`/users/${id}/archive`, { reason }),
+
+  restoreUser: (id) =>
+    api.put(`/users/${id}/restore`),
+
+  deleteUser: (id) =>
+    api.delete(`/users/${id}`),
 };
+
 
 export const azureApi = {
   getUsers: (params) =>
     api.get("/azure/users", { params }),
-  
+
 
   syncUsers: (options = {}) =>
     api.post("/azure/sync", options),

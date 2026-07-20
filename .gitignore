@@ -28,3 +28,7 @@ Thumbs.db
 # Database Backups
 backend/backups/
 *.sql
+
+# Keep reviewed application migrations in Git
+!backend/src/db/migrations/
+!backend/src/db/migrations/*.sql
