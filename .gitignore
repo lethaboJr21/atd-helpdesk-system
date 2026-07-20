@@ -23,3 +23,8 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 *.swp
+
+
+# Database Backups
+backend/backups/
+*.sql

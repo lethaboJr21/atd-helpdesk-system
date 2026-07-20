@@ -89,6 +89,15 @@ export const userApi = {
   reactivateUser: (id) => api.put(`/users/${id}/reactivate`),
 };
 
+export const azureApi = {
+  getUsers: (params) =>
+    api.get("/azure/users", { params }),
+  
+
+  syncUsers: (options = {}) =>
+    api.post("/azure/sync", options),
+};
+
 export const productionApi = {
   getAll: () => api.get("/production"),
   create: (data) => api.post("/production", data),
