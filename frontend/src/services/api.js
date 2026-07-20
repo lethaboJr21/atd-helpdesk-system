@@ -63,6 +63,13 @@ export const groupsApi = {
   getAll: () => api.get("/groups"),
 };
 
+export const assetsApi = {
+  getAll: (params) => api.get("/assets", { params }),
+  getById: (id) => api.get(`/assets/${id}`),
+  getStats: () => api.get("/assets/stats"),
+  getByUser: (params) => api.get("/assets/by-user", { params }),
+};
+
 export const statsApi = {
   getDashboard: () => api.get("/stats/dashboard"),
   getSLATrend: () => api.get("/stats/sla-trend"),

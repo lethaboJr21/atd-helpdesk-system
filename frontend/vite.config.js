@@ -14,5 +14,9 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
+    // Bundle files go to "static/" (not "assets/") so the /assets SPA route
+    // doesn't collide with a real directory — Apache's SPA fallback skips
+    // paths that exist on disk.
+    assetsDir: 'static',
   }
 })

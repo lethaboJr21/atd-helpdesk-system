@@ -11,6 +11,7 @@ import TicketWorkspace from "./pages/TicketWorkspace";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import OperationsHubEmbed from "./pages/OperationsHubEmbed";
 import TicketDetailPage from "./pages/TicketDetailPage";
+import AssetsPage from "./pages/AssetsPage";
 
 function getModuleBase() {
   const path = window.location.pathname.toLowerCase();
@@ -143,6 +144,15 @@ function AppRoutes({ moduleBase }) {
         element={
           <PrivateRoute>
             <TicketDetailPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/assets"
+        element={
+          <PrivateRoute>
+            <AssetsPage />
           </PrivateRoute>
         }
       />
