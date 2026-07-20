@@ -75,8 +75,8 @@ export default function Sidebar({ navigate, collapsed, onToggle }) {
     {
       icon: HardDrive,
       label: "Assets / CMDB",
-      external: true,
-      action: () => openExternal("/ams/assets.php"),
+      path: "/assets",
+      action: () => navigate("/assets"),
     },
     {
       icon: AlertTriangle,

@@ -151,7 +151,7 @@ export default function Dashboard() {
   const { logout, user } = useAuth();
 
   const [tickets, setTickets] = useState([]);
-  const [assets, setAssets] = useState([]);
+  const [assetStats, setAssetStats] = useState(null);
   const [knowledge, setKnowledge] = useState([]);
   const [notifications, setNotifications] = useState([]);
 
@@ -194,7 +194,7 @@ export default function Dashboard() {
         ] = await Promise.allSettled([
           ticketsApi.getAll(),
           notificationApi.getAll({ module: "admin" }),
-          api.get("/assets"),
+          api.get("/assets/stats"),
           api.get("/knowledge"),
           api.get("/auth/users"),
         ]);
@@ -218,7 +218,7 @@ export default function Dashboard() {
         }
 
         if (assetRes.status === "fulfilled") {
-          setAssets(assetRes.value.data || []);
+          setAssetStats(assetRes.value.data || null);
         }
 
         if (knowledgeRes.status === "fulfilled") {
@@ -978,62 +978,69 @@ const stats = useMemo(() => {
           <div className="grid gap-6 xl:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-bold text-slate-950">
-                Infrastructure & App Health
+                Asset Inventory
               </h2>
 
               <p className="text-sm text-slate-500">
-                Live asset snapshot from the assets API.
+                Live from the Asset Management System.
               </p>
 
               <div className="mt-4 space-y-3">
-                {assets.length === 0 ? (
-                  <p className="text-sm text-slate-500">No assets found.</p>
+                {!assetStats ? (
+                  <p className="text-sm text-slate-500">
+                    Asset data unavailable.
+                  </p>
                 ) : (
-                  assets.map((asset) => {
-                    const Icon = iconMap[asset.icon] || Server;
+                  <>
+                    <div className="rounded-2xl border border-slate-100 p-4">
+                      <p className="text-sm text-slate-500">Total Assets</p>
+                      <p className="mt-1 text-3xl font-bold text-slate-950">
+                        {assetStats.total || 0}
+                      </p>
+                    </div>
 
-                    return (
-                      <div
-                        key={asset.id || asset.name}
-                        className="rounded-2xl border border-slate-100 p-4"
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className="rounded-2xl bg-slate-100 p-2">
-                              <Icon className="h-5 w-5 text-slate-700" />
-                            </div>
+                    {[
+                      ["In Use", "assigned", "bg-emerald-500"],
+                      ["In Storage", "storage", "bg-slate-400"],
+                      ["Damaged", "damaged", "bg-red-500"],
+                      ["Untraced", "untraced", "bg-amber-500"],
+                    ].map(([label, key, barClass]) => {
+                      const count = assetStats.by_status?.[key] || 0;
+                      const pct = assetStats.total
+                        ? Math.round((count / assetStats.total) * 100)
+                        : 0;
 
-                            <div>
-                              <p className="font-semibold text-slate-950">
-                                {asset.name}
-                              </p>
-                              <p className="text-sm text-slate-500">
-                                {asset.status}
-                              </p>
-                            </div>
+                      return (
+                        <div
+                          key={key}
+                          className="rounded-2xl border border-slate-100 p-4"
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="font-semibold text-slate-950">
+                              {label}
+                            </p>
+                            <span className="font-bold text-slate-950">
+                              {count}
+                            </span>
                           </div>
 
-                          <span className="font-bold text-slate-950">
-                            {asset.score || 0}%
-                          </span>
+                          <div className="mt-3 h-2 rounded-full bg-slate-100">
+                            <div
+                              className={classNames("h-2 rounded-full", barClass)}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
                         </div>
+                      );
+                    })}
 
-                        <div className="mt-3 h-2 rounded-full bg-slate-100">
-                          <div
-                            className={classNames(
-                              "h-2 rounded-full",
-                              Number(asset.score || 0) >= 90
-                                ? "bg-emerald-500"
-                                : Number(asset.score || 0) >= 80
-                                ? "bg-amber-500"
-                                : "bg-red-500"
-                            )}
-                            style={{ width: `${Number(asset.score || 0)}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
+                    <button
+                      onClick={() => navigate("/assets")}
+                      className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-blue-300 hover:bg-blue-50"
+                    >
+                      View all assets →
+                    </button>
+                  </>
                 )}
               </div>
             </div>

@@ -17,6 +17,7 @@ const notificationRoutes = require("./routes/notifications");
 const groupRoutes = require("./routes/groups");
 const azureRoutes = require("./routes/azure");
 const userRoutes = require("./routes/users");
+const assetRoutes = require("./routes/assets");
 const productionSyncRoutes = require("./routes/productionSync");
 const { startTicketReminderJob } = require("./services/ticketReminders");
 startTicketReminderJob();
@@ -85,6 +86,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/azure", azureRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/assets", assetRoutes);
 
 app.use("/api/production", productionRoutes);
 app.use("/api/production/sync", productionSyncRoutes);
@@ -92,16 +94,6 @@ app.use("/api/production/events", productionEventRoutes);
 
 
 // Additional endpoints
-app.get("/api/assets", async (req, res) => {
-  try {
-    const result = await pool.query("SELECT * FROM asset_health");
-    res.json(result.rows);
-  } catch (err) {
-    console.error("Assets fetch error:", err.message);
-    res.status(500).json({ error: "Failed to fetch assets" });
-  }
-});
-//
 app.get("/api/notifications", async (req, res) => {
   const result = await pool.query(
     "SELECT * FROM notifications ORDER BY created_at DESC"
