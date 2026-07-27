@@ -60,7 +60,11 @@ app.use(
 );
 
 // Body parsing
-app.use(express.json({ limit: "1mb" }));
+app.use(
+  express.json({ 
+    limit: "1mb" 
+  })
+);
 
 // Rate limiting
 const loginLimiter = rateLimit({
@@ -68,14 +72,20 @@ const loginLimiter = rateLimit({
   max: 20,
   message: { error: "Too many login attempts" },
 });
-
+// Rate limiting for all other API endpoints
 const apiLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 200,
 });
+// Middleware for handling malformed JSON
+const jsonErrorHandler = require(
+  "./middleware/jsonErrorHandler"
+);
+
 
 app.use("/api/auth/login", loginLimiter);
 app.use("/api", apiLimiter);
+app.use(jsonErrorHandler);
 
 // API routes
 app.use("/api/auth", authRoutes);

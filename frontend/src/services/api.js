@@ -1,9 +1,9 @@
 import axios from "axios";
 
 function getModuleBase() {
-  const path = window.location.pathname.toLowerCase();
+  const pathname = window.location.pathname.toLowerCase();
 
-  if (path.startsWith("/production")) {
+  if (pathname.startsWith("/production")) {
     return "/production";
   }
 
@@ -45,123 +45,268 @@ api.interceptors.response.use(
 );
 
 export const ticketsApi = {
-  getAll: (params) => api.get("/tickets", { params }),
-  getById: (id) => api.get(`/tickets/${id}`),
-  create: (data) => api.post("/tickets", data),
-  update: (id, data) => api.put(`/tickets/${id}`, data),
-  updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),
-  resolve: (id) => api.patch(`/tickets/${id}/resolve`),
-  close: (id) => api.patch(`/tickets/${id}/close`),
-  assign: (id, assignedToUserId, assignedGroupId) =>
-    api.post(`/tickets/${id}/assign`, {
+  getAll: (params) => {
+    return api.get("/tickets", { params });
+  },
+
+  getMine: () => {
+    return api.get("/tickets/my-tickets");
+  },
+
+  getById: (id) => {
+    return api.get(`/tickets/${id}`);
+  },
+
+  create: (data) => {
+    return api.post("/tickets", data);
+  },
+
+  update: (id, data) => {
+    return api.put(`/tickets/${id}`, data);
+  },
+
+  updateStatus: (id, status) => {
+    return api.patch(`/tickets/${id}/status`, { status });
+  },
+
+  resolve: (id) => {
+    return api.patch(`/tickets/${id}/resolve`, {});
+  },
+
+  close: (id) => {
+    return api.patch(`/tickets/${id}/close`, {});
+  },
+
+  assign: (id, assignedToUserId, assignedGroupId) => {
+    return api.post(`/tickets/${id}/assign`, {
       assignedToUserId,
       assignedGroupId,
-    }),
+    });
+  },
 };
 
 export const groupsApi = {
-  getAll: () => api.get("/groups"),
+  getAll: () => {
+    return api.get("/groups");
+  },
 };
 
 export const assetsApi = {
-  getAll: (params) => api.get("/assets", { params }),
-  getById: (id) => api.get(`/assets/${id}`),
-  getStats: () => api.get("/assets/stats"),
-  getByUser: (params) => api.get("/assets/by-user", { params }),
+  getAll: (params) => {
+    return api.get("/assets", { params });
+  },
+
+  getById: (id) => {
+    return api.get(`/assets/${id}`);
+  },
+
+  getStats: () => {
+    return api.get("/assets/stats");
+  },
+
+  getMine: () => {
+    return api.get("/assets/by-user");
+  },
+
+  getByUser: (params) => {
+    return api.get("/assets/by-user", { params });
+  },
 };
 
-export const statsApi = {
-  getDashboard: () => api.get("/stats/dashboard"),
-  getSLATrend: () => api.get("/stats/sla-trend"),
-  getVolumeData: () => api.get("/stats/volume"),
-  getCategoryData: () => api.get("/stats/categories"),
-  getAssetHealth: () => api.get("/stats/assets"),
+export const knowledgeApi = {
+  getAll: (params) => {
+    return api.get("/knowledge", { params });
+  },
 };
 
 export const authApi = {
-  login: (credentials) => api.post("/auth/login", credentials),
-  signup: (data) => api.post("/auth/signup", data),
-  logout: () => api.post("/auth/logout"),
-  me: () => api.get("/auth/me"),
-  
-  microsoftLoginUrl: () => `${API_BASE}/auth/microsoft`,
+  login: (credentials) => {
+    return api.post("/auth/login", credentials);
+  },
 
+  signup: (data) => {
+    return api.post("/auth/signup", data);
+  },
+
+  logout: () => {
+    return api.post("/auth/logout", {});
+  },
+
+  me: () => {
+    return api.get("/auth/me");
+  },
+
+  microsoftLoginUrl: () => {
+    return `${API_BASE}/auth/microsoft`;
+  },
 };
 
 export const userApi = {
-  getUsers: (params) =>
-    api.get("/users", { params }),
+  getUsers: (params) => {
+    return api.get("/users", { params });
+  },
 
-  getMeta: () =>
-    api.get("/users/meta"),
+  getMeta: () => {
+    return api.get("/users/meta");
+  },
 
-  getById: (id) =>
-    api.get(`/users/${id}`),
+  getById: (id) => {
+    return api.get(`/users/${id}`);
+  },
 
-  updateProfile: (id, data) =>
-    api.put(`/users/${id}/profile`, data),
+  getEmployeePreview: (id) => {
+    return api.get(`/users/${id}/employee-preview`);
+  },
 
-  approveUser: (id, role) =>
-    api.put(`/users/${id}/approve`, { role }),
+  bulkAction: (data) => {
+    return api.post("/users/bulk", data);
+  },
 
-  updateUserRole: (id, role) =>
-    api.put(`/users/${id}/role`, { role }),
+  updateProfile: (id, data) => {
+    return api.put(`/users/${id}/profile`, data);
+  },
 
-  deactivateUser: (id) =>
-    api.put(`/users/${id}/deactivate`),
+  approveUser: (id, role) => {
+    return api.put(`/users/${id}/approve`, { role });
+  },
 
-  reactivateUser: (id) =>
-    api.put(`/users/${id}/reactivate`),
+  updateUserRole: (id, role) => {
+    return api.put(`/users/${id}/role`, { role });
+  },
 
-  archiveUser: (id, reason) =>
-    api.put(`/users/${id}/archive`, { reason }),
+  deactivateUser: (id) => {
+    return api.put(`/users/${id}/deactivate`, {});
+  },
 
-  restoreUser: (id) =>
-    api.put(`/users/${id}/restore`),
+  reactivateUser: (id) => {
+    return api.put(`/users/${id}/reactivate`, {});
+  },
 
-  deleteUser: (id) =>
-    api.delete(`/users/${id}`),
+  archiveUser: (id, reason) => {
+    return api.put(`/users/${id}/archive`, { reason });
+  },
+
+  restoreUser: (id) => {
+    return api.put(`/users/${id}/restore`, {});
+  },
+
+  deleteUser: (id) => {
+    return api.delete(`/users/${id}`);
+  },
 };
 
-
 export const azureApi = {
-  getUsers: (params) =>
-    api.get("/azure/users", { params }),
+  getUsers: (params) => {
+    return api.get("/azure/users", { params });
+  },
 
+  syncUsers: (options = {}) => {
+    return api.post("/azure/sync", options);
+  },
+};
 
-  syncUsers: (options = {}) =>
-    api.post("/azure/sync", options),
+export const statsApi = {
+  getDashboard: () => {
+    return api.get("/stats/dashboard");
+  },
+
+  getSLATrend: () => {
+    return api.get("/stats/sla-trend");
+  },
+
+  getVolumeData: () => {
+    return api.get("/stats/volume");
+  },
+
+  getCategoryData: () => {
+    return api.get("/stats/categories");
+  },
+
+  getAssetHealth: () => {
+    return api.get("/stats/assets");
+  },
 };
 
 export const productionApi = {
-  getAll: () => api.get("/production"),
-  create: (data) => api.post("/production", data),
+  getAll: () => {
+    return api.get("/production");
+  },
+
+  create: (data) => {
+    return api.post("/production", data);
+  },
 };
 
 export const logsApi = {
-  getAll: () => api.get("/logs"),
-  create: (data) => api.post("/logs", data),
+  getAll: () => {
+    return api.get("/logs");
+  },
+
+  create: (data) => {
+    return api.post("/logs", data);
+  },
 };
 
 export const notificationApi = {
-  getAll: (params) => api.get("/notifications", { params }),
-  markRead: (id) => api.patch(`/notifications/${id}/read`),
-  markAllRead: (module) =>
-    api.patch("/notifications/read-all", null, { params: { module } }),
-  clearAll: (module) =>
-    api.delete("/notifications/clear", { params: { module } }),
+  getAll: (params) => {
+    return api.get("/notifications", { params });
+  },
+
+  markRead: (id) => {
+    return api.patch(
+      `/notifications/${id}/read`,
+      {}
+    );
+  },
+
+  markAllRead: (module) => {
+    return api.patch(
+      "/notifications/read-all",
+      {},
+      {
+        params: {
+          module,
+        },
+      }
+    );
+  },
+
+  clearAll: (module) => {
+    return api.delete("/notifications/clear", {
+      params: {
+        module,
+      },
+    });
+  },
 };
 
 export const productionSyncApi = {
-  getBedlinerDaily: (params) =>
-    api.get("/production/sync/bedliner-daily", { params }),
-  syncBedlinerDaily: () => api.post("/production/sync/sync-bedliner-daily"),
-  testMssql: () => api.get("/production/sync/test-mssql"),
+  getBedlinerDaily: (params) => {
+    return api.get("/production/sync/bedliner-daily", {
+      params,
+    });
+  },
+
+  syncBedlinerDaily: () => {
+    return api.post(
+      "/production/sync/sync-bedliner-daily",
+      {}
+    );
+  },
+
+  testMssql: () => {
+    return api.get("/production/sync/test-mssql");
+  },
 };
 
 export const productionEventsApi = {
-  getAll: (params) => api.get("/production-events", { params }),
-  create: (data) => api.post("/production-events", data),
+  getAll: (params) => {
+    return api.get("/production-events", { params });
+  },
+
+  create: (data) => {
+    return api.post("/production-events", data);
+  },
 };
 
 export default api;
