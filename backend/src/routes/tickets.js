@@ -1,10 +1,24 @@
 const router = require("express").Router();
+
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
-const { sendTicketAssignmentEmail } = require("../services/email");
+const {
+  sendTicketAssignmentEmail,
+} = require("../services/email");
+const {
+  createTicketAssignmentNotifications,
+} = require("../services/notificationService");
 
 router.use(auth);
+
+const OPERATIONS_ROLES = new Set([
+  "agent",
+  "operator",
+  "manager",
+  "admin",
+  "superadmin",
+]);
 
 const STATUS_MAP = {
   open: "Open",
@@ -31,49 +45,140 @@ const TICKET_TYPE_PREFIX = {
   change: "CHG",
 };
 
+const TICKET_SELECT = `
+  SELECT
+    t.*,
+    requester.name AS requester_name,
+    requester.email AS requester_email,
+    requester.employee_number AS requester_employee_number,
+    assignee.name AS assigned_to_name,
+    assignee.email AS assigned_to_email,
+    g.name AS assigned_group_name
+  FROM tickets t
+  LEFT JOIN users requester
+    ON requester.id = t.requester_id
+  LEFT JOIN users assignee
+    ON assignee.id = t.assigned_to_user_id
+  LEFT JOIN support_groups g
+    ON g.id = t.assigned_group_id
+`;
+
 function normalizeStatus(status) {
-  if (!status) return null;
-  return STATUS_MAP[String(status).trim().toLowerCase()] || null;
+  if (!status) {
+    return null;
+  }
+
+  return STATUS_MAP[
+    String(status).trim().toLowerCase()
+  ] || null;
 }
 
 function normalizePriority(priority) {
-  if (!priority) return null;
-  return PRIORITY_MAP[String(priority).trim().toLowerCase()] || null;
+  if (!priority) {
+    return null;
+  }
+
+  return PRIORITY_MAP[
+    String(priority).trim().toLowerCase()
+  ] || null;
 }
 
 function normalizeNullableId(value) {
-  if (value === undefined) return undefined;
-  if (value === null || value === "") return null;
+  if (value === undefined) {
+    return undefined;
+  }
 
-  const parsed = Number(value);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  if (value === null || value === "") {
+    return null;
+  }
+
+  const parsedValue = Number(value);
+
+  return Number.isInteger(parsedValue) && parsedValue > 0
+    ? parsedValue
+    : null;
+}
+
+function isOperationsUser(user) {
+  return OPERATIONS_ROLES.has(
+    String(user?.role || "").toLowerCase()
+  );
 }
 
 function formatAge(createdAt) {
-  const created = new Date(createdAt).getTime();
-  if (!Number.isFinite(created)) return "N/A";
+  const createdTime = new Date(createdAt).getTime();
 
-  const diffMs = Math.max(0, Date.now() - created);
-  const mins = Math.floor(diffMs / 60000);
+  if (!Number.isFinite(createdTime)) {
+    return "N/A";
+  }
 
-  if (mins < 60) return `${mins}m`;
+  const differenceMilliseconds = Math.max(
+    0,
+    Date.now() - createdTime
+  );
 
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ${mins % 60}m`;
+  const minutes = Math.floor(
+    differenceMilliseconds / 60000
+  );
 
-  return `${Math.floor(hrs / 24)}d ${hrs % 24}h`;
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+
+  if (hours < 24) {
+    return `${hours}h ${minutes % 60}m`;
+  }
+
+  return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
-/**
- * Writes ticket history using the supplied database executor.
- *
- * IMPORTANT:
- * When the caller already has an open transaction, pass that transaction's
- * client here. Using pool.query() while another client holds a row lock on the
- * same ticket can make PostgreSQL wait on itself through the foreign-key check.
- */
+function withAge(ticket) {
+  return {
+    ...ticket,
+    age: formatAge(ticket.created_at),
+  };
+}
+
+function getTicketPrefix({
+  ticketType,
+  title,
+  workspace,
+}) {
+  const normalizedType = String(ticketType || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+  if (TICKET_TYPE_PREFIX[normalizedType]) {
+    return TICKET_TYPE_PREFIX[normalizedType];
+  }
+
+  const normalizedTitle = String(title || "").toLowerCase();
+  const normalizedWorkspace = String(workspace || "").toLowerCase();
+
+  if (
+    normalizedWorkspace.includes("change") ||
+    normalizedTitle.includes("change")
+  ) {
+    return "CHG";
+  }
+
+  if (
+    normalizedWorkspace.includes("request") ||
+    normalizedTitle.includes("request") ||
+    normalizedTitle.includes("access") ||
+    normalizedTitle.includes("install")
+  ) {
+    return "REQ";
+  }
+
+  return "INC";
+}
+
 async function addHistory(
-  db,
+  database,
   ticketId,
   actorId,
   action,
@@ -83,11 +188,11 @@ async function addHistory(
   const savepointName = "ticket_history_write";
 
   try {
-    // The history write is protected by a savepoint. If history fails, the
-    // ticket transaction can still commit instead of becoming aborted.
-    await db.query(`SAVEPOINT ${savepointName}`);
+    await database.query(
+      `SAVEPOINT ${savepointName}`
+    );
 
-    await db.query(
+    await database.query(
       `
       INSERT INTO ticket_history (
         ticket_id,
@@ -111,95 +216,104 @@ async function addHistory(
       ]
     );
 
-    await db.query(`RELEASE SAVEPOINT ${savepointName}`);
+    await database.query(
+      `RELEASE SAVEPOINT ${savepointName}`
+    );
+
     return true;
-  } catch (err) {
+  } catch (error) {
     try {
-      await db.query(`ROLLBACK TO SAVEPOINT ${savepointName}`);
-      await db.query(`RELEASE SAVEPOINT ${savepointName}`);
-    } catch (savepointErr) {
-      console.error("Ticket history savepoint recovery failed:", {
-        ticketId,
-        message: savepointErr.message,
-      });
-      throw err;
+      await database.query(
+        `ROLLBACK TO SAVEPOINT ${savepointName}`
+      );
+
+      await database.query(
+        `RELEASE SAVEPOINT ${savepointName}`
+      );
+    } catch (savepointError) {
+      console.error(
+        "Ticket history savepoint recovery failed:",
+        {
+          ticketId,
+          message: savepointError.message,
+        }
+      );
+
+      throw error;
     }
 
-    console.error("Ticket history insert failed; ticket change will continue:", {
-      ticketId,
-      action,
-      message: err.message,
-      code: err.code,
-    });
+    console.error(
+      "Ticket history insert failed; ticket change will continue:",
+      {
+        ticketId,
+        action,
+        message: error.message,
+        code: error.code,
+      }
+    );
 
     return false;
   }
 }
 
-function getTicketPrefix({ ticketType, title, workspace }) {
-  const normalizedType = String(ticketType || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[\s-]+/g, "_");
-
-  if (TICKET_TYPE_PREFIX[normalizedType]) {
-    return TICKET_TYPE_PREFIX[normalizedType];
-  }
-
-  const lowerTitle = String(title || "").toLowerCase();
-  const lowerWorkspace = String(workspace || "").toLowerCase();
-
-  if (lowerWorkspace.includes("change") || lowerTitle.includes("change")) {
-    return "CHG";
-  }
-
-  if (
-    lowerWorkspace.includes("request") ||
-    lowerTitle.includes("request") ||
-    lowerTitle.includes("access") ||
-    lowerTitle.includes("laptop") ||
-    lowerTitle.includes("create") ||
-    lowerTitle.includes("install")
-  ) {
-    return "REQ";
-  }
-
-  return "INC";
-}
-
 async function getGroupEmailRecipients(groupId) {
   if (!groupId) {
-    return { groupName: null, emails: [] };
+    return {
+      groupName: null,
+      emails: [],
+    };
   }
 
-  const { rows } = await pool.query(
+  const result = await pool.query(
     `
     SELECT
       g.name AS group_name,
       u.email
     FROM support_groups g
-    LEFT JOIN support_group_members gm ON gm.group_id = g.id
-    LEFT JOIN users u ON u.id = gm.user_id
+    LEFT JOIN support_group_members gm
+      ON gm.group_id = g.id
+    LEFT JOIN users u
+      ON u.id = gm.user_id
     WHERE g.id = $1
+      AND (
+        u.id IS NULL
+        OR (
+          u.status = 'active'
+          AND u.approved = TRUE
+          AND u.archived_at IS NULL
+        )
+      )
     `,
     [groupId]
   );
 
   return {
-    groupName: rows[0]?.group_name || null,
-    emails: rows.map((row) => row.email).filter(Boolean),
+    groupName: result.rows[0]?.group_name || null,
+    emails: result.rows
+      .map((row) => row.email)
+      .filter(Boolean),
   };
 }
 
 async function getAssigneeEmail(userId) {
-  if (!userId) return null;
+  if (!userId) {
+    return null;
+  }
 
-  const { rows } = await pool.query(
-    `SELECT email FROM users WHERE id = $1`,
+  const result = await pool.query(
+    `
+    SELECT email
+    FROM users
+    WHERE id = $1
+      AND status = 'active'
+      AND approved = TRUE
+      AND archived_at IS NULL
+    LIMIT 1
+    `,
     [userId]
   );
 
-  return rows[0]?.email || null;
+  return result.rows[0]?.email || null;
 }
 
 async function notifyTicketAssignment({
@@ -208,23 +322,90 @@ async function notifyTicketAssignment({
   assignedToUserId,
 }) {
   try {
-    const groupInfo = await getGroupEmailRecipients(assignedGroupId);
-    const assigneeEmail = await getAssigneeEmail(assignedToUserId);
-    const recipients = [...groupInfo.emails];
-
-    if (assigneeEmail) recipients.push(assigneeEmail);
-
-    await sendTicketAssignmentEmail({
-      recipients,
+    await createTicketAssignmentNotifications({
       ticket,
-      groupName: groupInfo.groupName,
+      assignedGroupId,
+      assignedToUserId,
     });
-  } catch (emailErr) {
-    console.error("Ticket assignment email failed:", emailErr.message);
+  } catch (notificationError) {
+    console.error(
+      "Ticket assignment in-app notification failed:",
+      {
+        ticketId: ticket?.id || null,
+        message: notificationError.message,
+      }
+    );
+  }
+
+  try {
+    const groupInformation =
+      await getGroupEmailRecipients(assignedGroupId);
+
+    const assigneeEmail =
+      await getAssigneeEmail(assignedToUserId);
+
+    const recipients = [
+      ...groupInformation.emails,
+    ];
+
+    if (assigneeEmail) {
+      recipients.push(assigneeEmail);
+    }
+
+    const emailResult =
+      await sendTicketAssignmentEmail({
+        recipients,
+        ticket,
+        groupName: groupInformation.groupName,
+      });
+
+    if (!emailResult?.sent && !emailResult?.skipped) {
+      console.error(
+        "Ticket assignment email delivery failed:",
+        {
+          ticketId: ticket?.id || null,
+          code: emailResult?.error?.code || null,
+          message: emailResult?.error?.message || "Unknown email error",
+        }
+      );
+    }
+  } catch (emailError) {
+    console.error(
+      "Ticket assignment email processing failed:",
+      {
+        ticketId: ticket?.id || null,
+        code: emailError.code || null,
+        message: emailError.message,
+      }
+    );
   }
 }
 
-router.get("/", async (req, res) => {
+async function getTicketById(ticketId) {
+  const result = await pool.query(
+    `
+    ${TICKET_SELECT}
+    WHERE t.id = $1
+    LIMIT 1
+    `,
+    [ticketId]
+  );
+
+  return result.rows[0] || null;
+}
+
+function canViewTicket(user, ticket) {
+  if (isOperationsUser(user)) {
+    return true;
+  }
+
+  return (
+    user?.role === "user" &&
+    Number(ticket.requester_id) === Number(user.id)
+  );
+}
+
+router.get("/", async (request, response) => {
   const {
     search,
     status,
@@ -233,93 +414,136 @@ router.get("/", async (req, res) => {
     groupId,
     limit = 50,
     offset = 0,
-  } = req.query;
+  } = request.query;
 
-  const where = [];
-  const params = [];
-  let i = 1;
+  const conditions = [];
+  const parameters = [];
+  let parameterIndex = 1;
 
   if (status) {
-    where.push(`t.status = $${i++}`);
-    params.push(status);
+    const normalizedStatus = normalizeStatus(status);
+
+    if (!normalizedStatus) {
+      return response.status(400).json({
+        error: "Invalid status filter",
+      });
+    }
+
+    conditions.push(
+      `t.status = $${parameterIndex}`
+    );
+    parameters.push(normalizedStatus);
+    parameterIndex += 1;
   }
 
   if (priority) {
-    where.push(`t.priority = $${i++}`);
-    params.push(priority);
+    const normalizedPriority = normalizePriority(priority);
+
+    if (!normalizedPriority) {
+      return response.status(400).json({
+        error: "Invalid priority filter",
+      });
+    }
+
+    conditions.push(
+      `t.priority = $${parameterIndex}`
+    );
+    parameters.push(normalizedPriority);
+    parameterIndex += 1;
   }
 
   if (workspace) {
-    where.push(`t.workspace = $${i++}`);
-    params.push(workspace);
+    conditions.push(
+      `t.workspace = $${parameterIndex}`
+    );
+    parameters.push(workspace);
+    parameterIndex += 1;
   }
 
   if (groupId) {
-    where.push(`t.assigned_group_id = $${i++}`);
-    params.push(groupId);
+    const normalizedGroupId = normalizeNullableId(groupId);
+
+    if (!normalizedGroupId) {
+      return response.status(400).json({
+        error: "Invalid group filter",
+      });
+    }
+
+    conditions.push(
+      `t.assigned_group_id = $${parameterIndex}`
+    );
+    parameters.push(normalizedGroupId);
+    parameterIndex += 1;
   }
 
   if (search) {
-    where.push(`
+    conditions.push(
+      `
       (
-        t.ticket_ref ILIKE $${i}
-        OR t.title ILIKE $${i}
-        OR t.description ILIKE $${i}
-        OR t.priority ILIKE $${i}
-        OR t.status ILIKE $${i}
-        OR t.workspace ILIKE $${i}
-        OR requester.name ILIKE $${i}
-        OR requester.email ILIKE $${i}
-        OR assignee.name ILIKE $${i}
-        OR assignee.email ILIKE $${i}
-        OR g.name ILIKE $${i}
+        t.ticket_ref ILIKE $${parameterIndex}
+        OR t.title ILIKE $${parameterIndex}
+        OR t.description ILIKE $${parameterIndex}
+        OR t.priority ILIKE $${parameterIndex}
+        OR t.status ILIKE $${parameterIndex}
+        OR t.workspace ILIKE $${parameterIndex}
+        OR requester.name ILIKE $${parameterIndex}
+        OR requester.email ILIKE $${parameterIndex}
+        OR assignee.name ILIKE $${parameterIndex}
+        OR assignee.email ILIKE $${parameterIndex}
+        OR g.name ILIKE $${parameterIndex}
       )
-    `);
+      `
+    );
 
-    params.push(`%${search}%`);
-    i += 1;
+    parameters.push(`%${search}%`);
+    parameterIndex += 1;
   }
 
-  if (req.user.role === "user") {
-    where.push(`t.requester_id = $${i++}`);
-    params.push(req.user.id);
-  }
-
-  if (req.user.role === "agent") {
-    where.push(`
+  if (request.user.role === "user") {
+    conditions.push(
+      `t.requester_id = $${parameterIndex}`
+    );
+    parameters.push(request.user.id);
+    parameterIndex += 1;
+  } else if (
+    ["agent", "operator"].includes(request.user.role)
+  ) {
+    conditions.push(
+      `
       (
-        t.assigned_to_user_id = $${i}
+        t.assigned_to_user_id = $${parameterIndex}
         OR t.assigned_to_user_id IS NULL
         OR t.assigned_group_id IN (
           SELECT group_id
           FROM support_group_members
-          WHERE user_id = $${i}
+          WHERE user_id = $${parameterIndex}
         )
       )
-    `);
+      `
+    );
 
-    params.push(req.user.id);
-    i += 1;
+    parameters.push(request.user.id);
+    parameterIndex += 1;
   }
 
-  const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
-  const safeOffset = Math.max(Number(offset) || 0, 0);
+  const whereClause = conditions.length > 0
+    ? `WHERE ${conditions.join(" AND ")}`
+    : "";
+
+  const safeLimit = Math.min(
+    Math.max(Number(limit) || 50, 1),
+    200
+  );
+
+  const safeOffset = Math.max(
+    Number(offset) || 0,
+    0
+  );
 
   try {
-    const { rows } = await pool.query(
+    const result = await pool.query(
       `
-      SELECT
-        t.*,
-        requester.name AS requester_name,
-        requester.email AS requester_email,
-        assignee.name AS assigned_to_name,
-        assignee.email AS assigned_to_email,
-        g.name AS assigned_group_name
-      FROM tickets t
-      LEFT JOIN users requester ON requester.id = t.requester_id
-      LEFT JOIN users assignee ON assignee.id = t.assigned_to_user_id
-      LEFT JOIN support_groups g ON g.id = t.assigned_group_id
+      ${TICKET_SELECT}
       ${whereClause}
       ORDER BY
         CASE t.priority
@@ -330,39 +554,34 @@ router.get("/", async (req, res) => {
           ELSE 5
         END,
         t.created_at DESC
-      LIMIT $${i} OFFSET $${i + 1}
+      LIMIT $${parameterIndex}
+      OFFSET $${parameterIndex + 1}
       `,
-      [...params, safeLimit, safeOffset]
+      [
+        ...parameters,
+        safeLimit,
+        safeOffset,
+      ]
     );
 
-    return res.json(
-      rows.map((ticket) => ({
-        ...ticket,
-        age: formatAge(ticket.created_at),
-      }))
+    return response.json(
+      result.rows.map(withAge)
     );
-  } catch (err) {
-    console.error("Fetch tickets error:", err);
-    return res.status(500).json({ error: "Server error" });
+  } catch (error) {
+    console.error("Fetch tickets failed:", error);
+    return response.status(500).json({
+      error: "Failed to fetch tickets",
+    });
   }
 });
 
-router.get("/my-tickets", async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      `
-      SELECT
-        t.*,
-        requester.name AS requester_name,
-        requester.email AS requester_email,
-        assignee.name AS assigned_to_name,
-        assignee.email AS assigned_to_email,
-        g.name AS assigned_group_name
-      FROM tickets t
-      LEFT JOIN users requester ON requester.id = t.requester_id
-      LEFT JOIN users assignee ON assignee.id = t.assigned_to_user_id
-      LEFT JOIN support_groups g ON g.id = t.assigned_group_id
-      WHERE
+router.get("/my-tickets", async (request, response) => {
+  const employeeOnly = request.user.role === "user";
+
+  const visibilityCondition = employeeOnly
+    ? "t.requester_id = $1"
+    : `
+      (
         t.requester_id = $1
         OR t.assigned_to_user_id = $1
         OR t.assigned_group_id IN (
@@ -370,61 +589,68 @@ router.get("/my-tickets", async (req, res) => {
           FROM support_group_members
           WHERE user_id = $1
         )
+      )
+    `;
+
+  try {
+    const result = await pool.query(
+      `
+      ${TICKET_SELECT}
+      WHERE ${visibilityCondition}
       ORDER BY t.created_at DESC
+      LIMIT 200
       `,
-      [req.user.id]
+      [request.user.id]
     );
 
-    return res.json(
-      rows.map((ticket) => ({
-        ...ticket,
-        age: formatAge(ticket.created_at),
-      }))
+    return response.json(
+      result.rows.map(withAge)
     );
-  } catch (err) {
-    console.error("My tickets error:", err);
-    return res.status(500).json({ error: "Server error" });
+  } catch (error) {
+    console.error("Fetch my tickets failed:", error);
+    return response.status(500).json({
+      error: "Failed to fetch your tickets",
+    });
   }
 });
 
-router.get("/:id", async (req, res) => {
+router.get("/:id", async (request, response) => {
   try {
-    const { rows } = await pool.query(
-      `
-      SELECT
-        t.*,
-        requester.name AS requester_name,
-        requester.email AS requester_email,
-        assignee.name AS assigned_to_name,
-        assignee.email AS assigned_to_email,
-        g.name AS assigned_group_name
-      FROM tickets t
-      LEFT JOIN users requester ON requester.id = t.requester_id
-      LEFT JOIN users assignee ON assignee.id = t.assigned_to_user_id
-      LEFT JOIN support_groups g ON g.id = t.assigned_group_id
-      WHERE t.id = $1
-      `,
-      [req.params.id]
-    );
+    const ticket = await getTicketById(request.params.id);
 
-    if (!rows[0]) {
-      return res.status(404).json({ error: "Ticket not found" });
+    if (!ticket) {
+      return response.status(404).json({
+        error: "Ticket not found",
+      });
     }
 
-    return res.json({
-      ...rows[0],
-      age: formatAge(rows[0].created_at),
+    if (!canViewTicket(request.user, ticket)) {
+      return response.status(403).json({
+        error:
+          "You can only view tickets requested by your account.",
+      });
+    }
+
+    return response.json(withAge(ticket));
+  } catch (error) {
+    console.error("Fetch ticket failed:", error);
+    return response.status(500).json({
+      error: "Failed to fetch ticket",
     });
-  } catch (err) {
-    console.error("Get ticket error:", err);
-    return res.status(500).json({ error: "Server error" });
   }
 });
 
 router.post(
   "/",
-  allowRoles("superadmin", "admin", "agent", "user", "operator", "manager"),
-  async (req, res) => {
+  allowRoles(
+    "superadmin",
+    "admin",
+    "agent",
+    "user",
+    "operator",
+    "manager"
+  ),
+  async (request, response) => {
     const {
       ticketType,
       title,
@@ -433,22 +659,39 @@ router.post(
       workspace,
       assignedGroupId,
       assignedToUserId,
-    } = req.body;
+    } = request.body;
 
-    if (!title || !String(title).trim()) {
-      return res.status(400).json({ error: "title is required" });
+    const normalizedTitle = String(title || "").trim();
+    const normalizedDescription = String(description || "").trim();
+    const normalizedGroupId = normalizeNullableId(assignedGroupId);
+    const normalizedAssigneeId = normalizeNullableId(assignedToUserId);
+
+    if (!normalizedTitle) {
+      return response.status(400).json({
+        error: "A ticket title is required.",
+      });
     }
 
-    if (!assignedGroupId && !assignedToUserId) {
-      return res.status(400).json({
-        error: "Please choose either a support group or an assignee.",
+    if (!normalizedDescription) {
+      return response.status(400).json({
+        error: "A ticket description is required.",
+      });
+    }
+
+    if (!normalizedGroupId && !normalizedAssigneeId) {
+      return response.status(400).json({
+        error: "Please choose a support group or an assignee.",
       });
     }
 
     try {
-      const duplicateCheck = await pool.query(
+      const duplicateResult = await pool.query(
         `
-        SELECT id, ticket_ref, title, created_at
+        SELECT
+          id,
+          ticket_ref,
+          title,
+          created_at
         FROM tickets
         WHERE requester_id = $1
           AND LOWER(title) = LOWER($2)
@@ -456,19 +699,24 @@ router.post(
         ORDER BY created_at DESC
         LIMIT 1
         `,
-        [req.user.id, String(title).trim()]
+        [
+          request.user.id,
+          normalizedTitle,
+        ]
       );
 
-      if (duplicateCheck.rows[0]) {
-        return res.status(409).json({
+      if (duplicateResult.rows[0]) {
+        return response.status(409).json({
           error:
             "A similar ticket was just created. Please wait before submitting again.",
-          ticket: duplicateCheck.rows[0],
+          ticket: duplicateResult.rows[0],
         });
       }
-    } catch (err) {
-      console.error("Duplicate ticket check failed:", err);
-      return res.status(500).json({ error: "Server error" });
+    } catch (error) {
+      console.error("Duplicate ticket check failed:", error);
+      return response.status(500).json({
+        error: "Failed to validate the new ticket",
+      });
     }
 
     const client = await pool.connect();
@@ -478,19 +726,26 @@ router.post(
       await client.query("BEGIN");
       transactionOpen = true;
 
-      // Prevent any accidental lock from hanging this request indefinitely.
-      await client.query("SET LOCAL lock_timeout = '5s'");
-      await client.query("SET LOCAL statement_timeout = '15s'");
+      await client.query(
+        "SET LOCAL lock_timeout = '5s'"
+      );
 
-      const seqResult = await client.query(
+      await client.query(
+        "SET LOCAL statement_timeout = '15s'"
+      );
+
+      const sequenceResult = await client.query(
         "SELECT nextval(pg_get_serial_sequence('tickets', 'id')) AS next_id"
       );
 
-      const nextId = seqResult.rows[0].next_id;
-      const prefix = getTicketPrefix({ ticketType, title, workspace });
-      const ticketRef = `${prefix}-${String(nextId).padStart(5, "0")}`;
+      const nextId = sequenceResult.rows[0].next_id;
+      const ticketReference = `${getTicketPrefix({
+        ticketType,
+        title: normalizedTitle,
+        workspace,
+      })}-${String(nextId).padStart(5, "0")}`;
 
-      const { rows } = await client.query(
+      const insertResult = await client.query(
         `
         INSERT INTO tickets (
           id,
@@ -505,29 +760,41 @@ router.post(
           assigned_group_id,
           assigned_to_user_id
         )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,'Open',$8,$9,$10)
+        VALUES (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          'Open',
+          $8,
+          $9,
+          $10
+        )
         RETURNING *
         `,
         [
           nextId,
-          ticketRef,
-          String(title).trim(),
-          description || "",
-          req.user.id,
-          req.user.id,
+          ticketReference,
+          normalizedTitle,
+          normalizedDescription,
+          request.user.id,
+          request.user.id,
           normalizePriority(priority) || "Medium",
           workspace || "IT",
-          normalizeNullableId(assignedGroupId),
-          normalizeNullableId(assignedToUserId),
+          normalizedGroupId,
+          normalizedAssigneeId,
         ]
       );
 
-      const createdTicket = rows[0];
+      const createdTicket = insertResult.rows[0];
 
       await addHistory(
         client,
         createdTicket.id,
-        req.user.id,
+        request.user.id,
         "created",
         null,
         "Open"
@@ -536,36 +803,49 @@ router.post(
       await client.query("COMMIT");
       transactionOpen = false;
 
-      notifyTicketAssignment({
-        ticket: createdTicket,
-        assignedGroupId: createdTicket.assigned_group_id,
-        assignedToUserId: createdTicket.assigned_to_user_id,
-      }).catch((err) => {
-        console.error("Ticket creation email background failure:", err.message);
+      setImmediate(() => {
+        notifyTicketAssignment({
+          ticket: createdTicket,
+          assignedGroupId: createdTicket.assigned_group_id,
+          assignedToUserId: createdTicket.assigned_to_user_id,
+        }).catch((error) => {
+          console.error(
+            "Ticket creation notification background failure:",
+            error.message
+          );
+        });
       });
 
-      return res.status(201).json({
-        ...createdTicket,
-        age: "0m",
-      });
-    } catch (err) {
+      return response.status(201).json(
+        withAge(createdTicket)
+      );
+    } catch (error) {
       if (transactionOpen) {
         try {
           await client.query("ROLLBACK");
-        } catch (rollbackErr) {
-          console.error("Create ticket rollback failed:", rollbackErr.message);
+        } catch (rollbackError) {
+          console.error(
+            "Create ticket rollback failed:",
+            rollbackError.message
+          );
         }
       }
 
-      console.error("Create ticket error:", err);
+      console.error("Create ticket failed:", error);
 
-      if (err.code === "55P03" || err.code === "57014") {
-        return res.status(409).json({
-          error: "The ticket database is busy. Please try again in a few seconds.",
+      if (
+        error.code === "55P03" ||
+        error.code === "57014"
+      ) {
+        return response.status(409).json({
+          error:
+            "The ticket database is busy. Please try again in a few seconds.",
         });
       }
 
-      return res.status(500).json({ error: "Server error" });
+      return response.status(500).json({
+        error: "Failed to create ticket",
+      });
     } finally {
       client.release();
     }
@@ -574,8 +854,14 @@ router.post(
 
 router.put(
   "/:id",
-  allowRoles("superadmin", "admin", "agent", "manager"),
-  async (req, res) => {
+  allowRoles(
+    "superadmin",
+    "admin",
+    "agent",
+    "operator",
+    "manager"
+  ),
+  async (request, response) => {
     const {
       title,
       description,
@@ -585,19 +871,22 @@ router.put(
       assignedGroupId,
       assignedToUserId,
       dueAt,
-    } = req.body;
+    } = request.body;
 
     const client = await pool.connect();
     let transactionOpen = false;
 
     try {
-      console.log("Updating ticket:", req.params.id);
-
       await client.query("BEGIN");
       transactionOpen = true;
 
-      await client.query("SET LOCAL lock_timeout = '5s'");
-      await client.query("SET LOCAL statement_timeout = '15s'");
+      await client.query(
+        "SET LOCAL lock_timeout = '5s'"
+      );
+
+      await client.query(
+        "SET LOCAL statement_timeout = '15s'"
+      );
 
       const oldTicketResult = await client.query(
         `
@@ -606,7 +895,7 @@ router.put(
         WHERE id = $1
         FOR UPDATE
         `,
-        [req.params.id]
+        [request.params.id]
       );
 
       const oldTicket = oldTicketResult.rows[0];
@@ -614,64 +903,55 @@ router.put(
       if (!oldTicket) {
         await client.query("ROLLBACK");
         transactionOpen = false;
-        return res.status(404).json({ error: "Ticket not found" });
+
+        return response.status(404).json({
+          error: "Ticket not found",
+        });
       }
 
-      const nextTitle =
-        title === undefined ? oldTicket.title : String(title).trim();
+      const nextTitle = title === undefined
+        ? oldTicket.title
+        : String(title).trim();
 
       if (!nextTitle) {
         await client.query("ROLLBACK");
         transactionOpen = false;
-        return res.status(400).json({ error: "Ticket title is required" });
+
+        return response.status(400).json({
+          error: "Ticket title is required",
+        });
       }
 
-      const nextDescription =
-        description === undefined ? oldTicket.description : description || "";
+      const nextPriority = priority === undefined
+        ? oldTicket.priority
+        : normalizePriority(priority);
 
-      const nextPriority =
-        priority === undefined ? oldTicket.priority : normalizePriority(priority);
+      const nextStatus = status === undefined
+        ? oldTicket.status
+        : normalizeStatus(status);
 
-      if (!nextPriority) {
+      if (!nextPriority || !nextStatus) {
         await client.query("ROLLBACK");
         transactionOpen = false;
-        return res.status(400).json({ error: "Invalid priority" });
+
+        return response.status(400).json({
+          error: "Invalid priority or status",
+        });
       }
 
-      const nextStatus =
-        status === undefined ? oldTicket.status : normalizeStatus(status);
+      const nextAssignedGroupId = assignedGroupId === undefined
+        ? oldTicket.assigned_group_id
+        : normalizeNullableId(assignedGroupId);
 
-      if (!nextStatus) {
-        await client.query("ROLLBACK");
-        transactionOpen = false;
-        return res.status(400).json({ error: "Invalid status" });
-      }
+      const nextAssignedToUserId = assignedToUserId === undefined
+        ? oldTicket.assigned_to_user_id
+        : normalizeNullableId(assignedToUserId);
 
-      const nextWorkspace =
-        workspace === undefined ? oldTicket.workspace : workspace || "IT";
-
-      const normalizedGroupId = normalizeNullableId(assignedGroupId);
-      const normalizedUserId = normalizeNullableId(assignedToUserId);
-
-      const nextAssignedGroupId =
-        assignedGroupId === undefined
-          ? oldTicket.assigned_group_id
-          : normalizedGroupId;
-
-      const nextAssignedToUserId =
-        assignedToUserId === undefined
-          ? oldTicket.assigned_to_user_id
-          : normalizedUserId;
-
-      const nextDueAt =
-        dueAt === undefined ? oldTicket.due_at : dueAt || null;
-
-      const nextClosedAt =
-        nextStatus === "Closed"
-          ? oldTicket.closed_at || new Date()
-          : nextStatus === "Resolved"
-          ? oldTicket.closed_at
-          : null;
+      const nextClosedAt = nextStatus === "Closed"
+        ? oldTicket.closed_at || new Date()
+        : nextStatus === "Resolved"
+        ? oldTicket.closed_at
+        : null;
 
       const updatedResult = await client.query(
         `
@@ -692,27 +972,30 @@ router.put(
         `,
         [
           nextTitle,
-          nextDescription,
+          description === undefined
+            ? oldTicket.description
+            : String(description || "").trim(),
           nextPriority,
           nextStatus,
-          nextWorkspace,
+          workspace === undefined
+            ? oldTicket.workspace
+            : workspace || "IT",
           nextAssignedGroupId,
           nextAssignedToUserId,
-          nextDueAt,
+          dueAt === undefined
+            ? oldTicket.due_at
+            : dueAt || null,
           nextClosedAt,
-          req.params.id,
+          request.params.id,
         ]
       );
 
       const updatedTicket = updatedResult.rows[0];
 
-      // Critical fix: use the SAME transaction client that updated the ticket.
-      // This prevents the ticket_history foreign-key insert from waiting on the
-      // uncommitted ticket row owned by this transaction.
       await addHistory(
         client,
-        req.params.id,
-        req.user.id,
+        request.params.id,
+        request.user.id,
         "updated",
         JSON.stringify(oldTicket),
         JSON.stringify(updatedTicket)
@@ -721,8 +1004,6 @@ router.put(
       await client.query("COMMIT");
       transactionOpen = false;
 
-      console.log("Ticket transaction committed:", req.params.id);
-
       const assignmentChanged =
         String(oldTicket.assigned_group_id || "") !==
           String(updatedTicket.assigned_group_id || "") ||
@@ -730,42 +1011,54 @@ router.put(
           String(updatedTicket.assigned_to_user_id || "");
 
       if (assignmentChanged) {
-        notifyTicketAssignment({
-          ticket: updatedTicket,
-          assignedGroupId: updatedTicket.assigned_group_id,
-          assignedToUserId: updatedTicket.assigned_to_user_id,
-        }).catch((err) => {
-          console.error("Assignment email background failure:", err.message);
+        setImmediate(() => {
+          notifyTicketAssignment({
+            ticket: updatedTicket,
+            assignedGroupId: updatedTicket.assigned_group_id,
+            assignedToUserId: updatedTicket.assigned_to_user_id,
+          }).catch((error) => {
+            console.error(
+              "Updated ticket assignment notification failure:",
+              error.message
+            );
+          });
         });
       }
 
-      return res.json({
-        ...updatedTicket,
-        age: formatAge(updatedTicket.created_at),
-      });
-    } catch (err) {
+      return response.json(
+        withAge(updatedTicket)
+      );
+    } catch (error) {
       if (transactionOpen) {
         try {
           await client.query("ROLLBACK");
-        } catch (rollbackErr) {
-          console.error("Update ticket rollback failed:", rollbackErr.message);
+        } catch (rollbackError) {
+          console.error(
+            "Update ticket rollback failed:",
+            rollbackError.message
+          );
         }
       }
 
-      console.error("Update ticket error:", {
-        ticketId: req.params.id,
-        message: err.message,
-        code: err.code,
-        detail: err.detail,
+      console.error("Update ticket failed:", {
+        ticketId: request.params.id,
+        message: error.message,
+        code: error.code,
       });
 
-      if (err.code === "55P03" || err.code === "57014") {
-        return res.status(409).json({
-          error: "This ticket is busy. Please wait a few seconds and try again.",
+      if (
+        error.code === "55P03" ||
+        error.code === "57014"
+      ) {
+        return response.status(409).json({
+          error:
+            "This ticket is busy. Please wait a few seconds and try again.",
         });
       }
 
-      return res.status(500).json({ error: "Server error" });
+      return response.status(500).json({
+        error: "Failed to update ticket",
+      });
     } finally {
       client.release();
     }
@@ -774,90 +1067,21 @@ router.put(
 
 router.patch(
   "/:id/status",
-  allowRoles("superadmin", "admin", "agent", "manager"),
-  async (req, res) => {
-    const normalizedStatus = normalizeStatus(req.body.status);
+  allowRoles(
+    "superadmin",
+    "admin",
+    "agent",
+    "operator",
+    "manager"
+  ),
+  async (request, response) => {
+    const normalizedStatus = normalizeStatus(
+      request.body.status
+    );
 
     if (!normalizedStatus) {
-      return res.status(400).json({ error: "Invalid status" });
-    }
-
-    const client = await pool.connect();
-    let transactionOpen = false;
-
-    try {
-      await client.query("BEGIN");
-      transactionOpen = true;
-      await client.query("SET LOCAL lock_timeout = '5s'");
-
-      const oldTicketResult = await client.query(
-        `SELECT status FROM tickets WHERE id = $1 FOR UPDATE`,
-        [req.params.id]
-      );
-
-      if (!oldTicketResult.rows[0]) {
-        await client.query("ROLLBACK");
-        transactionOpen = false;
-        return res.status(404).json({ error: "Ticket not found" });
-      }
-
-      const { rows } = await client.query(
-        `
-        UPDATE tickets
-        SET
-          status = $1,
-          closed_at = CASE
-            WHEN $1 = 'Closed' THEN COALESCE(closed_at, NOW())
-            WHEN $1 IN ('Resolved') THEN closed_at
-            ELSE NULL
-          END,
-          updated_at = NOW()
-        WHERE id = $2
-        RETURNING *
-        `,
-        [normalizedStatus, req.params.id]
-      );
-
-      await addHistory(
-        client,
-        req.params.id,
-        req.user.id,
-        "status_changed",
-        oldTicketResult.rows[0].status,
-        normalizedStatus
-      );
-
-      await client.query("COMMIT");
-      transactionOpen = false;
-
-      return res.json(rows[0]);
-    } catch (err) {
-      if (transactionOpen) {
-        try {
-          await client.query("ROLLBACK");
-        } catch (rollbackErr) {
-          console.error("Status rollback failed:", rollbackErr.message);
-        }
-      }
-
-      console.error("Status update error:", err);
-      return res.status(500).json({ error: "Server error" });
-    } finally {
-      client.release();
-    }
-  }
-);
-
-router.post(
-  "/:id/assign",
-  allowRoles("superadmin", "admin", "agent", "manager"),
-  async (req, res) => {
-    const assignedToUserId = normalizeNullableId(req.body.assignedToUserId);
-    const assignedGroupId = normalizeNullableId(req.body.assignedGroupId);
-
-    if (!assignedToUserId && !assignedGroupId) {
-      return res.status(400).json({
-        error: "assignedToUserId or assignedGroupId is required",
+      return response.status(400).json({
+        error: "Invalid status",
       });
     }
 
@@ -867,29 +1091,151 @@ router.post(
     try {
       await client.query("BEGIN");
       transactionOpen = true;
-      await client.query("SET LOCAL lock_timeout = '5s'");
+
+      await client.query(
+        "SET LOCAL lock_timeout = '5s'"
+      );
 
       const oldTicketResult = await client.query(
         `
-        SELECT assigned_to_user_id, assigned_group_id
+        SELECT status
         FROM tickets
         WHERE id = $1
         FOR UPDATE
         `,
-        [req.params.id]
+        [request.params.id]
       );
 
       if (!oldTicketResult.rows[0]) {
         await client.query("ROLLBACK");
         transactionOpen = false;
-        return res.status(404).json({ error: "Ticket not found" });
+
+        return response.status(404).json({
+          error: "Ticket not found",
+        });
       }
 
-      const oldTicket = oldTicketResult.rows[0];
-      const nextAssignedGroupId =
-        assignedGroupId || oldTicket.assigned_group_id || null;
+      const updateResult = await client.query(
+        `
+        UPDATE tickets
+        SET
+          status = $1,
+          closed_at = CASE
+            WHEN $1 = 'Closed'
+              THEN COALESCE(closed_at, NOW())
+            WHEN $1 = 'Resolved'
+              THEN closed_at
+            ELSE NULL
+          END,
+          updated_at = NOW()
+        WHERE id = $2
+        RETURNING *
+        `,
+        [
+          normalizedStatus,
+          request.params.id,
+        ]
+      );
 
-      const { rows } = await client.query(
+      await addHistory(
+        client,
+        request.params.id,
+        request.user.id,
+        "status_changed",
+        oldTicketResult.rows[0].status,
+        normalizedStatus
+      );
+
+      await client.query("COMMIT");
+      transactionOpen = false;
+
+      return response.json(
+        withAge(updateResult.rows[0])
+      );
+    } catch (error) {
+      if (transactionOpen) {
+        await client.query("ROLLBACK");
+      }
+
+      console.error("Update ticket status failed:", error);
+      return response.status(500).json({
+        error: "Failed to update ticket status",
+      });
+    } finally {
+      client.release();
+    }
+  }
+);
+
+router.post(
+  "/:id/assign",
+  allowRoles(
+    "superadmin",
+    "admin",
+    "agent",
+    "operator",
+    "manager"
+  ),
+  async (request, response) => {
+    const assignedToUserId = normalizeNullableId(
+      request.body.assignedToUserId
+    );
+
+    const requestedGroupId = normalizeNullableId(
+      request.body.assignedGroupId
+    );
+
+    const client = await pool.connect();
+    let transactionOpen = false;
+
+    try {
+      await client.query("BEGIN");
+      transactionOpen = true;
+
+      await client.query(
+        "SET LOCAL lock_timeout = '5s'"
+      );
+
+      const oldTicketResult = await client.query(
+        `
+        SELECT
+          assigned_to_user_id,
+          assigned_group_id,
+          status
+        FROM tickets
+        WHERE id = $1
+        FOR UPDATE
+        `,
+        [request.params.id]
+      );
+
+      const oldTicket = oldTicketResult.rows[0];
+
+      if (!oldTicket) {
+        await client.query("ROLLBACK");
+        transactionOpen = false;
+
+        return response.status(404).json({
+          error: "Ticket not found",
+        });
+      }
+
+      const nextAssignedGroupId =
+        request.body.assignedGroupId === undefined
+          ? oldTicket.assigned_group_id
+          : requestedGroupId;
+
+      if (!assignedToUserId && !nextAssignedGroupId) {
+        await client.query("ROLLBACK");
+        transactionOpen = false;
+
+        return response.status(400).json({
+          error:
+            "The ticket must remain assigned to a support group or an agent.",
+        });
+      }
+
+      const updateResult = await client.query(
         `
         UPDATE tickets
         SET
@@ -900,178 +1246,182 @@ router.post(
         WHERE id = $3
         RETURNING *
         `,
-        [assignedToUserId || null, nextAssignedGroupId, req.params.id]
+        [
+          assignedToUserId,
+          nextAssignedGroupId,
+          request.params.id,
+        ]
       );
 
-      const updatedTicket = rows[0];
+      const updatedTicket = updateResult.rows[0];
 
       await addHistory(
         client,
-        req.params.id,
-        req.user.id,
+        request.params.id,
+        request.user.id,
         "assigned",
         JSON.stringify(oldTicket),
         JSON.stringify({
-          assigned_to_user_id: updatedTicket.assigned_to_user_id,
-          assigned_group_id: updatedTicket.assigned_group_id,
+          assigned_to_user_id:
+            updatedTicket.assigned_to_user_id,
+          assigned_group_id:
+            updatedTicket.assigned_group_id,
         })
       );
 
       await client.query("COMMIT");
       transactionOpen = false;
 
-      notifyTicketAssignment({
-        ticket: updatedTicket,
-        assignedGroupId: updatedTicket.assigned_group_id,
-        assignedToUserId: updatedTicket.assigned_to_user_id,
-      }).catch((err) => {
-        console.error("Assignment email background failure:", err.message);
+      setImmediate(() => {
+        notifyTicketAssignment({
+          ticket: updatedTicket,
+          assignedGroupId: updatedTicket.assigned_group_id,
+          assignedToUserId: updatedTicket.assigned_to_user_id,
+        }).catch((error) => {
+          console.error(
+            "Ticket assignment notification background failure:",
+            error.message
+          );
+        });
       });
 
-      return res.json({
-        ...updatedTicket,
-        age: formatAge(updatedTicket.created_at),
-      });
-    } catch (err) {
+      return response.json(
+        withAge(updatedTicket)
+      );
+    } catch (error) {
       if (transactionOpen) {
-        try {
-          await client.query("ROLLBACK");
-        } catch (rollbackErr) {
-          console.error("Assignment rollback failed:", rollbackErr.message);
-        }
+        await client.query("ROLLBACK");
       }
 
-      console.error("Assign ticket error:", err);
-      return res.status(500).json({ error: "Server error" });
+      console.error("Assign ticket failed:", error);
+      return response.status(500).json({
+        error: "Failed to assign ticket",
+      });
     } finally {
       client.release();
     }
   }
 );
 
-router.patch(
-  "/:id/resolve",
-  allowRoles("superadmin", "admin", "agent", "manager"),
-  async (req, res) => {
-    const client = await pool.connect();
-    let transactionOpen = false;
+async function updateTerminalStatus({
+  request,
+  response,
+  status,
+  action,
+}) {
+  const client = await pool.connect();
+  let transactionOpen = false;
 
-    try {
-      await client.query("BEGIN");
-      transactionOpen = true;
-      await client.query("SET LOCAL lock_timeout = '5s'");
+  try {
+    await client.query("BEGIN");
+    transactionOpen = true;
 
-      const oldTicketResult = await client.query(
-        `SELECT status FROM tickets WHERE id = $1 FOR UPDATE`,
-        [req.params.id]
-      );
+    await client.query(
+      "SET LOCAL lock_timeout = '5s'"
+    );
 
-      if (!oldTicketResult.rows[0]) {
-        await client.query("ROLLBACK");
-        transactionOpen = false;
-        return res.status(404).json({ error: "Ticket not found" });
-      }
+    const oldTicketResult = await client.query(
+      `
+      SELECT status
+      FROM tickets
+      WHERE id = $1
+      FOR UPDATE
+      `,
+      [request.params.id]
+    );
 
-      const { rows } = await client.query(
-        `
-        UPDATE tickets
-        SET status = 'Resolved', updated_at = NOW()
-        WHERE id = $1
-        RETURNING *
-        `,
-        [req.params.id]
-      );
-
-      await addHistory(
-        client,
-        req.params.id,
-        req.user.id,
-        "resolved",
-        oldTicketResult.rows[0].status,
-        "Resolved"
-      );
-
-      await client.query("COMMIT");
+    if (!oldTicketResult.rows[0]) {
+      await client.query("ROLLBACK");
       transactionOpen = false;
 
-      return res.json(rows[0]);
-    } catch (err) {
-      if (transactionOpen) {
-        try {
-          await client.query("ROLLBACK");
-        } catch (rollbackErr) {
-          console.error("Resolve rollback failed:", rollbackErr.message);
-        }
-      }
-
-      console.error("Resolve ticket error:", err);
-      return res.status(500).json({ error: "Server error" });
-    } finally {
-      client.release();
+      return response.status(404).json({
+        error: "Ticket not found",
+      });
     }
+
+    const updateResult = await client.query(
+      `
+      UPDATE tickets
+      SET
+        status = $1,
+        closed_at = CASE
+          WHEN $1 = 'Closed' THEN NOW()
+          ELSE closed_at
+        END,
+        updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+      `,
+      [
+        status,
+        request.params.id,
+      ]
+    );
+
+    await addHistory(
+      client,
+      request.params.id,
+      request.user.id,
+      action,
+      oldTicketResult.rows[0].status,
+      status
+    );
+
+    await client.query("COMMIT");
+    transactionOpen = false;
+
+    return response.json(
+      withAge(updateResult.rows[0])
+    );
+  } catch (error) {
+    if (transactionOpen) {
+      await client.query("ROLLBACK");
+    }
+
+    console.error(`${action} ticket failed:`, error);
+    return response.status(500).json({
+      error: `Failed to ${action} ticket`,
+    });
+  } finally {
+    client.release();
+  }
+}
+
+router.patch(
+  "/:id/resolve",
+  allowRoles(
+    "superadmin",
+    "admin",
+    "agent",
+    "operator",
+    "manager"
+  ),
+  async (request, response) => {
+    return updateTerminalStatus({
+      request,
+      response,
+      status: "Resolved",
+      action: "resolve",
+    });
   }
 );
 
 router.patch(
   "/:id/close",
-  allowRoles("superadmin", "admin", "agent", "manager"),
-  async (req, res) => {
-    const client = await pool.connect();
-    let transactionOpen = false;
-
-    try {
-      await client.query("BEGIN");
-      transactionOpen = true;
-      await client.query("SET LOCAL lock_timeout = '5s'");
-
-      const oldTicketResult = await client.query(
-        `SELECT status FROM tickets WHERE id = $1 FOR UPDATE`,
-        [req.params.id]
-      );
-
-      if (!oldTicketResult.rows[0]) {
-        await client.query("ROLLBACK");
-        transactionOpen = false;
-        return res.status(404).json({ error: "Ticket not found" });
-      }
-
-      const { rows } = await client.query(
-        `
-        UPDATE tickets
-        SET status = 'Closed', closed_at = NOW(), updated_at = NOW()
-        WHERE id = $1
-        RETURNING *
-        `,
-        [req.params.id]
-      );
-
-      await addHistory(
-        client,
-        req.params.id,
-        req.user.id,
-        "closed",
-        oldTicketResult.rows[0].status,
-        "Closed"
-      );
-
-      await client.query("COMMIT");
-      transactionOpen = false;
-
-      return res.json(rows[0]);
-    } catch (err) {
-      if (transactionOpen) {
-        try {
-          await client.query("ROLLBACK");
-        } catch (rollbackErr) {
-          console.error("Close rollback failed:", rollbackErr.message);
-        }
-      }
-
-      console.error("Close ticket error:", err);
-      return res.status(500).json({ error: "Server error" });
-    } finally {
-      client.release();
-    }
+  allowRoles(
+    "superadmin",
+    "admin",
+    "agent",
+    "operator",
+    "manager"
+  ),
+  async (request, response) => {
+    return updateTerminalStatus({
+      request,
+      response,
+      status: "Closed",
+      action: "close",
+    });
   }
 );
 

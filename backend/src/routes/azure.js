@@ -1,16 +1,20 @@
 const express = require("express");
-const router = express.Router();
 
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
 const { getUsers } = require("../services/azureUsers");
 
+const router = express.Router();
+
 router.use(auth);
 
 const COMPANY_DOMAIN = String(
   process.env.MICROSOFT_ALLOWED_DOMAIN || "atdalliance.co.za"
 ).toLowerCase();
+
+const AUTO_APPROVE_MICROSOFT_USERS =
+  process.env.MICROSOFT_AUTO_APPROVE !== "false";
 
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
@@ -20,31 +24,95 @@ function isCompanyEmail(email) {
   return email.endsWith(`@${COMPANY_DOMAIN}`);
 }
 
-async function updateExistingUser(userId, microsoftUser) {
+function isMicrosoftAccountEnabled(microsoftUser) {
+  return microsoftUser.accountEnabled !== false;
+}
+
+async function findExistingUser(email, microsoftId) {
+  const result = await pool.query(
+    `
+    SELECT
+      id,
+      role,
+      status,
+      approved,
+      archived_at,
+      microsoft_id
+    FROM users
+    WHERE
+      LOWER(email::text) = LOWER($1::text)
+      OR (
+        $2::text IS NOT NULL
+        AND microsoft_id = $2::text
+      )
+    ORDER BY
+      CASE
+        WHEN LOWER(email::text) = LOWER($1::text) THEN 0
+        ELSE 1
+      END,
+      id
+    LIMIT 1
+    `,
+    [email, microsoftId || null]
+  );
+
+  return result.rows[0] || null;
+}
+
+async function updateExistingUser(userId, microsoftUser, email) {
+  const accountEnabled = isMicrosoftAccountEnabled(microsoftUser);
+  const shouldActivate =
+    AUTO_APPROVE_MICROSOFT_USERS && accountEnabled;
+
   const result = await pool.query(
     `
     UPDATE users
     SET
-      name = $1,
-      microsoft_id = $2,
-      first_name = $3,
-      last_name = $4,
-      job_title = $5,
-      department = $6,
-      office_location = $7,
-      mobile_phone = $8,
-      business_phone = $9,
-      microsoft_account_enabled = $10,
-      microsoft_user_type = $11,
-      microsoft_created_at = $12,
+      name = COALESCE(NULLIF($1, ''), name),
+      email = $2,
+      microsoft_id = $3,
+      first_name = COALESCE(NULLIF($4, ''), first_name),
+      last_name = COALESCE(NULLIF($5, ''), last_name),
+      job_title = COALESCE(NULLIF($6, ''), job_title),
+      department = COALESCE(NULLIF($7, ''), department),
+      office_location = COALESCE(NULLIF($8, ''), office_location),
+      mobile_phone = COALESCE(NULLIF($9, ''), mobile_phone),
+      business_phone = COALESCE(NULLIF($10, ''), business_phone),
+      microsoft_account_enabled = $11,
+      microsoft_user_type = $12,
+      microsoft_created_at = $13,
+      approved = CASE
+        WHEN archived_at IS NOT NULL THEN approved
+        WHEN $14 = TRUE THEN TRUE
+        WHEN $11 = FALSE THEN FALSE
+        ELSE approved
+      END,
+      status = CASE
+        WHEN archived_at IS NOT NULL THEN status
+        WHEN $11 = FALSE THEN 'inactive'
+        WHEN $14 = TRUE THEN 'active'
+        ELSE status
+      END,
+      role = CASE
+        WHEN role = 'pending' AND $14 = TRUE THEN 'user'
+        ELSE role
+      END,
       last_microsoft_sync_at = NOW(),
       microsoft_sync_status = 'synced',
       updated_at = NOW()
-    WHERE id = $13
-    RETURNING id
+    WHERE id = $15
+    RETURNING
+      id,
+      email,
+      role,
+      status,
+      approved,
+      archived_at,
+      microsoft_account_enabled
     `,
     [
-      microsoftUser.name,
+      microsoftUser.name || email,
+      email,
       microsoftUser.microsoftId || null,
       microsoftUser.firstName || null,
       microsoftUser.lastName || null,
@@ -53,9 +121,10 @@ async function updateExistingUser(userId, microsoftUser) {
       microsoftUser.officeLocation || null,
       microsoftUser.mobilePhone || null,
       microsoftUser.businessPhone || null,
-      microsoftUser.accountEnabled !== false,
+      accountEnabled,
       microsoftUser.userType || "Member",
       microsoftUser.microsoftCreatedAt || null,
+      shouldActivate,
       userId,
     ]
   );
@@ -64,6 +133,11 @@ async function updateExistingUser(userId, microsoftUser) {
 }
 
 async function createUser(microsoftUser, email) {
+  const accountEnabled = isMicrosoftAccountEnabled(microsoftUser);
+  const approved =
+    AUTO_APPROVE_MICROSOFT_USERS && accountEnabled;
+  const status = approved ? "active" : "inactive";
+
   const result = await pool.query(
     `
     INSERT INTO users (
@@ -88,15 +162,40 @@ async function createUser(microsoftUser, email) {
       microsoft_sync_status
     )
     VALUES (
-      $1, $2, NULL, 'user', TRUE, 'active',
-      $3, $4, $5, $6, $7, $8, $9, $10,
-      $11, $12, $13, NOW(), 'synced'
+      $1,
+      $2,
+      NULL,
+      'user',
+      $3,
+      $4,
+      $5,
+      $6,
+      $7,
+      $8,
+      $9,
+      $10,
+      $11,
+      $12,
+      $13,
+      $14,
+      $15,
+      NOW(),
+      'synced'
     )
-    RETURNING id
+    RETURNING
+      id,
+      email,
+      role,
+      status,
+      approved,
+      archived_at,
+      microsoft_account_enabled
     `,
     [
-      microsoftUser.name,
+      microsoftUser.name || email,
       email,
+      approved,
+      status,
       microsoftUser.microsoftId || null,
       microsoftUser.firstName || null,
       microsoftUser.lastName || null,
@@ -105,7 +204,7 @@ async function createUser(microsoftUser, email) {
       microsoftUser.officeLocation || null,
       microsoftUser.mobilePhone || null,
       microsoftUser.businessPhone || null,
-      microsoftUser.accountEnabled !== false,
+      accountEnabled,
       microsoftUser.userType || "Member",
       microsoftUser.microsoftCreatedAt || null,
     ]
@@ -114,55 +213,46 @@ async function createUser(microsoftUser, email) {
   return result.rows[0];
 }
 
-/**
- * GET /api/azure/users
- * Preview users returned by Microsoft Graph. Does not modify PostgreSQL.
- */
 router.get(
   "/users",
   allowRoles("superadmin", "admin", "manager"),
-  async (req, res) => {
+  async (request, response) => {
     try {
       const users = await getUsers({
-        includeGuests: req.query.includeGuests === "true",
-        includeDisabled: req.query.includeDisabled !== "false",
+        includeGuests: request.query.includeGuests === "true",
+        includeDisabled: request.query.includeDisabled !== "false",
       });
 
-      return res.json({
+      return response.json({
         count: users.length,
         users,
       });
-    } catch (err) {
+    } catch (error) {
       console.error("Microsoft users fetch failed:", {
-        message: err.message,
-        status: err.response?.status,
-        graphError: err.response?.data,
+        message: error.message,
+        status: error.response?.status,
+        graphError: error.response?.data,
       });
 
-      return res.status(500).json({
+      return response.status(502).json({
         error: "Failed to retrieve Microsoft 365 users.",
         details:
           process.env.NODE_ENV === "development"
-            ? err.response?.data || err.message
+            ? error.response?.data || error.message
             : undefined,
       });
     }
   }
 );
 
-/**
- * POST /api/azure/sync
- * Synchronizes all ATD company users returned by Microsoft Graph.
- * Each user is handled independently so one bad record cannot abort the batch.
- */
 router.post(
   "/sync",
   allowRoles("superadmin", "admin", "manager"),
-  async (req, res) => {
+  async (request, response) => {
     try {
       const microsoftUsers = await getUsers({
         includeGuests: false,
-        includeDisabled: req.body?.includeDisabled !== false,
+        includeDisabled: request.body?.includeDisabled !== false,
       });
 
       const summary = {
@@ -170,6 +260,8 @@ router.post(
         created: 0,
         updated: 0,
         skipped: 0,
+        archivedPreserved: 0,
+        disabled: 0,
         failed: 0,
         errors: [],
       };
@@ -184,65 +276,73 @@ router.post(
         }
 
         try {
-          const existingResult = await pool.query(
-            `
-            SELECT id
-            FROM users
-            WHERE LOWER(email) = LOWER($1)
-               OR ($2::text IS NOT NULL AND microsoft_id = $2)
-            ORDER BY
-              CASE WHEN LOWER(email) = LOWER($1) THEN 0 ELSE 1 END
-            LIMIT 1
-            `,
-            [email, microsoftUser.microsoftId || null]
+          const existingUser = await findExistingUser(
+            email,
+            microsoftUser.microsoftId
           );
 
-          const existingUser = existingResult.rows[0];
-
           if (existingUser) {
-            await updateExistingUser(existingUser.id, microsoftUser);
+            if (existingUser.archived_at) {
+              summary.archivedPreserved += 1;
+            }
+
+            const updatedUser = await updateExistingUser(
+              existingUser.id,
+              microsoftUser,
+              email
+            );
+
+            if (updatedUser.microsoft_account_enabled === false) {
+              summary.disabled += 1;
+            }
+
             summary.updated += 1;
           } else {
-            await createUser(microsoftUser, email);
+            const createdUser = await createUser(microsoftUser, email);
+
+            if (createdUser.microsoft_account_enabled === false) {
+              summary.disabled += 1;
+            }
+
             summary.created += 1;
           }
-        } catch (userErr) {
+        } catch (userError) {
           summary.failed += 1;
 
           if (summary.errors.length < 25) {
             summary.errors.push({
               email,
-              message: userErr.message,
-              code: userErr.code,
+              message: userError.message,
+              code: userError.code || null,
             });
           }
 
           console.error("Microsoft user sync row failed:", {
             email,
-            message: userErr.message,
-            code: userErr.code,
+            message: userError.message,
+            code: userError.code,
           });
         }
       }
 
       console.log("Microsoft 365 user sync completed:", summary);
 
-      return res.json({
+      return response.json({
         message: "Microsoft 365 users synchronized successfully.",
         summary,
       });
-    } catch (err) {
+    } catch (error) {
       console.error("Microsoft user sync failed:", {
-        message: err.message,
-        status: err.response?.status,
-        graphError: err.response?.data,
+        message: error.message,
+        status: error.response?.status,
+        graphError: error.response?.data,
       });
 
-      return res.status(500).json({
+      return response.status(502).json({
         error: "Microsoft 365 user synchronization failed.",
         details:
           process.env.NODE_ENV === "development"
-            ? err.response?.data || err.message
+            ? error.response?.data || error.message
             : undefined,
       });
     }

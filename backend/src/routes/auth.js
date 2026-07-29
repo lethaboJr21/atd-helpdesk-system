@@ -1,17 +1,57 @@
-//This file contains the authentication routes for the backend. It handles login, logout, and fetching the current user's info. The original code used a PostgreSQL database to store users and bcrypt for password hashing, but it has been temporarily replaced with hardcoded dev users for development purposes. The JWT token is generated upon successful login and includes the user's ID, email, role, and name.
 const router = require("express").Router();
+
+const axios = require("axios");
 const bcrypt = require("bcrypt");
+const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
+
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
-const axios = require("axios");
-const crypto = require("crypto");
-const { sendM365WelcomeEmail } = require("../services/email");
+const {
+  sendApprovalEmail,
+  sendM365WelcomeEmail,
+} = require("../services/email");
 
-/**
- * ✅ Create JWT token after successful login
- * The token stores basic user identity and role.
- */
+const ALLOWED_ROLES = [
+  "user",
+  "agent",
+  "operator",
+  "manager",
+  "admin",
+  "superadmin",
+];
+
+const SAFE_USER_SELECT = `
+  id,
+  name,
+  email,
+  role,
+  status,
+  approved,
+  microsoft_id,
+  microsoft_account_enabled,
+  microsoft_user_type,
+  employee_number,
+  job_title,
+  department,
+  office_location,
+  site,
+  archived_at,
+  last_login_at,
+  created_at,
+  updated_at
+`;
+
+function normalizeEmail(email) {
+  return String(email || "")
+    .trim()
+    .toLowerCase();
+}
+
+function getEmailDomain(email) {
+  return normalizeEmail(email).split("@")[1] || "";
+}
+
 function signToken(user) {
   return jwt.sign(
     {
@@ -26,22 +66,31 @@ function signToken(user) {
     }
   );
 }
-  function getMicrosoftConfig() {
+
+function getMicrosoftConfig() {
   const tenantId =
-    process.env.MICROSOFT_TENANT_ID || process.env.AZURE_TENANT_ID;
+    process.env.MICROSOFT_TENANT_ID ||
+    process.env.AZURE_TENANT_ID;
 
   const clientId =
-    process.env.MICROSOFT_CLIENT_ID || process.env.AZURE_CLIENT_ID;
+    process.env.MICROSOFT_CLIENT_ID ||
+    process.env.AZURE_CLIENT_ID;
 
   const clientSecret =
-    process.env.MICROSOFT_CLIENT_SECRET || process.env.AZURE_CLIENT_SECRET;
+    process.env.MICROSOFT_CLIENT_SECRET ||
+    process.env.AZURE_CLIENT_SECRET;
 
   const redirectUri =
     process.env.MICROSOFT_REDIRECT_URI ||
     "http://localhost:3001/api/auth/microsoft/callback";
 
-  const allowedDomain =
-    process.env.MICROSOFT_ALLOWED_DOMAIN || "atdalliance.co.za";
+  const allowedDomain = String(
+    process.env.MICROSOFT_ALLOWED_DOMAIN ||
+      "atdalliance.co.za"
+  ).toLowerCase();
+
+  const autoApprove =
+    process.env.MICROSOFT_AUTO_APPROVE !== "false";
 
   return {
     tenantId,
@@ -49,22 +98,36 @@ function signToken(user) {
     clientSecret,
     redirectUri,
     allowedDomain,
+    autoApprove,
   };
 }
 
-function getPortalRedirectUrl(path = "/") {
-  const base = process.env.PUBLIC_PORTAL_URL || "http://localhost:5173/helpdesk/login";
-  return `${base}${path}`;
+function getPortalBaseUrl() {
+  const configuredUrl =
+    process.env.PUBLIC_PORTAL_URL ||
+    "http://localhost:5173/helpdesk";
+
+  return configuredUrl
+    .replace(/\/login\/?$/i, "")
+    .replace(/\/$/, "");
 }
 
-function getEmailDomain(email) {
-  return String(email || "").split("@")[1]?.toLowerCase() || "";
+function getPortalRedirectUrl(path = "/") {
+  const normalizedPath = path.startsWith("/")
+    ? path
+    : `/${path}`;
+
+  return `${getPortalBaseUrl()}${normalizedPath}`;
 }
 
 function buildMicrosoftAuthorizeUrl(state) {
-  const { tenantId, clientId, redirectUri } = getMicrosoftConfig();
+  const {
+    tenantId,
+    clientId,
+    redirectUri,
+  } = getMicrosoftConfig();
 
-  const params = new URLSearchParams({
+  const parameters = new URLSearchParams({
     client_id: clientId,
     response_type: "code",
     redirect_uri: redirectUri,
@@ -74,14 +137,23 @@ function buildMicrosoftAuthorizeUrl(state) {
     prompt: "select_account",
   });
 
-  return `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize?${params.toString()}`;
+  return (
+    `https://login.microsoftonline.com/${tenantId}` +
+    `/oauth2/v2.0/authorize?${parameters.toString()}`
+  );
 }
 
 async function exchangeMicrosoftCodeForToken(code) {
-  const { tenantId, clientId, clientSecret, redirectUri } =
-    getMicrosoftConfig();
+  const {
+    tenantId,
+    clientId,
+    clientSecret,
+    redirectUri,
+  } = getMicrosoftConfig();
 
-  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  const tokenUrl =
+    `https://login.microsoftonline.com/${tenantId}` +
+    "/oauth2/v2.0/token";
 
   const body = new URLSearchParams({
     client_id: clientId,
@@ -92,615 +164,718 @@ async function exchangeMicrosoftCodeForToken(code) {
     scope: "openid profile email User.Read",
   });
 
-  const { data } = await axios.post(tokenUrl, body, {
+  const response = await axios.post(tokenUrl, body, {
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
+    timeout: 20000,
   });
 
-  return data;
+  return response.data;
 }
 
-async function getMicrosoftMe(accessToken) {
-  const { data } = await axios.get(
-    "https://graph.microsoft.com/v1.0/me?$select=id,displayName,mail,userPrincipalName",
+async function getMicrosoftProfile(accessToken) {
+  const response = await axios.get(
+    "https://graph.microsoft.com/v1.0/me" +
+      "?$select=id,displayName,mail,userPrincipalName," +
+      "givenName,surname,jobTitle,department,officeLocation," +
+      "mobilePhone,businessPhones,accountEnabled,userType",
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
+      timeout: 20000,
     }
   );
 
-  return data;
+  return response.data;
+}
+
+async function getCurrentUser(userId) {
+  const result = await pool.query(
+    `
+    SELECT ${SAFE_USER_SELECT}
+    FROM users
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [userId]
+  );
+
+  return result.rows[0] || null;
 }
 
 async function findOrCreateMicrosoftUser(profile) {
-  const email = String(
-    profile.mail || profile.userPrincipalName || ""
-  ).toLowerCase();
+  const email = normalizeEmail(
+    profile.mail || profile.userPrincipalName
+  );
 
-  const name = profile.displayName || email;
-  const { allowedDomain } = getMicrosoftConfig();
+  const name = String(
+    profile.displayName || email
+  ).trim();
+
+  const {
+    allowedDomain,
+    autoApprove,
+  } = getMicrosoftConfig();
 
   if (!email) {
-    const error = new Error("Microsoft account did not return an email address.");
+    const error = new Error(
+      "Microsoft account did not return an email address."
+    );
     error.status = 400;
     throw error;
   }
 
-  if (getEmailDomain(email) !== allowedDomain.toLowerCase()) {
-    const error = new Error(`Only @${allowedDomain} accounts are allowed.`);
+  if (getEmailDomain(email) !== allowedDomain) {
+    const error = new Error(
+      `Only @${allowedDomain} Microsoft accounts are allowed.`
+    );
     error.status = 403;
     throw error;
   }
 
-  const existing = await pool.query(
+  const microsoftAccountEnabled =
+    profile.accountEnabled !== false;
+
+  if (!microsoftAccountEnabled) {
+    const error = new Error(
+      "This Microsoft account is disabled."
+    );
+    error.status = 403;
+    throw error;
+  }
+
+  const existingResult = await pool.query(
     `
-    SELECT id, name, email, role, approved
+    SELECT ${SAFE_USER_SELECT}
     FROM users
-    WHERE LOWER(email) = LOWER($1)
+    WHERE
+      microsoft_id = $1
+      OR LOWER(email::text) = LOWER($2::text)
+    ORDER BY
+      CASE WHEN microsoft_id = $1 THEN 0 ELSE 1 END,
+      id
+    LIMIT 1
     `,
-    [email]
+    [profile.id, email]
   );
 
-  if (existing.rows[0]) {
-    const user = existing.rows[0];
+  if (existingResult.rows[0]) {
+    const existingUser = existingResult.rows[0];
 
-    // If a pending user signs in with valid M365, activate as standard user.
-    if (!user.approved || user.role === "pending") {
-      const updated = await pool.query(
-        `
-        UPDATE users
-        SET
-          name = COALESCE(NULLIF($1, ''), name),
-          role = CASE WHEN role = 'pending' THEN 'user' ELSE role END,
-          approved = TRUE
-        WHERE id = $2
-        RETURNING id, name, email, role, approved
-        `,
-        [name, user.id]
+    if (existingUser.archived_at) {
+      const error = new Error(
+        "This portal account is archived. Contact an administrator."
       );
-
-      return {
-        user: updated.rows[0],
-        isNew: false,
-        wasActivated: true,
-      };
+      error.status = 403;
+      throw error;
     }
 
+    const updatedResult = await pool.query(
+      `
+      UPDATE users
+      SET
+        name = COALESCE(NULLIF($1, ''), name),
+        email = $2,
+        microsoft_id = $3,
+        first_name = COALESCE(NULLIF($4, ''), first_name),
+        last_name = COALESCE(NULLIF($5, ''), last_name),
+        job_title = COALESCE(NULLIF($6, ''), job_title),
+        department = COALESCE(NULLIF($7, ''), department),
+        office_location = COALESCE(NULLIF($8, ''), office_location),
+        mobile_phone = COALESCE(NULLIF($9, ''), mobile_phone),
+        business_phone = COALESCE(NULLIF($10, ''), business_phone),
+        microsoft_account_enabled = $11,
+        microsoft_user_type = $12,
+        approved = CASE
+          WHEN $13 = TRUE THEN TRUE
+          ELSE approved
+        END,
+        status = CASE
+          WHEN $13 = TRUE THEN 'active'
+          ELSE status
+        END,
+        role = CASE
+          WHEN role = 'pending' THEN 'user'
+          ELSE role
+        END,
+        last_microsoft_sync_at = NOW(),
+        microsoft_sync_status = 'success',
+        last_login_at = NOW(),
+        updated_at = NOW()
+      WHERE id = $14
+      RETURNING ${SAFE_USER_SELECT}
+      `,
+      [
+        name,
+        email,
+        profile.id,
+        profile.givenName || null,
+        profile.surname || null,
+        profile.jobTitle || null,
+        profile.department || null,
+        profile.officeLocation || null,
+        profile.mobilePhone || null,
+        profile.businessPhones?.[0] || null,
+        microsoftAccountEnabled,
+        profile.userType || null,
+        autoApprove,
+        existingUser.id,
+      ]
+    );
+
     return {
-      user,
+      user: updatedResult.rows[0],
       isNew: false,
-      wasActivated: false,
+      wasActivated:
+        !existingUser.approved ||
+        existingUser.status !== "active",
     };
   }
 
-  const randomPassword = crypto.randomBytes(32).toString("hex");
-  const passwordHash = await bcrypt.hash(randomPassword, 10);
+  const randomPassword = crypto
+    .randomBytes(32)
+    .toString("hex");
 
-  const inserted = await pool.query(
+  const passwordHash = await bcrypt.hash(
+    randomPassword,
+    10
+  );
+
+  const approved = autoApprove;
+  const status = approved ? "active" : "inactive";
+
+  const insertedResult = await pool.query(
     `
     INSERT INTO users (
       name,
       email,
       password_hash,
       role,
-      approved
+      status,
+      approved,
+      microsoft_id,
+      first_name,
+      last_name,
+      job_title,
+      department,
+      office_location,
+      mobile_phone,
+      business_phone,
+      microsoft_account_enabled,
+      microsoft_user_type,
+      last_microsoft_sync_at,
+      microsoft_sync_status,
+      last_login_at
     )
-    VALUES ($1, $2, $3, 'user', TRUE)
-    RETURNING id, name, email, role, approved
+    VALUES (
+      $1,
+      $2,
+      $3,
+      'user',
+      $4,
+      $5,
+      $6,
+      $7,
+      $8,
+      $9,
+      $10,
+      $11,
+      $12,
+      $13,
+      $14,
+      $15,
+      NOW(),
+      'success',
+      NOW()
+    )
+    RETURNING ${SAFE_USER_SELECT}
     `,
-    [name, email, passwordHash]
+    [
+      name,
+      email,
+      passwordHash,
+      status,
+      approved,
+      profile.id,
+      profile.givenName || null,
+      profile.surname || null,
+      profile.jobTitle || null,
+      profile.department || null,
+      profile.officeLocation || null,
+      profile.mobilePhone || null,
+      profile.businessPhones?.[0] || null,
+      microsoftAccountEnabled,
+      profile.userType || null,
+    ]
   );
 
   return {
-    user: inserted.rows[0],
+    user: insertedResult.rows[0],
     isNew: true,
-    wasActivated: true,
+    wasActivated: approved,
   };
 }
 
-
-/**
- * ✅ Helper: Create non-blocking in-app notification
- * If the notifications table has an issue, the main auth flow must not fail.
- */
-async function createNotification(message, type = "system") {
+async function createNotification(
+  message,
+  type = "system",
+  targetRole = null
+) {
   try {
     await pool.query(
       `
-      INSERT INTO notifications (message, type, is_read)
-      VALUES ($1, $2, false)
+      INSERT INTO notifications (
+        user_id,
+        target_role,
+        message,
+        type,
+        module,
+        is_read,
+        created_at
+      )
+      VALUES (
+        NULL,
+        $1,
+        $2,
+        $3,
+        'admin',
+        FALSE,
+        NOW()
+      )
       `,
-      [message, type]
+      [targetRole, message, type]
     );
-  } catch (err) {
-    console.error("Notification creation failed:", err.message);
+  } catch (error) {
+    console.error(
+      "Authentication notification creation failed:",
+      error.message
+    );
   }
 }
 
-/**
- * ✅ POST /api/auth/login
- * Logs in approved users only.
- */
-router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+router.post("/login", async (request, response) => {
+  const email = normalizeEmail(request.body.email);
+  const password = String(request.body.password || "");
 
-  // ✅ Validate request body
   if (!email || !password) {
-    return res.status(400).json({
-      error: "Email and password required",
+    return response.status(400).json({
+      error: "Email and password are required",
     });
   }
 
   try {
-    // ✅ Find user by email
-    const { rows } = await pool.query(
+    const result = await pool.query(
       `
-      SELECT id, name, email, password_hash, role, approved
+      SELECT
+        ${SAFE_USER_SELECT},
+        password_hash
       FROM users
-      WHERE email = $1
+      WHERE LOWER(email::text) = LOWER($1::text)
+      LIMIT 1
       `,
-      [email.toLowerCase()]
+      [email]
     );
 
-    const user = rows[0];
+    const user = result.rows[0];
 
-    // ✅ Do not reveal whether email exists
-    if (!user) {
-      return res.status(401).json({
+    if (!user || !user.password_hash) {
+      return response.status(401).json({
         error: "Invalid credentials",
       });
     }
 
-    // ✅ Block pending role users
-    if (user.role === "pending") {
-      return res.status(403).json({
-        message: "Your account is pending approval",
-      });
-    }
+    const validPassword = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
 
-    // ✅ Block unapproved users
-    // Admin/superadmin exception prevents accidental admin lockout.
-    if (!user.approved && !["admin", "superadmin"].includes(user.role)) {
-      return res.status(403).json({
-        message: "Your account is pending approval",
-      });
-    }
-
-    // ✅ Validate password
-    const valid = await bcrypt.compare(password, user.password_hash);
-
-    if (!valid) {
-      return res.status(401).json({
+    if (!validPassword) {
+      return response.status(401).json({
         error: "Invalid credentials",
       });
     }
 
-    // ✅ Generate JWT token
+    if (user.archived_at) {
+      return response.status(403).json({
+        message: "This account has been archived.",
+      });
+    }
+
+    if (!user.approved || user.status !== "active") {
+      return response.status(403).json({
+        message: "Your account is still awaiting administrator approval.",
+      });
+    }
+
+    if (user.microsoft_account_enabled === false) {
+      return response.status(403).json({
+        message: "The linked Microsoft account is disabled.",
+      });
+    }
+
+    await pool.query(
+      `
+      UPDATE users
+      SET last_login_at = NOW()
+      WHERE id = $1
+      `,
+      [user.id]
+    );
+
     const token = signToken(user);
 
-    // ✅ Return safe user object
-    return res.json({
+    delete user.password_hash;
+
+    return response.json({
       token,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        approved: user.approved,
-      },
+      user,
     });
-  } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({
-      error: "Server error",
+  } catch (error) {
+    console.error("Login failed:", error);
+    return response.status(500).json({
+      error: "Login failed",
     });
   }
 });
 
-/**
- * ✅ POST /api/auth/signup
- * Creates a pending account.
- * Does NOT log user in immediately.
- */
-router.post("/signup", async (req, res) => {
-  const { name, email, password } = req.body;
+router.post("/signup", async (request, response) => {
+  const name = String(request.body.name || "").trim();
+  const email = normalizeEmail(request.body.email);
+  const password = String(request.body.password || "");
 
-  // ✅ Validate input
   if (!name || !email || !password) {
-    return res.status(400).json({
+    return response.status(400).json({
       error: "Name, email and password are required",
     });
   }
 
   try {
-    // ✅ Check duplicate email
-    const existing = await pool.query(
+    const existingResult = await pool.query(
       `
       SELECT id
       FROM users
-      WHERE email = $1
+      WHERE LOWER(email::text) = LOWER($1::text)
+      LIMIT 1
       `,
-      [email.toLowerCase()]
+      [email]
     );
 
-    if (existing.rows[0]) {
-      return res.status(409).json({
+    if (existingResult.rows[0]) {
+      return response.status(409).json({
         error: "User already exists",
       });
     }
 
-    // ✅ Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // ✅ Create user as pending and unapproved
-    const { rows } = await pool.query(
+    const insertedResult = await pool.query(
       `
-      INSERT INTO users (name, email, password_hash, role, approved)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING id, name, email, role, approved, created_at
+      INSERT INTO users (
+        name,
+        email,
+        password_hash,
+        role,
+        status,
+        approved
+      )
+      VALUES (
+        $1,
+        $2,
+        $3,
+        'pending',
+        'inactive',
+        FALSE
+      )
+      RETURNING ${SAFE_USER_SELECT}
       `,
-      [name.trim(), email.toLowerCase(), passwordHash, "pending", false]
+      [name, email, passwordHash]
     );
 
-    const newUser = rows[0];
+    const newUser = insertedResult.rows[0];
 
-    // ✅ Create in-app notification for admins
     await createNotification(
-      `New user signup pending approval: ${newUser.email}`,
-      "user_signup"
+      `New local user signup pending approval: ${newUser.email}`,
+      "user_signup",
+      "admin"
     );
-    //
-    console.log("Sending approval email for:", newUser.email);
-    console.log("Admin email target:", process.env.ADMIN_EMAIL);
-    // ✅ Try sending approval email, but do not break signup if email fails
-    try {
-      const { sendApprovalEmail } = require("../services/email");
 
-      await sendApprovalEmail({
-        id: newUser.id,
-        email: newUser.email,
-        name: newUser.name,
-      });
-    } catch (emailErr) {
+    sendApprovalEmail(newUser).catch((emailError) => {
       console.error(
         "Approval email failed, but signup continues:",
-        emailErr.message
+        emailError.message
       );
-    }
+    });
 
-    // ✅ Important: do NOT return token here
-    return res.status(201).json({
+    return response.status(201).json({
       message:
-        "Account created successfully. Please wait for admin approval before signing in.",
+        "Account created successfully. Please wait for administrator approval before signing in.",
       user: newUser,
     });
-  } catch (err) {
-    console.error("Signup error:", err);
-    return res.status(500).json({
-      error: "Server error",
+  } catch (error) {
+    console.error("Signup failed:", error);
+    return response.status(500).json({
+      error: "Signup failed",
     });
   }
 });
 
-/**
- * ✅ POST /api/auth/logout
- * Stateless JWT logout. Frontend removes token.
- */
-router.post("/logout", auth, (_req, res) => {
-  return res.json({
-    ok: true,
-  });
+router.post("/logout", auth, (_request, response) => {
+  return response.json({ ok: true });
 });
 
-/**
- * ✅ GET /api/auth/me
- * Returns current authenticated user.
- */
-router.get("/me", auth, async (req, res) => {
+router.get("/me", auth, async (request, response) => {
   try {
-    const { rows } = await pool.query(
-      `
-      SELECT id, name, email, role, approved
-      FROM users
-      WHERE id = $1
-      `,
-      [req.user.id]
-    );
+    const currentUser = await getCurrentUser(request.user.id);
 
-    if (!rows[0]) {
-      return res.status(404).json({
-        error: "User not found",
+    if (!currentUser) {
+      return response.status(401).json({
+        error: "The account no longer exists.",
       });
     }
 
-    return res.json({
-      user: rows[0],
+    return response.json({
+      user: currentUser,
     });
-  } catch (err) {
-    console.error("Me error:", err);
-    return res.status(500).json({
-      error: "Server error",
+  } catch (error) {
+    console.error("Fetch current user failed:", error);
+    return response.status(500).json({
+      error: "Failed to load the current account.",
     });
   }
 });
 
-/**
- * ✅ GET /api/auth/users
- * Admin and superadmin can view all users.
- * Pending users are shown first.
- */
-router.get("/users", auth, async (req, res) => {
-  // ✅ Only admin and superadmin can view users
-  if (!["admin", "superadmin"].includes(req.user.role)) {
-    return res.status(403).json({
+router.get("/users", auth, async (request, response) => {
+  if (!["admin", "superadmin"].includes(request.user.role)) {
+    return response.status(403).json({
       error: "Access denied",
     });
   }
 
   try {
-    const { rows } = await pool.query(
+    const result = await pool.query(
       `
-      SELECT id, name, email, role, approved, created_at
+      SELECT ${SAFE_USER_SELECT}
       FROM users
-      ORDER BY approved ASC, created_at DESC
+      ORDER BY
+        approved ASC,
+        archived_at NULLS FIRST,
+        created_at DESC
       `
     );
 
-    return res.json(rows);
-  } catch (err) {
-    console.error("Fetch users error:", err);
-    return res.status(500).json({
+    return response.json(result.rows);
+  } catch (error) {
+    console.error("Fetch authentication users failed:", error);
+    return response.status(500).json({
       error: "Failed to fetch users",
     });
   }
 });
 
-/**
- * ✅ PUT /api/auth/approve/:id
- * Admin approves a pending user and assigns a role.
- */
-router.put("/approve/:id", auth, async (req, res) => {
-  const role = req.body.role || req.query.role || "user";
-
-  // ✅ Only admin and superadmin can approve
-  if (!["admin", "superadmin"].includes(req.user.role)) {
-    return res.status(403).json({
+router.put("/approve/:id", auth, async (request, response) => {
+  if (!["admin", "superadmin"].includes(request.user.role)) {
+    return response.status(403).json({
       error: "Access denied",
     });
   }
 
-  // ✅ Allowed roles after approval
-  const allowedRoles = [
-    "user",
-    "agent",
-    "operator",
-    "manager",
-    "admin",
-    "superadmin",
-  ];
+  const role = String(
+    request.body.role || request.query.role || "user"
+  ).toLowerCase();
 
-  if (!allowedRoles.includes(role)) {
-    return res.status(400).json({
+  if (!ALLOWED_ROLES.includes(role)) {
+    return response.status(400).json({
       error: "Invalid role",
     });
   }
 
+  if (
+    ["admin", "superadmin"].includes(role) &&
+    request.user.role !== "superadmin"
+  ) {
+    return response.status(403).json({
+      error: "Only a superadmin can assign protected roles.",
+    });
+  }
+
   try {
-    const { rows } = await pool.query(
+    const result = await pool.query(
       `
       UPDATE users
-      SET role = $1,
-          approved = TRUE
+      SET
+        role = $1,
+        approved = TRUE,
+        status = 'active',
+        archived_at = NULL,
+        archived_by = NULL,
+        archive_reason = NULL,
+        updated_at = NOW()
       WHERE id = $2
-      RETURNING id, name, email, role, approved
+      RETURNING ${SAFE_USER_SELECT}
       `,
-      [role, req.params.id]
+      [role, request.params.id]
     );
 
-    if (!rows[0]) {
-      return res.status(404).json({
+    if (!result.rows[0]) {
+      return response.status(404).json({
         error: "User not found",
       });
     }
 
-    // ✅ Create in-app notification
-    await createNotification(
-      `User approved: ${rows[0].email} as ${rows[0].role}`,
-      "user_approved"
-    );
-
-    return res.json({
+    return response.json({
       message: "User approved successfully",
-      user: rows[0],
+      user: result.rows[0],
     });
-  } catch (err) {
-    console.error("Approve error:", err);
-    return res.status(500).json({
+  } catch (error) {
+    console.error("Approve user failed:", error);
+    return response.status(500).json({
       error: "Approval failed",
     });
   }
 });
 
-/**
- * ✅ DELETE /api/auth/reject/:id
- * Admin rejects and removes a pending user.
- */
-router.delete("/reject/:id", auth, async (req, res) => {
-  // ✅ Only admin and superadmin can reject users
-  if (!["admin", "superadmin"].includes(req.user.role)) {
-    return res.status(403).json({
+router.delete("/reject/:id", auth, async (request, response) => {
+  if (!["admin", "superadmin"].includes(request.user.role)) {
+    return response.status(403).json({
       error: "Access denied",
     });
   }
 
   try {
-    const { rows } = await pool.query(
+    const result = await pool.query(
       `
       DELETE FROM users
       WHERE id = $1
+        AND approved = FALSE
       RETURNING id, email
       `,
-      [req.params.id]
+      [request.params.id]
     );
 
-    if (!rows[0]) {
-      return res.status(404).json({
-        error: "User not found",
+    if (!result.rows[0]) {
+      return response.status(404).json({
+        error: "Pending user not found",
       });
     }
 
-    // ✅ Create in-app notification
-    await createNotification(
-      `User rejected and removed: ${rows[0].email}`,
-      "user_rejected"
-    );
-
-    return res.json({
-      message: "User rejected and removed",
-      user: rows[0],
+    return response.json({
+      message: "Pending user rejected and removed",
+      user: result.rows[0],
     });
-  } catch (err) {
-    console.error("Reject user error:", err);
-    return res.status(500).json({
+  } catch (error) {
+    if (error.code === "23503") {
+      return response.status(409).json({
+        error:
+          "This account has linked records and cannot be removed. Archive it instead.",
+      });
+    }
+
+    console.error("Reject user failed:", error);
+    return response.status(500).json({
       error: "Reject failed",
     });
   }
 });
 
-/**
- * ✅ Optional backward-compatible reject link
- * This keeps your old GET reject URL working, but protected.
- */
-router.get("/reject/:id", auth, async (req, res) => {
-  // ✅ Only admin and superadmin can reject users
-  if (!["admin", "superadmin"].includes(req.user.role)) {
-    return res.status(403).send("Access denied");
-  }
-
+router.get("/microsoft", async (_request, response) => {
   try {
-    const { rows } = await pool.query(
-      `
-      DELETE FROM users
-      WHERE id = $1
-      RETURNING id, email
-      `,
-      [req.params.id]
-    );
-
-    if (!rows[0]) {
-      return res.status(404).send("User not found");
-    }
-
-    await createNotification(
-      `User rejected and removed: ${rows[0].email}`,
-      "user_rejected"
-    );
-
-    return res.send("User rejected and removed");
-  } catch (err) {
-    console.error("Reject user error:", err);
-    return res.status(500).send("Reject failed");
-  }
-});
-
-/**
- * ✅ GET /api/auth/microsoft
- * Starts Microsoft Entra sign-in.
- *
- * Public URL through Apache:
- * https://portal.atdalliance.co.za/helpdesk/api/auth/microsoft
- */
-router.get("/microsoft", async (_req, res) => {
-  try {
-    const { tenantId, clientId, clientSecret } = getMicrosoftConfig();
+    const {
+      tenantId,
+      clientId,
+      clientSecret,
+    } = getMicrosoftConfig();
 
     if (!tenantId || !clientId || !clientSecret) {
-      return res.status(500).send("Microsoft SSO is not configured.");
-    }
-
-    const state = crypto.randomBytes(16).toString("hex");
-    const authorizeUrl = buildMicrosoftAuthorizeUrl(state);
-
-    return res.redirect(authorizeUrl);
-  } catch (err) {
-    console.error("Microsoft auth start error:", err);
-    return res.status(500).send("Failed to start Microsoft sign-in.");
-  }
-});
-
-/**
- * ✅ GET /api/auth/microsoft/callback
- * Microsoft redirects here after successful sign-in.
- *
- * Public callback URL:
- * https://portal.atdalliance.co.za/helpdesk/api/auth/microsoft/callback
- */
-router.get("/microsoft/callback", async (req, res) => {
-  const { code, error, error_description } = req.query;
-
-  if (error) {
-    const message = encodeURIComponent(
-      error_description || error || "Microsoft sign-in failed."
-    );
-
-    return res.redirect(getPortalRedirectUrl(`/login?ssoError=${message}`));
-  }
-
-  if (!code) {
-    return res.redirect(
-      getPortalRedirectUrl(
-        `/login?ssoError=${encodeURIComponent("Missing Microsoft auth code.")}`
-      )
-    );
-  }
-
-  try {
-    const tokenResponse = await exchangeMicrosoftCodeForToken(code);
-
-    const microsoftProfile = await getMicrosoftMe(tokenResponse.access_token);
-
-    const { user, isNew, wasActivated } =
-      await findOrCreateMicrosoftUser(microsoftProfile);
-
-    if (isNew || wasActivated) {
-      try {
-        await sendM365WelcomeEmail(user);
-      } catch (emailErr) {
-        console.error(
-          "M365 welcome email failed, but login continues:",
-          emailErr.message
-        );
-      }
-
-      await createNotification(
-        `Microsoft 365 user registered: ${user.email}`,
-        "user_signup"
+      return response.status(500).send(
+        "Microsoft SSO is not configured."
       );
     }
 
-    const token = signToken(user);
-
-    return res.redirect(
-      getPortalRedirectUrl(`/login?token=${encodeURIComponent(token)}`)
+    const state = crypto.randomBytes(16).toString("hex");
+    return response.redirect(
+      buildMicrosoftAuthorizeUrl(state)
     );
-  } catch (err) {
-    console.error("Microsoft callback error:", err);
+  } catch (error) {
+    console.error("Start Microsoft sign-in failed:", error);
+    return response.status(500).send(
+      "Failed to start Microsoft sign-in."
+    );
+  }
+});
 
-    const status = err.status || 500;
+router.get("/microsoft/callback", async (request, response) => {
+  const {
+    code,
+    error,
+    error_description: errorDescription,
+  } = request.query;
+
+  if (error) {
     const message = encodeURIComponent(
-      err.message || "Microsoft sign-in failed."
+      errorDescription || error || "Microsoft sign-in failed."
     );
 
-    if (status === 403) {
-      return res.redirect(getPortalRedirectUrl(`/login?ssoError=${message}`));
+    return response.redirect(
+      getPortalRedirectUrl(`/login?ssoError=${message}`)
+    );
+  }
+
+  if (!code) {
+    return response.redirect(
+      getPortalRedirectUrl(
+        `/login?ssoError=${encodeURIComponent(
+          "Missing Microsoft authorisation code."
+        )}`
+      )
+    );
+  }
+
+  try {
+    const tokenResponse =
+      await exchangeMicrosoftCodeForToken(code);
+
+    const microsoftProfile =
+      await getMicrosoftProfile(tokenResponse.access_token);
+
+    const {
+      user,
+      isNew,
+      wasActivated,
+    } = await findOrCreateMicrosoftUser(microsoftProfile);
+
+    if (isNew || wasActivated) {
+      sendM365WelcomeEmail(user).catch((emailError) => {
+        console.error(
+          "Microsoft welcome email failed, but login continues:",
+          emailError.message
+        );
+      });
     }
 
-    return res.redirect(
+    const currentUser = await getCurrentUser(user.id);
+    const token = signToken(currentUser);
+
+    return response.redirect(
       getPortalRedirectUrl(
-        `/login?ssoError=${encodeURIComponent("Microsoft sign-in failed.")}`
+        `/login?token=${encodeURIComponent(token)}`
       )
+    );
+  } catch (callbackError) {
+    console.error("Microsoft callback failed:", {
+      message: callbackError.message,
+      status: callbackError.status || 500,
+    });
+
+    const message = encodeURIComponent(
+      callbackError.status === 403
+        ? callbackError.message
+        : "Microsoft sign-in failed."
+    );
+
+    return response.redirect(
+      getPortalRedirectUrl(`/login?ssoError=${message}`)
     );
   }
 });

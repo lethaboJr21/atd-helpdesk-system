@@ -1,15 +1,20 @@
 const express = require("express");
-const router = express.Router();
-const pool = require("../db/pool");
 
+const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
+
+const router = express.Router();
 
 router.use(auth);
 
 const COMPANY_DOMAIN = String(
   process.env.MICROSOFT_ALLOWED_DOMAIN || "atdalliance.co.za"
 ).toLowerCase();
+
+const MAX_PAGE_SIZE = 1000;
+const DEFAULT_PAGE_SIZE = 100;
+const MAX_BULK_USERS = 200;
 
 const ALLOWED_ROLES = [
   "user",
@@ -20,7 +25,11 @@ const ALLOWED_ROLES = [
   "superadmin",
 ];
 
-const ALLOWED_STATUSES = ["active", "inactive"];
+const ALLOWED_PORTAL_STATUSES = [
+  "active",
+  "inactive",
+];
+
 const ALLOWED_EMPLOYMENT_STATUSES = [
   "active",
   "resigned",
@@ -64,28 +73,45 @@ const USER_SELECT = `
   archive_reason
 `;
 
-function normalizeRole(role) {
-  const value = String(role || "").trim().toLowerCase();
-  return ALLOWED_ROLES.includes(value) ? value : null;
+function normalizeRole(value) {
+  const normalizedValue = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  return ALLOWED_ROLES.includes(normalizedValue)
+    ? normalizedValue
+    : null;
 }
 
-function normalizeStatus(status) {
-  const value = String(status || "").trim().toLowerCase();
-  return ALLOWED_STATUSES.includes(value) ? value : null;
+function normalizePortalStatus(value) {
+  const normalizedValue = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  return ALLOWED_PORTAL_STATUSES.includes(normalizedValue)
+    ? normalizedValue
+    : null;
 }
 
-function normalizeEmploymentStatus(status) {
-  const value = String(status || "").trim().toLowerCase();
-  return ALLOWED_EMPLOYMENT_STATUSES.includes(value) ? value : null;
+function normalizeEmploymentStatus(value) {
+  const normalizedValue = String(value || "")
+    .trim()
+    .toLowerCase();
+
+  return ALLOWED_EMPLOYMENT_STATUSES.includes(normalizedValue)
+    ? normalizedValue
+    : null;
 }
 
 function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 function nullableText(value) {
-  const text = String(value ?? "").trim();
-  return text || null;
+  const normalizedValue = String(value ?? "").trim();
+  return normalizedValue || null;
 }
 
 function nullableDate(value) {
@@ -96,27 +122,48 @@ function isCompanyEmail(email) {
   return email.endsWith(`@${COMPANY_DOMAIN}`);
 }
 
-function isSuperadmin(req) {
-  return req.user?.role === "superadmin";
+function isSuperadmin(request) {
+  return request.user?.role === "superadmin";
 }
 
-async function getUserById(id) {
+function parsePositiveInteger(value, fallbackValue) {
+  const parsedValue = Number(value);
+
+  if (!Number.isInteger(parsedValue) || parsedValue < 0) {
+    return fallbackValue;
+  }
+
+  return parsedValue;
+}
+
+async function getUserById(userId) {
   const result = await pool.query(
-    `SELECT ${USER_SELECT} FROM users WHERE id = $1 LIMIT 1`,
-    [id]
+    `
+    SELECT ${USER_SELECT}
+    FROM users
+    WHERE id = $1
+    LIMIT 1
+    `,
+    [userId]
   );
+
   return result.rows[0] || null;
 }
 
-function ensureCanManageTarget(req, res, targetUser) {
+function canManageTargetUser(request, response, targetUser) {
   if (!targetUser) {
-    res.status(404).json({ error: "User not found" });
+    response.status(404).json({
+      error: "User not found",
+    });
     return false;
   }
 
-  if (targetUser.role === "superadmin" && !isSuperadmin(req)) {
-    res.status(403).json({
-      error: "Only a superadmin can modify another superadmin account.",
+  if (
+    targetUser.role === "superadmin" &&
+    !isSuperadmin(request)
+  ) {
+    response.status(403).json({
+      error: "Only a superadmin can modify a superadmin account.",
     });
     return false;
   }
@@ -124,14 +171,24 @@ function ensureCanManageTarget(req, res, targetUser) {
   return true;
 }
 
-/**
- * GET /api/users
- * Searchable and filterable user-management list.
- */
+function canAssignRole(request, response, requestedRole) {
+  if (
+    ["admin", "superadmin"].includes(requestedRole) &&
+    !isSuperadmin(request)
+  ) {
+    response.status(403).json({
+      error: "Only a superadmin can assign admin or superadmin roles.",
+    });
+    return false;
+  }
+
+  return true;
+}
+
 router.get(
   "/",
-  allowRoles("superadmin", "admin", "manager"),
-  async (req, res) => {
+  allowRoles("manager", "admin", "superadmin"),
+  async (request, response) => {
     const {
       includeExternal = "false",
       includeArchived = "false",
@@ -142,86 +199,133 @@ router.get(
       employmentStatus,
       microsoftEnabled,
       search,
-      limit = 500,
+      limit = DEFAULT_PAGE_SIZE,
       offset = 0,
-    } = req.query;
+    } = request.query;
 
-    const where = [];
-    const params = [];
-    let i = 1;
+    const whereConditions = [];
+    const queryParameters = [];
+    let parameterIndex = 1;
 
     if (includeExternal !== "true") {
-      where.push(`LOWER(email) LIKE $${i++}`);
-      params.push(`%@${COMPANY_DOMAIN}`);
+      whereConditions.push(
+        `LOWER(email) LIKE $${parameterIndex}`
+      );
+      queryParameters.push(`%@${COMPANY_DOMAIN}`);
+      parameterIndex += 1;
     }
 
     if (includeArchived !== "true") {
-      where.push("archived_at IS NULL");
+      whereConditions.push("archived_at IS NULL");
     }
 
     if (role) {
       const normalizedRole = normalizeRole(role);
+
       if (!normalizedRole) {
-        return res.status(400).json({ error: "Invalid role filter" });
+        return response.status(400).json({
+          error: "Invalid role filter",
+        });
       }
-      where.push(`LOWER(role) = $${i++}`);
-      params.push(normalizedRole);
+
+      whereConditions.push(
+        `role = $${parameterIndex}`
+      );
+      queryParameters.push(normalizedRole);
+      parameterIndex += 1;
     }
 
     if (approved === "true" || approved === "false") {
-      where.push(`approved = $${i++}`);
-      params.push(approved === "true");
+      whereConditions.push(
+        `approved = $${parameterIndex}`
+      );
+      queryParameters.push(approved === "true");
+      parameterIndex += 1;
     }
 
     if (status) {
-      const normalizedStatus = normalizeStatus(status);
+      const normalizedStatus = normalizePortalStatus(status);
+
       if (!normalizedStatus) {
-        return res.status(400).json({ error: "Invalid status filter" });
+        return response.status(400).json({
+          error: "Invalid portal status filter",
+        });
       }
-      where.push(`LOWER(status) = $${i++}`);
-      params.push(normalizedStatus);
+
+      whereConditions.push(
+        `status = $${parameterIndex}`
+      );
+      queryParameters.push(normalizedStatus);
+      parameterIndex += 1;
     }
 
     if (department) {
-      where.push(`department = $${i++}`);
-      params.push(department);
+      whereConditions.push(
+        `department = $${parameterIndex}`
+      );
+      queryParameters.push(department);
+      parameterIndex += 1;
     }
 
     if (employmentStatus) {
-      const normalizedEmployment = normalizeEmploymentStatus(employmentStatus);
-      if (!normalizedEmployment) {
-        return res.status(400).json({
+      const normalizedEmploymentStatus =
+        normalizeEmploymentStatus(employmentStatus);
+
+      if (!normalizedEmploymentStatus) {
+        return response.status(400).json({
           error: "Invalid employment status filter",
         });
       }
-      where.push(`LOWER(employment_status) = $${i++}`);
-      params.push(normalizedEmployment);
+
+      whereConditions.push(
+        `employment_status = $${parameterIndex}`
+      );
+      queryParameters.push(normalizedEmploymentStatus);
+      parameterIndex += 1;
     }
 
-    if (microsoftEnabled === "true" || microsoftEnabled === "false") {
-      where.push(`microsoft_account_enabled = $${i++}`);
-      params.push(microsoftEnabled === "true");
+    if (
+      microsoftEnabled === "true" ||
+      microsoftEnabled === "false"
+    ) {
+      whereConditions.push(
+        `microsoft_account_enabled = $${parameterIndex}`
+      );
+      queryParameters.push(microsoftEnabled === "true");
+      parameterIndex += 1;
     }
 
     if (search) {
-      where.push(`
+      whereConditions.push(
+        `
         (
-          name ILIKE $${i}
-          OR email ILIKE $${i}
-          OR COALESCE(employee_number, '') ILIKE $${i}
-          OR COALESCE(job_title, '') ILIKE $${i}
-          OR COALESCE(department, '') ILIKE $${i}
-          OR COALESCE(manager_name, '') ILIKE $${i}
-          OR COALESCE(site, '') ILIKE $${i}
+          name ILIKE $${parameterIndex}
+          OR email ILIKE $${parameterIndex}
+          OR COALESCE(employee_number, '') ILIKE $${parameterIndex}
+          OR COALESCE(job_title, '') ILIKE $${parameterIndex}
+          OR COALESCE(department, '') ILIKE $${parameterIndex}
+          OR COALESCE(manager_name, '') ILIKE $${parameterIndex}
+          OR COALESCE(site, '') ILIKE $${parameterIndex}
         )
-      `);
-      params.push(`%${search}%`);
-      i += 1;
+        `
+      );
+      queryParameters.push(`%${search}%`);
+      parameterIndex += 1;
     }
 
-    const safeLimit = Math.min(Math.max(Number(limit) || 500, 1), 1000);
-    const safeOffset = Math.max(Number(offset) || 0, 0);
-    const whereClause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const safeLimit = Math.min(
+      Math.max(
+        parsePositiveInteger(limit, DEFAULT_PAGE_SIZE),
+        1
+      ),
+      MAX_PAGE_SIZE
+    );
+
+    const safeOffset = parsePositiveInteger(offset, 0);
+
+    const whereClause = whereConditions.length > 0
+      ? `WHERE ${whereConditions.join(" AND ")}`
+      : "";
 
     try {
       const result = await pool.query(
@@ -234,101 +338,409 @@ router.get(
           approved ASC,
           name ASC,
           email ASC
-        LIMIT $${i} OFFSET $${i + 1}
+        LIMIT $${parameterIndex}
+        OFFSET $${parameterIndex + 1}
         `,
-        [...params, safeLimit, safeOffset]
+        [
+          ...queryParameters,
+          safeLimit,
+          safeOffset,
+        ]
       );
 
-      return res.json(result.rows);
-    } catch (err) {
-      console.error("Fetch users failed:", err);
-      return res.status(500).json({ error: "Failed to fetch users" });
+      return response.json(result.rows);
+    } catch (error) {
+      console.error("Fetch users failed:", error);
+      return response.status(500).json({
+        error: "Failed to fetch users",
+      });
     }
   }
 );
 
-/** GET /api/users/meta */
 router.get(
   "/meta",
-  allowRoles("superadmin", "admin", "manager"),
-  async (_req, res) => {
+  allowRoles("manager", "admin", "superadmin"),
+  async (_request, response) => {
     try {
-      const [summaryResult, departmentsResult] = await Promise.all([
-        pool.query(`
-          SELECT
-            COUNT(*)::integer AS total,
-            COUNT(*) FILTER (WHERE status = 'active' AND archived_at IS NULL)::integer AS active,
-            COUNT(*) FILTER (WHERE approved = FALSE AND archived_at IS NULL)::integer AS pending,
-            COUNT(*) FILTER (WHERE role = 'agent' AND archived_at IS NULL)::integer AS agents,
-            COUNT(*) FILTER (WHERE microsoft_account_enabled = FALSE AND archived_at IS NULL)::integer AS microsoft_disabled,
-            COUNT(*) FILTER (WHERE archived_at IS NOT NULL)::integer AS archived
-          FROM users
-        `),
-        pool.query(`
-          SELECT DISTINCT department
-          FROM users
-          WHERE department IS NOT NULL
-            AND TRIM(department) <> ''
-          ORDER BY department
-        `),
-      ]);
+      const [summaryResult, departmentsResult] =
+        await Promise.all([
+          pool.query(
+            `
+            SELECT
+              COUNT(*)::integer AS total,
+              COUNT(*) FILTER (
+                WHERE status = 'active'
+                  AND archived_at IS NULL
+              )::integer AS active,
+              COUNT(*) FILTER (
+                WHERE approved = FALSE
+                  AND archived_at IS NULL
+              )::integer AS pending,
+              COUNT(*) FILTER (
+                WHERE role = 'agent'
+                  AND archived_at IS NULL
+              )::integer AS agents,
+              COUNT(*) FILTER (
+                WHERE microsoft_account_enabled = FALSE
+                  AND archived_at IS NULL
+              )::integer AS microsoft_disabled,
+              COUNT(*) FILTER (
+                WHERE archived_at IS NOT NULL
+              )::integer AS archived,
+              COUNT(*) FILTER (
+                WHERE microsoft_id IS NOT NULL
+                  AND COALESCE(TRIM(department), '') = ''
+              )::integer AS missing_department,
+              COUNT(*) FILTER (
+                WHERE microsoft_id IS NOT NULL
+                  AND COALESCE(TRIM(job_title), '') = ''
+              )::integer AS missing_job_title
+            FROM users
+            `
+          ),
+          pool.query(
+            `
+            SELECT DISTINCT department
+            FROM users
+            WHERE COALESCE(TRIM(department), '') <> ''
+            ORDER BY department
+            `
+          ),
+        ]);
 
-      return res.json({
+      return response.json({
         summary: summaryResult.rows[0],
-        departments: departmentsResult.rows.map((row) => row.department),
+        departments: departmentsResult.rows.map(
+          (row) => row.department
+        ),
         roles: ALLOWED_ROLES,
-        statuses: ALLOWED_STATUSES,
+        portalStatuses: ALLOWED_PORTAL_STATUSES,
         employmentStatuses: ALLOWED_EMPLOYMENT_STATUSES,
       });
-    } catch (err) {
-      console.error("Fetch user metadata failed:", err);
-      return res.status(500).json({ error: "Failed to fetch user metadata" });
+    } catch (error) {
+      console.error("Fetch user metadata failed:", error);
+      return response.status(500).json({
+        error: "Failed to fetch user metadata",
+      });
     }
   }
 );
 
-/** GET /api/users/:id */
 router.get(
-  "/:id",
-  allowRoles("superadmin", "admin", "manager"),
-  async (req, res) => {
+  "/:id/employee-preview",
+  allowRoles("manager", "admin", "superadmin"),
+  async (request, response) => {
     try {
-      const user = await getUserById(req.params.id);
-      if (!user) return res.status(404).json({ error: "User not found" });
-      return res.json(user);
-    } catch (err) {
-      console.error("Fetch user failed:", err);
-      return res.status(500).json({ error: "Failed to fetch user" });
+      const targetUser = await getUserById(request.params.id);
+
+      if (!targetUser) {
+        return response.status(404).json({
+          error: "User not found",
+        });
+      }
+
+      const ticketCountResult = await pool.query(
+        `
+        SELECT COUNT(*)::integer AS count
+        FROM tickets
+        WHERE requester_id = $1
+        `,
+        [targetUser.id]
+      );
+
+      return response.json({
+        user: targetUser,
+        summary: {
+          ticketCount: ticketCountResult.rows[0].count,
+          assetCount: null,
+        },
+        access: {
+          employee_dashboard: true,
+          report_incident: true,
+          request_service: true,
+          my_tickets: true,
+          my_assets: true,
+          knowledge: true,
+          notifications: true,
+          operations_dashboard: false,
+          user_management: false,
+          all_assets: false,
+          production_operations: false,
+          admin_settings: false,
+        },
+      });
+    } catch (error) {
+      console.error("Employee access preview failed:", error);
+      return response.status(500).json({
+        error: "Failed to build the employee access preview",
+      });
     }
   }
 );
 
-/** PUT /api/users/:id/profile */
+router.post(
+  "/bulk",
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
+    const requestedIds = Array.isArray(request.body.userIds)
+      ? request.body.userIds
+      : [];
+
+    const userIds = Array.from(
+      new Set(
+        requestedIds
+          .map(Number)
+          .filter((userId) => Number.isInteger(userId))
+      )
+    ).slice(0, MAX_BULK_USERS);
+
+    const action = String(request.body.action || "").trim();
+    const value = request.body.value;
+
+    if (userIds.length === 0) {
+      return response.status(400).json({
+        error: "Select at least one user",
+      });
+    }
+
+    const result = {
+      requested: userIds.length,
+      updated: 0,
+      skipped: 0,
+      failed: 0,
+      results: [],
+    };
+
+    for (const userId of userIds) {
+      try {
+        const targetUser = await getUserById(userId);
+
+        if (!targetUser) {
+          result.skipped += 1;
+          result.results.push({
+            id: userId,
+            status: "skipped",
+            reason: "User not found",
+          });
+          continue;
+        }
+
+        if (
+          targetUser.role === "superadmin" &&
+          !isSuperadmin(request)
+        ) {
+          result.skipped += 1;
+          result.results.push({
+            id: userId,
+            status: "skipped",
+            reason: "Protected superadmin account",
+          });
+          continue;
+        }
+
+        const isOwnAccount =
+          Number(request.user.id) === Number(userId);
+
+        if (
+          isOwnAccount &&
+          ["deactivate", "archive"].includes(action)
+        ) {
+          result.skipped += 1;
+          result.results.push({
+            id: userId,
+            status: "skipped",
+            reason: "You cannot disable your own account",
+          });
+          continue;
+        }
+
+        let updateQuery;
+        let updateParameters;
+
+        switch (action) {
+          case "approve":
+          case "activate":
+            updateQuery = `
+              UPDATE users
+              SET
+                approved = TRUE,
+                status = 'active',
+                updated_at = NOW()
+              WHERE id = $1
+            `;
+            updateParameters = [userId];
+            break;
+
+          case "deactivate":
+            updateQuery = `
+              UPDATE users
+              SET
+                approved = FALSE,
+                status = 'inactive',
+                updated_at = NOW()
+              WHERE id = $1
+            `;
+            updateParameters = [userId];
+            break;
+
+          case "archive":
+            updateQuery = `
+              UPDATE users
+              SET
+                approved = FALSE,
+                status = 'inactive',
+                archived_at = NOW(),
+                archived_by = $2,
+                archive_reason = 'Bulk archive',
+                updated_at = NOW()
+              WHERE id = $1
+            `;
+            updateParameters = [
+              userId,
+              request.user.id,
+            ];
+            break;
+
+          case "restore":
+            updateQuery = `
+              UPDATE users
+              SET
+                archived_at = NULL,
+                archived_by = NULL,
+                archive_reason = NULL,
+                status = 'inactive',
+                approved = FALSE,
+                updated_at = NOW()
+              WHERE id = $1
+            `;
+            updateParameters = [userId];
+            break;
+
+          case "set_role": {
+            const requestedRole = normalizeRole(value);
+
+            if (!requestedRole) {
+              throw new Error("Invalid role");
+            }
+
+            if (
+              ["admin", "superadmin"].includes(requestedRole) &&
+              !isSuperadmin(request)
+            ) {
+              throw new Error("Protected role");
+            }
+
+            updateQuery = `
+              UPDATE users
+              SET
+                role = $2,
+                updated_at = NOW()
+              WHERE id = $1
+            `;
+            updateParameters = [
+              userId,
+              requestedRole,
+            ];
+            break;
+          }
+
+          case "set_department":
+            updateQuery = `
+              UPDATE users
+              SET
+                department = $2,
+                updated_at = NOW()
+              WHERE id = $1
+            `;
+            updateParameters = [
+              userId,
+              nullableText(value),
+            ];
+            break;
+
+          case "set_site":
+            updateQuery = `
+              UPDATE users
+              SET
+                site = $2,
+                updated_at = NOW()
+              WHERE id = $1
+            `;
+            updateParameters = [
+              userId,
+              nullableText(value),
+            ];
+            break;
+
+          default:
+            return response.status(400).json({
+              error: "Unsupported bulk action",
+            });
+        }
+
+        await pool.query(updateQuery, updateParameters);
+
+        result.updated += 1;
+        result.results.push({
+          id: userId,
+          status: "updated",
+        });
+      } catch (error) {
+        result.failed += 1;
+        result.results.push({
+          id: userId,
+          status: "failed",
+          reason: error.message,
+        });
+      }
+    }
+
+    return response.json(result);
+  }
+);
+
 router.put(
   "/:id/profile",
-  allowRoles("superadmin", "admin"),
-  async (req, res) => {
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
     try {
-      const targetUser = await getUserById(req.params.id);
-      if (!ensureCanManageTarget(req, res, targetUser)) return;
+      const targetUser = await getUserById(request.params.id);
 
-      const email = normalizeEmail(req.body.email ?? targetUser.email);
-      const name = String(req.body.name ?? targetUser.name).trim();
+      if (!canManageTargetUser(request, response, targetUser)) {
+        return;
+      }
 
-      if (!name) return res.status(400).json({ error: "Name is required" });
+      const name = String(
+        request.body.name ?? targetUser.name
+      ).trim();
+
+      const email = normalizeEmail(
+        request.body.email ?? targetUser.email
+      );
+
+      if (!name) {
+        return response.status(400).json({
+          error: "Name is required",
+        });
+      }
+
       if (!email || !isCompanyEmail(email)) {
-        return res.status(400).json({
+        return response.status(400).json({
           error: `Email must belong to @${COMPANY_DOMAIN}`,
         });
       }
 
-      const employmentStatus =
-        req.body.employmentStatus === undefined
-          ? targetUser.employment_status
-          : normalizeEmploymentStatus(req.body.employmentStatus);
+      const employmentStatus = normalizeEmploymentStatus(
+        request.body.employmentStatus ||
+          targetUser.employment_status ||
+          "active"
+      );
 
       if (!employmentStatus) {
-        return res.status(400).json({ error: "Invalid employment status" });
+        return response.status(400).json({
+          error: "Invalid employment status",
+        });
       }
 
       const result = await pool.query(
@@ -358,95 +770,121 @@ router.put(
         [
           name,
           email,
-          nullableText(req.body.firstName),
-          nullableText(req.body.lastName),
-          nullableText(req.body.employeeNumber),
-          nullableText(req.body.jobTitle),
-          nullableText(req.body.department),
-          nullableText(req.body.managerName),
-          nullableText(req.body.officeLocation),
-          nullableText(req.body.site),
-          nullableText(req.body.mobilePhone),
-          nullableText(req.body.businessPhone),
-          nullableText(req.body.alternativeEmail),
+          nullableText(request.body.firstName),
+          nullableText(request.body.lastName),
+          nullableText(request.body.employeeNumber),
+          nullableText(request.body.jobTitle),
+          nullableText(request.body.department),
+          nullableText(request.body.managerName),
+          nullableText(request.body.officeLocation),
+          nullableText(request.body.site),
+          nullableText(request.body.mobilePhone),
+          nullableText(request.body.businessPhone),
+          nullableText(request.body.alternativeEmail),
           employmentStatus,
-          nullableDate(req.body.startDate),
-          nullableDate(req.body.terminationDate),
-          req.params.id,
+          nullableDate(request.body.startDate),
+          nullableDate(request.body.terminationDate),
+          request.params.id,
         ]
       );
 
-      return res.json(result.rows[0]);
-    } catch (err) {
-      if (err.code === "23505") {
-        return res.status(409).json({ error: "Email or Microsoft ID already exists" });
+      return response.json(result.rows[0]);
+    } catch (error) {
+      if (error.code === "23505") {
+        return response.status(409).json({
+          error: "Email or employee identity already exists",
+        });
       }
-      console.error("Update user profile failed:", err);
-      return res.status(500).json({ error: "Failed to update user profile" });
+
+      console.error("Update user profile failed:", error);
+      return response.status(500).json({
+        error: "Failed to update user profile",
+      });
     }
   }
 );
 
-/** PUT /api/users/:id/approve */
 router.put(
   "/:id/approve",
-  allowRoles("superadmin", "admin"),
-  async (req, res) => {
-    const normalizedRole = normalizeRole(req.body.role || "user");
-    if (!normalizedRole) return res.status(400).json({ error: "Invalid role" });
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
+    const requestedRole = normalizeRole(
+      request.body.role || "user"
+    );
+
+    if (!requestedRole) {
+      return response.status(400).json({
+        error: "Invalid role",
+      });
+    }
+
+    if (!canAssignRole(request, response, requestedRole)) {
+      return;
+    }
 
     try {
-      const targetUser = await getUserById(req.params.id);
-      if (!ensureCanManageTarget(req, res, targetUser)) return;
+      const targetUser = await getUserById(request.params.id);
 
-      if (["admin", "superadmin"].includes(normalizedRole) && !isSuperadmin(req)) {
-        return res.status(403).json({
-          error: "Only a superadmin can assign admin or superadmin roles.",
-        });
+      if (!canManageTargetUser(request, response, targetUser)) {
+        return;
       }
 
       const result = await pool.query(
         `
         UPDATE users
-        SET approved = TRUE, status = 'active', role = $1, updated_at = NOW()
+        SET
+          approved = TRUE,
+          status = 'active',
+          role = $1,
+          updated_at = NOW()
         WHERE id = $2
         RETURNING ${USER_SELECT}
         `,
-        [normalizedRole, req.params.id]
+        [
+          requestedRole,
+          request.params.id,
+        ]
       );
 
-      return res.json(result.rows[0]);
-    } catch (err) {
-      console.error("Approve user failed:", err);
-      return res.status(500).json({ error: "Failed to approve user" });
+      return response.json(result.rows[0]);
+    } catch (error) {
+      console.error("Approve user failed:", error);
+      return response.status(500).json({
+        error: "Failed to approve user",
+      });
     }
   }
 );
 
-/** PUT /api/users/:id/role */
 router.put(
   "/:id/role",
-  allowRoles("superadmin", "admin"),
-  async (req, res) => {
-    const normalizedRole = normalizeRole(req.body.role);
-    if (!normalizedRole) return res.status(400).json({ error: "Invalid role" });
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
+    const requestedRole = normalizeRole(request.body.role);
+
+    if (!requestedRole) {
+      return response.status(400).json({
+        error: "Invalid role",
+      });
+    }
+
+    if (!canAssignRole(request, response, requestedRole)) {
+      return;
+    }
 
     try {
-      const targetUser = await getUserById(req.params.id);
-      if (!ensureCanManageTarget(req, res, targetUser)) return;
+      const targetUser = await getUserById(request.params.id);
 
-      if (["admin", "superadmin"].includes(normalizedRole) && !isSuperadmin(req)) {
-        return res.status(403).json({
-          error: "Only a superadmin can assign admin or superadmin roles.",
-        });
+      if (!canManageTargetUser(request, response, targetUser)) {
+        return;
       }
 
       if (
-        Number(req.user.id) === Number(req.params.id) &&
+        Number(request.user.id) === Number(request.params.id) &&
         targetUser.role === "superadmin" &&
-        normalizedRole !== "superadmin"
+        requestedRole !== "superadmin"
       ) {
-        return res.status(400).json({
+        return response.status(400).json({
           error: "You cannot remove your own superadmin role.",
         });
       }
@@ -454,183 +892,270 @@ router.put(
       const result = await pool.query(
         `
         UPDATE users
-        SET role = $1, updated_at = NOW()
+        SET
+          role = $1,
+          updated_at = NOW()
         WHERE id = $2
         RETURNING ${USER_SELECT}
         `,
-        [normalizedRole, req.params.id]
+        [
+          requestedRole,
+          request.params.id,
+        ]
       );
 
-      return res.json(result.rows[0]);
-    } catch (err) {
-      console.error("Update user role failed:", err);
-      return res.status(500).json({ error: "Failed to update user role" });
+      return response.json(result.rows[0]);
+    } catch (error) {
+      console.error("Update user role failed:", error);
+      return response.status(500).json({
+        error: "Failed to update user role",
+      });
     }
   }
 );
 
-/** PUT /api/users/:id/deactivate */
 router.put(
   "/:id/deactivate",
-  allowRoles("superadmin", "admin"),
-  async (req, res) => {
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
     try {
-      const targetUser = await getUserById(req.params.id);
-      if (!ensureCanManageTarget(req, res, targetUser)) return;
+      const targetUser = await getUserById(request.params.id);
 
-      if (Number(req.user.id) === Number(req.params.id)) {
-        return res.status(400).json({ error: "You cannot deactivate your own account." });
+      if (!canManageTargetUser(request, response, targetUser)) {
+        return;
+      }
+
+      if (Number(request.user.id) === Number(request.params.id)) {
+        return response.status(400).json({
+          error: "You cannot deactivate your own account.",
+        });
       }
 
       const result = await pool.query(
         `
         UPDATE users
-        SET approved = FALSE, status = 'inactive', updated_at = NOW()
+        SET
+          approved = FALSE,
+          status = 'inactive',
+          updated_at = NOW()
         WHERE id = $1
         RETURNING ${USER_SELECT}
         `,
-        [req.params.id]
+        [request.params.id]
       );
 
-      return res.json(result.rows[0]);
-    } catch (err) {
-      console.error("Deactivate user failed:", err);
-      return res.status(500).json({ error: "Failed to deactivate user" });
+      return response.json(result.rows[0]);
+    } catch (error) {
+      console.error("Deactivate user failed:", error);
+      return response.status(500).json({
+        error: "Failed to deactivate user",
+      });
     }
   }
 );
 
-/** PUT /api/users/:id/reactivate */
 router.put(
   "/:id/reactivate",
-  allowRoles("superadmin", "admin"),
-  async (req, res) => {
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
     try {
-      const targetUser = await getUserById(req.params.id);
-      if (!ensureCanManageTarget(req, res, targetUser)) return;
+      const targetUser = await getUserById(request.params.id);
 
-      const result = await pool.query(
-        `
-        UPDATE users
-        SET approved = TRUE, status = 'active', archived_at = NULL,
-            archived_by = NULL, archive_reason = NULL, updated_at = NOW()
-        WHERE id = $1
-        RETURNING ${USER_SELECT}
-        `,
-        [req.params.id]
-      );
-
-      return res.json(result.rows[0]);
-    } catch (err) {
-      console.error("Reactivate user failed:", err);
-      return res.status(500).json({ error: "Failed to reactivate user" });
-    }
-  }
-);
-
-/** PUT /api/users/:id/archive */
-router.put(
-  "/:id/archive",
-  allowRoles("superadmin", "admin"),
-  async (req, res) => {
-    try {
-      const targetUser = await getUserById(req.params.id);
-      if (!ensureCanManageTarget(req, res, targetUser)) return;
-
-      if (Number(req.user.id) === Number(req.params.id)) {
-        return res.status(400).json({ error: "You cannot archive your own account." });
+      if (!canManageTargetUser(request, response, targetUser)) {
+        return;
       }
 
       const result = await pool.query(
         `
         UPDATE users
-        SET approved = FALSE,
-            status = 'inactive',
-            archived_at = NOW(),
-            archived_by = $1,
-            archive_reason = $2,
-            updated_at = NOW()
+        SET
+          approved = TRUE,
+          status = 'active',
+          archived_at = NULL,
+          archived_by = NULL,
+          archive_reason = NULL,
+          updated_at = NOW()
+        WHERE id = $1
+        RETURNING ${USER_SELECT}
+        `,
+        [request.params.id]
+      );
+
+      return response.json(result.rows[0]);
+    } catch (error) {
+      console.error("Reactivate user failed:", error);
+      return response.status(500).json({
+        error: "Failed to reactivate user",
+      });
+    }
+  }
+);
+
+router.put(
+  "/:id/archive",
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
+    try {
+      const targetUser = await getUserById(request.params.id);
+
+      if (!canManageTargetUser(request, response, targetUser)) {
+        return;
+      }
+
+      if (Number(request.user.id) === Number(request.params.id)) {
+        return response.status(400).json({
+          error: "You cannot archive your own account.",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE users
+        SET
+          approved = FALSE,
+          status = 'inactive',
+          archived_at = NOW(),
+          archived_by = $1,
+          archive_reason = $2,
+          updated_at = NOW()
         WHERE id = $3
         RETURNING ${USER_SELECT}
         `,
-        [req.user.id, nullableText(req.body.reason), req.params.id]
+        [
+          request.user.id,
+          nullableText(request.body.reason),
+          request.params.id,
+        ]
       );
 
-      return res.json(result.rows[0]);
-    } catch (err) {
-      console.error("Archive user failed:", err);
-      return res.status(500).json({ error: "Failed to archive user" });
+      return response.json(result.rows[0]);
+    } catch (error) {
+      console.error("Archive user failed:", error);
+      return response.status(500).json({
+        error: "Failed to archive user",
+      });
     }
   }
 );
 
-/** PUT /api/users/:id/restore */
 router.put(
   "/:id/restore",
-  allowRoles("superadmin", "admin"),
-  async (req, res) => {
+  allowRoles("admin", "superadmin"),
+  async (request, response) => {
     try {
-      const targetUser = await getUserById(req.params.id);
-      if (!ensureCanManageTarget(req, res, targetUser)) return;
+      const targetUser = await getUserById(request.params.id);
+
+      if (!canManageTargetUser(request, response, targetUser)) {
+        return;
+      }
 
       const result = await pool.query(
         `
         UPDATE users
-        SET archived_at = NULL,
-            archived_by = NULL,
-            archive_reason = NULL,
-            status = 'inactive',
-            approved = FALSE,
-            updated_at = NOW()
+        SET
+          archived_at = NULL,
+          archived_by = NULL,
+          archive_reason = NULL,
+          status = 'inactive',
+          approved = FALSE,
+          updated_at = NOW()
         WHERE id = $1
         RETURNING ${USER_SELECT}
         `,
-        [req.params.id]
+        [request.params.id]
       );
 
-      return res.json(result.rows[0]);
-    } catch (err) {
-      console.error("Restore user failed:", err);
-      return res.status(500).json({ error: "Failed to restore user" });
+      return response.json(result.rows[0]);
+    } catch (error) {
+      console.error("Restore user failed:", error);
+      return response.status(500).json({
+        error: "Failed to restore user",
+      });
     }
   }
 );
 
-/** DELETE /api/users/:id — superadmin only */
 router.delete(
   "/:id",
   allowRoles("superadmin"),
-  async (req, res) => {
+  async (request, response) => {
     try {
-      if (Number(req.user.id) === Number(req.params.id)) {
-        return res.status(400).json({ error: "You cannot delete your own account." });
+      if (Number(request.user.id) === Number(request.params.id)) {
+        return response.status(400).json({
+          error: "You cannot delete your own account.",
+        });
       }
 
-      const targetUser = await getUserById(req.params.id);
-      if (!targetUser) return res.status(404).json({ error: "User not found" });
+      const targetUser = await getUserById(request.params.id);
+
+      if (!targetUser) {
+        return response.status(404).json({
+          error: "User not found",
+        });
+      }
 
       if (targetUser.role === "superadmin") {
-        const countResult = await pool.query(
-          `SELECT COUNT(*)::integer AS count FROM users WHERE role = 'superadmin'`,
+        const superadminCountResult = await pool.query(
+          `
+          SELECT COUNT(*)::integer AS count
+          FROM users
+          WHERE role = 'superadmin'
+          `
         );
-        if (countResult.rows[0].count <= 1) {
-          return res.status(400).json({
+
+        if (superadminCountResult.rows[0].count <= 1) {
+          return response.status(400).json({
             error: "The final superadmin account cannot be deleted.",
           });
         }
       }
 
-      await pool.query("DELETE FROM users WHERE id = $1", [req.params.id]);
-      return res.json({ message: "User permanently deleted" });
-    } catch (err) {
-      if (err.code === "23503") {
-        return res.status(409).json({
+      await pool.query(
+        `
+        DELETE FROM users
+        WHERE id = $1
+        `,
+        [request.params.id]
+      );
+
+      return response.json({
+        message: "User permanently deleted",
+      });
+    } catch (error) {
+      if (error.code === "23503") {
+        return response.status(409).json({
           error:
             "This user is linked to historical records and cannot be deleted. Archive the account instead.",
         });
       }
-      console.error("Delete user failed:", err);
-      return res.status(500).json({ error: "Failed to delete user" });
+
+      console.error("Delete user failed:", error);
+      return response.status(500).json({
+        error: "Failed to delete user",
+      });
+    }
+  }
+);
+
+router.get(
+  "/:id",
+  allowRoles("manager", "admin", "superadmin"),
+  async (request, response) => {
+    try {
+      const user = await getUserById(request.params.id);
+
+      if (!user) {
+        return response.status(404).json({
+          error: "User not found",
+        });
+      }
+
+      return response.json(user);
+    } catch (error) {
+      console.error("Fetch user failed:", error);
+      return response.status(500).json({
+        error: "Failed to fetch user",
+      });
     }
   }
 );

@@ -740,3 +740,28 @@ ATD Alliance IT Helpdesk / Production Portal
 ---
 
 © ATD Alliance · portal.atdalliance.co.za
+
+
+
+# Refined Production Frontend Files
+
+Replace:
+- `frontend/src/App.jsx`
+- `frontend/src/pages/EmployeeDashboard.jsx`
+- `frontend/src/pages/AdminSettings.jsx`
+- `frontend/src/pages/AdminUsers.jsx`
+
+Validation:
+```powershell
+cd frontend
+npm run build
+```
+
+AdminUsers improvements:
+- Floating toast notifications that automatically close after 5 seconds
+- No top-of-page success/error blocks
+- Scroll position preserved after edits/actions
+- Row selection and select-all-visible
+- Bulk approve, activate, deactivate, archive, restore, and role assignment
+- 50, 100, 200, or All employee views
+- Pagination for 50/100/200 views

@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+﻿import React, { useEffect, useState } from "react";
 import { Navigate, useNavigate, Link } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { Headphones, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
@@ -71,7 +71,7 @@ export default function LoginPage() {
         "Login failed.";
 
       if (msg.toLowerCase().includes("pending")) {
-        setError("⏳ Your account is still awaiting admin approval.");
+        setError("â³ Your account is still awaiting admin approval.");
       } else {
         setError(msg);
       }
@@ -148,7 +148,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-              placeholder="••••••••"
+              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
             />
           </div>
 
@@ -171,7 +171,7 @@ export default function LoginPage() {
 
 
         <p className="mt-6 text-center text-xs text-slate-400">
-          © {new Date().getFullYear()} ATD Alliance · portal.atdalliance.co.za
+          Â© {new Date().getFullYear()} ATD Alliance Â· portal.atdalliance.co.za
         </p>
       </div>
     </div>

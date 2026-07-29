@@ -1,37 +1,96 @@
-const nodemailer = require("nodemailer");
 const dns = require("dns");
+const nodemailer = require("nodemailer");
 
-// Prefer IPv4 to avoid SMTP IPv6 routing issues.
 dns.setDefaultResultOrder("ipv4first");
 
 const EMAIL_ENABLED = process.env.EMAIL_ENABLED !== "false";
 
-const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_SECURE = process.env.SMTP_SECURE === "true";
+const SMTP_HOST =
+  process.env.SMTP_HOST ||
+  process.env.EMAIL_HOST ||
+  "";
 
-const EMAIL_USER = process.env.EMAIL_USER;
-const EMAIL_PASS = process.env.EMAIL_PASS;
+const SMTP_PORT = Number(
+  process.env.SMTP_PORT ||
+    process.env.EMAIL_PORT ||
+    587
+);
+
+const SMTP_SECURE =
+  String(
+    process.env.SMTP_SECURE ||
+      process.env.EMAIL_SECURE ||
+      "false"
+  )
+    .trim()
+    .toLowerCase() === "true";
+
+const EMAIL_USER =
+  process.env.EMAIL_USER ||
+  process.env.SMTP_USER ||
+  "";
+
+const EMAIL_PASS =
+  process.env.EMAIL_PASS ||
+  process.env.SMTP_PASSWORD ||
+  "";
+
+const EMAIL_FROM =
+  process.env.EMAIL_FROM ||
+  process.env.SMTP_FROM ||
+  `"ATD Helpdesk" <${EMAIL_USER}>`;
 
 const PUBLIC_PORTAL_URL =
-  process.env.PUBLIC_PORTAL_URL || "http://localhost:5173/helpdesk";
+  process.env.PUBLIC_PORTAL_URL ||
+  "http://localhost:5173/helpdesk";
 
-const SMTP_FROM =
-  process.env.SMTP_FROM || `"ATD Helpdesk" <${process.env.EMAIL_USER}>`;
+let transporter = null;
 
-const transporter = nodemailer.createTransport({
-  host: SMTP_HOST,
-  port: SMTP_PORT,
-  secure: SMTP_SECURE,
-  requireTLS: !SMTP_SECURE,
-  connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT || 10000),
-  greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT || 10000),
-  socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT || 15000),
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  },
-});
+function isEmailConfigured() {
+  return Boolean(
+    EMAIL_ENABLED &&
+      SMTP_HOST &&
+      SMTP_PORT &&
+      EMAIL_USER &&
+      EMAIL_PASS &&
+      EMAIL_FROM
+  );
+}
+
+function createEmailTransporter() {
+  if (!isEmailConfigured()) {
+    return null;
+  }
+
+  return nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: SMTP_PORT,
+    secure: SMTP_SECURE,
+    family: 4,
+    requireTLS: !SMTP_SECURE,
+    connectionTimeout: Number(
+      process.env.SMTP_CONNECTION_TIMEOUT || 10000
+    ),
+    greetingTimeout: Number(
+      process.env.SMTP_GREETING_TIMEOUT || 10000
+    ),
+    socketTimeout: Number(
+      process.env.SMTP_SOCKET_TIMEOUT || 15000
+    ),
+    auth: {
+      user: EMAIL_USER,
+      pass: EMAIL_PASS,
+    },
+  });
+}
+
+function getEmailTransporter() {
+  if (!transporter) {
+    transporter = createEmailTransporter();
+  }
+
+  return transporter;
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -43,122 +102,178 @@ function escapeHtml(value) {
 }
 
 function normalizeRecipients(recipients) {
-  if (!recipients) return [];
+  if (!recipients) {
+    return [];
+  }
 
-  const list = Array.isArray(recipients) ? recipients : [recipients];
+  const recipientList = Array.isArray(recipients)
+    ? recipients
+    : [recipients];
 
-  return [...new Set(list.map((email) => String(email || "").trim()).filter(Boolean))];
+  return Array.from(
+    new Set(
+      recipientList
+        .map((emailAddress) => {
+          return String(emailAddress || "")
+            .trim()
+            .toLowerCase();
+        })
+        .filter(Boolean)
+    )
+  );
 }
 
 async function verifyEmailTransporter() {
   if (!EMAIL_ENABLED) {
-    console.log("📭 Email disabled with EMAIL_ENABLED=false");
+    console.log("Email delivery is disabled with EMAIL_ENABLED=false.");
     return false;
   }
 
-  if (!EMAIL_USER || !EMAIL_PASS) {
-    console.warn("⚠️ EMAIL_USER or EMAIL_PASS missing. Email will not send.");
+  if (!isEmailConfigured()) {
+    console.warn("Email configuration is incomplete.", {
+      hostConfigured: Boolean(SMTP_HOST),
+      port: SMTP_PORT || null,
+      secure: SMTP_SECURE,
+      userConfigured: Boolean(EMAIL_USER),
+      passwordConfigured: Boolean(EMAIL_PASS),
+      fromConfigured: Boolean(EMAIL_FROM),
+    });
+
     return false;
   }
 
   try {
-    await transporter.verify();
-    console.log("✅ Email transporter verified");
+    const activeTransporter = getEmailTransporter();
+    await activeTransporter.verify();
+
+    console.log("Email transporter verified.", {
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+    });
+
     return true;
-  } catch (err) {
-    console.error("❌ Email transporter verification failed:", err.message);
+  } catch (error) {
+    console.error("Email transporter verification failed:", {
+      code: error.code || null,
+      command: error.command || null,
+      responseCode: error.responseCode || null,
+      message: error.message,
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+    });
+
     return false;
   }
 }
 
-async function sendMailSafe({ to, subject, html, text }) {
+async function sendMailSafe({
+  to,
+  subject,
+  html,
+  text,
+}) {
   const recipients = normalizeRecipients(to);
 
   if (!EMAIL_ENABLED) {
-    console.log("📭 Email disabled. Skipping:", subject);
-    return null;
+    return {
+      sent: false,
+      skipped: true,
+      reason: "Email delivery is disabled.",
+    };
   }
 
-  if (!EMAIL_USER || !EMAIL_PASS) {
-    console.warn("⚠️ Email credentials missing. Skipping:", subject);
-    return null;
+  if (!isEmailConfigured()) {
+    return {
+      sent: false,
+      skipped: true,
+      reason: "Email configuration is incomplete.",
+    };
   }
 
   if (recipients.length === 0) {
-    console.log("📭 No recipients. Skipping:", subject);
-    return null;
+    return {
+      sent: false,
+      skipped: true,
+      reason: "No valid recipients were supplied.",
+    };
   }
 
-  console.log("📧 Sending email:", {
-    to: recipients,
-    subject,
-  });
+  try {
+    const activeTransporter = getEmailTransporter();
 
-  const info = await transporter.sendMail({
-    from: SMTP_FROM,
-    to: recipients.join(","),
-    subject,
-    html,
-    text,
-  });
+    const info = await activeTransporter.sendMail({
+      from: EMAIL_FROM,
+      to: recipients.join(","),
+      subject,
+      html,
+      text,
+    });
 
-  console.log("✅ Email sent:", {
-    messageId: info.messageId,
-    accepted: info.accepted,
-    rejected: info.rejected,
-  });
+    console.log("Email sent successfully:", {
+      messageId: info.messageId,
+      acceptedCount: info.accepted?.length || 0,
+      rejectedCount: info.rejected?.length || 0,
+      subject,
+    });
 
-  return info;
+    return {
+      sent: true,
+      skipped: false,
+      info,
+    };
+  } catch (error) {
+    console.error("Email delivery failed:", {
+      code: error.code || null,
+      command: error.command || null,
+      responseCode: error.responseCode || null,
+      message: error.message,
+      recipientCount: recipients.length,
+      subject,
+    });
+
+    return {
+      sent: false,
+      skipped: false,
+      error: {
+        code: error.code || null,
+        message: error.message,
+      },
+    };
+  }
 }
 
-/**
- * Sends approval request email to admin.
- * Triggered when a new user signs up.
- */
 async function sendApprovalEmail(user) {
   const adminEmail = process.env.ADMIN_EMAIL;
 
   if (!adminEmail) {
-    throw new Error("ADMIN_EMAIL is missing in backend/.env");
+    return {
+      sent: false,
+      skipped: true,
+      reason: "ADMIN_EMAIL is not configured.",
+    };
   }
 
   const adminUsersUrl = `${PUBLIC_PORTAL_URL}/admin/users`;
-
-  const name = escapeHtml(user?.name || "N/A");
-  const email = escapeHtml(user?.email || "N/A");
-
+  const safeName = escapeHtml(user?.name || "N/A");
+  const safeEmail = escapeHtml(user?.email || "N/A");
   const subject = "New User Signup Pending Approval";
 
   const html = `
-    <div style="font-family:Segoe UI, Arial, sans-serif; color:#1f2937; font-size:14px; line-height:1.6;">
+    <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;">
       <p>Hi Admin,</p>
-
       <p>A new user has registered and is waiting for approval.</p>
-
-      <div style="margin:18px 0; padding:14px; background:#f8fafc; border-left:4px solid #2563eb;">
-        <p style="margin:0;"><strong>Name:</strong> ${name}</p>
-        <p style="margin:0;"><strong>Email:</strong> ${email}</p>
+      <div style="margin:18px 0;padding:14px;background:#f8fafc;border-left:4px solid #2563eb;">
+        <p style="margin:0;"><strong>Name:</strong> ${safeName}</p>
+        <p style="margin:0;"><strong>Email:</strong> ${safeEmail}</p>
       </div>
-
-      <p>Please open the Admin Users page to approve or reject this user.</p>
-
       <p>
-        <a href="${adminUsersUrl}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+        <a href="${adminUsersUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">
           Open Admin Users
         </a>
       </p>
-
-      <p style="margin-top:28px;">
-        Kind regards,<br/>
-        <strong>ATD Helpdesk</strong><br/>
-        IT Support Portal
-      </p>
-
-      <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;" />
-
-      <p style="font-size:12px; color:#64748b;">
-        This is an automated notification from the ATD Alliance Helpdesk Portal.
-      </p>
+      <p>Kind regards,<br/><strong>ATD Helpdesk</strong></p>
     </div>
   `;
 
@@ -175,7 +290,7 @@ ${adminUsersUrl}
 
 Kind regards,
 ATD Helpdesk
-`;
+  `.trim();
 
   return sendMailSafe({
     to: adminEmail,
@@ -185,54 +300,25 @@ ATD Helpdesk
   });
 }
 
-
-/**
- * ✅ Sends welcome email when a Microsoft 365 user signs in for the first time.
- */
 async function sendM365WelcomeEmail(user) {
-  const portalUrl = PUBLIC_PORTAL_URL;
-
   const safeName = escapeHtml(user?.name || "ATD user");
   const safeEmail = escapeHtml(user?.email || "");
-
   const subject = "Welcome to the ATD Helpdesk Portal";
 
   const html = `
-    <div style="font-family:Segoe UI, Arial, sans-serif; color:#1f2937; font-size:14px; line-height:1.6;">
+    <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;">
       <p>Hi ${safeName},</p>
-
-      <p>
-        Your Microsoft 365 account has been registered on the
-        <strong>ATD Helpdesk Portal</strong>.
-      </p>
-
-      <div style="margin:18px 0; padding:14px; background:#f8fafc; border-left:4px solid #2563eb;">
+      <p>Your Microsoft 365 account has been registered on the <strong>ATD Helpdesk Portal</strong>.</p>
+      <div style="margin:18px 0;padding:14px;background:#f8fafc;border-left:4px solid #2563eb;">
         <p style="margin:0;"><strong>Email:</strong> ${safeEmail}</p>
         <p style="margin:0;"><strong>Default role:</strong> Standard user</p>
       </div>
-
       <p>
-        You can now sign in using your Microsoft 365 account to lodge support requests,
-        report problems, and track your tickets.
-      </p>
-
-      <p>
-        <a href="${portalUrl}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+        <a href="${PUBLIC_PORTAL_URL}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">
           Open ATD Helpdesk
         </a>
       </p>
-
-      <p style="margin-top:28px;">
-        Kind regards,<br/>
-        <strong>ATD Helpdesk</strong><br/>
-        IT Support Portal
-      </p>
-
-      <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;" />
-
-      <p style="font-size:12px; color:#64748b;">
-        This is an automated notification from the ATD Alliance Helpdesk Portal.
-      </p>
+      <p>Kind regards,<br/><strong>ATD Helpdesk</strong></p>
     </div>
   `;
 
@@ -244,14 +330,12 @@ Your Microsoft 365 account has been registered on the ATD Helpdesk Portal.
 Email: ${user?.email || ""}
 Default role: Standard user
 
-You can now sign in using your Microsoft 365 account.
-
 Open ATD Helpdesk:
-${portalUrl}
+${PUBLIC_PORTAL_URL}
 
 Kind regards,
 ATD Helpdesk
-`;
+  `.trim();
 
   return sendMailSafe({
     to: user?.email,
@@ -261,95 +345,64 @@ ATD Helpdesk
   });
 }
 
+async function sendTicketAssignmentEmail({
+  recipients,
+  ticket,
+  groupName,
+}) {
+  const normalizedRecipients = normalizeRecipients(recipients);
 
-/**
- * Sends ticket assignment email to group members or assigned agent.
- */
-async function sendTicketAssignmentEmail({ recipients, ticket, groupName }) {
-  const uniqueRecipients = normalizeRecipients(recipients);
-
-  if (uniqueRecipients.length === 0) {
-    console.log("📭 No ticket assignment email recipients found.", {
-      ticketId: ticket?.id,
-      ticketRef: ticket?.ticket_ref,
-    });
-
-    return null;
+  if (normalizedRecipients.length === 0) {
+    return {
+      sent: false,
+      skipped: true,
+      reason: "No assignment email recipients were found.",
+    };
   }
 
-  const ticketRef = ticket?.ticket_ref || `TICKET-${ticket?.id}`;
-  const ticketTitle = ticket?.title || "Untitled ticket";
-  const ticketUrl = `${PUBLIC_PORTAL_URL}/tickets/${ticket?.id}`;
+  const ticketReference =
+    ticket?.ticket_ref ||
+    `TICKET-${ticket?.id}`;
 
-  const safeTicketRef = escapeHtml(ticketRef);
-  const safeTitle = escapeHtml(ticketTitle);
-  const safeDescription = escapeHtml(ticket?.description || "No description provided.");
-  const safePriority = escapeHtml(ticket?.priority || "Medium");
-  const safeStatus = escapeHtml(ticket?.status || "Open");
-  const safeWorkspace = escapeHtml(ticket?.workspace || "IT");
-  const safeGroup = escapeHtml(groupName || "N/A");
+  const ticketTitle =
+    ticket?.title ||
+    "Untitled ticket";
 
-  const subject = `Assigned to Group - ${ticketTitle}`;
+  const ticketUrl =
+    `${PUBLIC_PORTAL_URL}/tickets/${ticket?.id}`;
+
+  const subject = `Ticket Assigned - ${ticketReference}`;
 
   const html = `
-    <div style="font-family:Segoe UI, Arial, sans-serif; color:#1f2937; font-size:14px; line-height:1.6;">
+    <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;">
       <p>Hi,</p>
-
-      <p>
-        A new incident has been assigned to your group
-        <strong>${safeGroup}</strong>. Please follow the link below to view the incident.
-      </p>
-
-      <h3 style="margin-top:24px; color:#111827;">
-        ${safeTitle}
-      </h3>
-
-      <p>
-        <strong>Ticket:</strong> ${safeTicketRef}<br/>
-        <strong>Priority:</strong> ${safePriority}<br/>
-        <strong>Status:</strong> ${safeStatus}<br/>
-        <strong>Workspace:</strong> ${safeWorkspace}<br/>
-        <strong>Assigned Group:</strong> ${safeGroup}
-      </p>
-
-      <div style="margin:20px 0; padding:14px; background:#f8fafc; border-left:4px solid #2563eb;">
-        <strong>Description</strong>
-        <p style="white-space:pre-wrap; margin-bottom:0;">${safeDescription}</p>
+      <p>A Helpdesk ticket has been assigned to ${escapeHtml(groupName || "your team")}.</p>
+      <div style="margin:18px 0;padding:14px;background:#f8fafc;border-left:4px solid #2563eb;">
+        <p style="margin:0;"><strong>Ticket:</strong> ${escapeHtml(ticketReference)}</p>
+        <p style="margin:0;"><strong>Title:</strong> ${escapeHtml(ticketTitle)}</p>
+        <p style="margin:0;"><strong>Priority:</strong> ${escapeHtml(ticket?.priority || "Medium")}</p>
+        <p style="margin:0;"><strong>Status:</strong> ${escapeHtml(ticket?.status || "Open")}</p>
       </div>
-
+      <p>${escapeHtml(ticket?.description || "No description provided.")}</p>
       <p>
-        <a href="${ticketUrl}" style="display:inline-block; background:#2563eb; color:#ffffff; padding:10px 16px; border-radius:8px; text-decoration:none; font-weight:600;">
+        <a href="${ticketUrl}" style="display:inline-block;background:#2563eb;color:#ffffff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">
           Open Ticket
         </a>
       </p>
-
-      <p style="margin-top:28px;">
-        Kind regards,<br/>
-        <strong>ATD Helpdesk</strong><br/>
-        IT Support Portal
-      </p>
-
-      <hr style="border:none; border-top:1px solid #e5e7eb; margin:24px 0;" />
-
-      <p style="font-size:12px; color:#64748b;">
-        This is an automated notification from the ATD Alliance Helpdesk Portal.
-      </p>
+      <p>Kind regards,<br/><strong>ATD Helpdesk</strong></p>
     </div>
   `;
 
   const text = `
 Hi,
 
-A new incident has been assigned to your group "${groupName || "N/A"}".
+A Helpdesk ticket has been assigned to ${groupName || "your team"}.
 
-Ticket: ${ticketRef}
+Ticket: ${ticketReference}
 Title: ${ticketTitle}
 Priority: ${ticket?.priority || "Medium"}
 Status: ${ticket?.status || "Open"}
-Workspace: ${ticket?.workspace || "IT"}
-Assigned Group: ${groupName || "N/A"}
 
-Description:
 ${ticket?.description || "No description provided."}
 
 Open Ticket:
@@ -357,10 +410,10 @@ ${ticketUrl}
 
 Kind regards,
 ATD Helpdesk
-`;
+  `.trim();
 
   return sendMailSafe({
-    to: uniqueRecipients,
+    to: normalizedRecipients,
     subject,
     html,
     text,
@@ -369,6 +422,7 @@ ATD Helpdesk
 
 module.exports = {
   verifyEmailTransporter,
+  sendMailSafe,
   sendApprovalEmail,
   sendTicketAssignmentEmail,
   sendM365WelcomeEmail,

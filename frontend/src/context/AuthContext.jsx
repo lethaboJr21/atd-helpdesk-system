@@ -1,119 +1,221 @@
-import React, {
+import {
   createContext,
-  useContext,
+  useCallback,
+  useEffect,
   useMemo,
   useState,
-  useEffect,
 } from "react";
+
 import { authApi } from "../services/api";
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(undefined);
+
+function normalizeBoolean(value, fallbackValue = false) {
+  if (value === undefined || value === null) {
+    return fallbackValue;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  const normalizedValue = String(value)
+    .trim()
+    .toLowerCase();
+
+  return ["true", "1", "yes"].includes(normalizedValue);
+}
+
+function normalizeAuthenticatedUser(userData) {
+  if (!userData) {
+    return null;
+  }
+
+  const approved = normalizeBoolean(
+    userData.approved,
+    false
+  );
+
+  const rawStatus = String(
+    userData.status || ""
+  )
+    .trim()
+    .toLowerCase();
+
+  // Backward compatibility for older /auth/me responses that omitted status.
+  // The refined backend now returns status explicitly.
+  const status = rawStatus || (approved ? "active" : "inactive");
+
+  return {
+    ...userData,
+    role: String(userData.role || "user")
+      .trim()
+      .toLowerCase(),
+    approved,
+    status,
+    microsoft_account_enabled: normalizeBoolean(
+      userData.microsoft_account_enabled,
+      true
+    ),
+    archived_at: userData.archived_at || null,
+  };
+}
+
+function extractUser(response) {
+  return normalizeAuthenticatedUser(
+    response?.data?.user || response?.data
+  );
+}
 
 export function AuthProvider({ children }) {
-  // ✅ Stores the currently logged-in user
   const [user, setUser] = useState(null);
-
-  // ✅ Prevents route flicker while session is being restored
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // ✅ Restore session from localStorage token
-    const token = localStorage.getItem("token");
+  const refreshUser = useCallback(async () => {
+    const response = await authApi.me();
+    const currentUser = extractUser(response);
 
-    if (!token) {
-      setLoading(false);
-      return;
-    }
-
-    authApi
-      .me()
-      .then((res) => {
-        // ✅ Accept either { user } or direct user response
-        const userData = res.data.user || res.data;
-        setUser(userData);
-      })
-      .catch(() => {
-        // ✅ If token is invalid, clear session
-        localStorage.removeItem("token");
-        setUser(null);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    setUser(currentUser);
+    return currentUser;
   }, []);
 
-  // ✅ Login authenticates approved users only
-  const login = async (email, password) => {
-    const res = await authApi.login({ email, password });
+  useEffect(() => {
+    let cancelled = false;
 
-    // ✅ Store JWT only after successful login
-    localStorage.setItem("token", res.data.token);
+    const restoreSession = async () => {
+      const token = localStorage.getItem("token");
 
-    // ✅ Store logged-in user
-    setUser(res.data.user);
+      if (!token) {
+        if (!cancelled) {
+          setLoading(false);
+        }
 
-    return res.data.user;
-  };
+        return;
+      }
 
-  const completeSso = async (token) => {
-  localStorage.setItem("token", token);
+      try {
+        const response = await authApi.me();
+        const currentUser = extractUser(response);
 
-  const res = await authApi.me();
-  const userData = res.data.user || res.data;
+        if (!cancelled) {
+          setUser(currentUser);
+        }
+      } catch (_error) {
+        localStorage.removeItem("token");
 
-  setUser(userData);
+        if (!cancelled) {
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
 
-  return userData;
-  };
-  
-  const loginWithMicrosoft = () => {
-    window.location.href = authApi.microsoftLoginUrl();
-  };
+    restoreSession();
 
-  // ✅ Signup creates account only.
-  // ✅ It must NOT log the user in.
-  // ✅ Pending users must wait for admin approval.
-  const signup = async (name, email, password) => {
-    const res = await authApi.signup({
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const login = useCallback(async (email, password) => {
+    const response = await authApi.login({
+      email,
+      password,
+    });
+
+    localStorage.setItem(
+      "token",
+      response.data.token
+    );
+
+    const currentUser = normalizeAuthenticatedUser(
+      response.data.user
+    );
+
+    setUser(currentUser);
+    return currentUser;
+  }, []);
+
+  const completeSso = useCallback(async (token) => {
+    localStorage.setItem("token", token);
+
+    try {
+      return await refreshUser();
+    } catch (error) {
+      localStorage.removeItem("token");
+      setUser(null);
+      throw error;
+    }
+  }, [refreshUser]);
+
+  const loginWithMicrosoft = useCallback(() => {
+    window.location.assign(
+      authApi.microsoftLoginUrl()
+    );
+  }, []);
+
+  const signup = useCallback(async (
+    name,
+    email,
+    password
+  ) => {
+    const response = await authApi.signup({
       name,
       email,
       password,
     });
 
-    // ✅ Make sure signup does not authenticate pending users
     localStorage.removeItem("token");
     setUser(null);
 
-    return res.data;
-  };
+    return response.data;
+  }, []);
 
-  // ✅ Logout clears frontend session
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await authApi.logout();
-    } catch (_) {
-      // ✅ Ignore backend logout errors in local dev
+    } catch (_error) {
+      // Always clear the local session, even if the API is unavailable.
     } finally {
       localStorage.removeItem("token");
       setUser(null);
     }
-  };
+  }, []);
 
-  const value = useMemo(
+  const contextValue = useMemo(
     () => ({
       user,
       loading,
-      isAuthenticated: !!user,
+      isAuthenticated: Boolean(user),
       login,
       signup,
       logout,
       completeSso,
       loginWithMicrosoft,
+      refreshUser,
     }),
-    [user, loading]
+    [
+      user,
+      loading,
+      login,
+      signup,
+      logout,
+      completeSso,
+      loginWithMicrosoft,
+      refreshUser,
+    ]
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={contextValue}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
-
-export const useAuth = () => useContext(AuthContext);

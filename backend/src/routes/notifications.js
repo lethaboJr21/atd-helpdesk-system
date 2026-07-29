@@ -1,67 +1,86 @@
 const router = require("express").Router();
+
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
+const {
+  normalizeModule,
+} = require("../services/notificationService");
 
 router.use(auth);
 
 let schemaReady = false;
 
 async function ensureNotificationColumns() {
-  if (schemaReady) return;
+  if (schemaReady) {
+    return;
+  }
 
-  await pool.query(`
+  await pool.query(
+    `
     ALTER TABLE notifications
-    ADD COLUMN IF NOT EXISTS module VARCHAR(50) DEFAULT 'system';
-
-    ALTER TABLE notifications
-    ADD COLUMN IF NOT EXISTS target_type VARCHAR(50);
-
-    ALTER TABLE notifications
-    ADD COLUMN IF NOT EXISTS target_id INTEGER;
+      ADD COLUMN IF NOT EXISTS module VARCHAR(50) DEFAULT 'system';
 
     ALTER TABLE notifications
-    ADD COLUMN IF NOT EXISTS target_url TEXT;
+      ADD COLUMN IF NOT EXISTS target_type VARCHAR(50);
 
     ALTER TABLE notifications
-    ADD COLUMN IF NOT EXISTS attachment_count INTEGER DEFAULT 0;
+      ADD COLUMN IF NOT EXISTS target_id INTEGER;
 
     ALTER TABLE notifications
-    ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
+      ADD COLUMN IF NOT EXISTS target_url TEXT;
+
+    ALTER TABLE notifications
+      ADD COLUMN IF NOT EXISTS attachment_count INTEGER DEFAULT 0;
+
+    ALTER TABLE notifications
+      ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
 
     UPDATE notifications
-    SET module = COALESCE(module, 'system'),
-        attachment_count = COALESCE(attachment_count, 0);
-  `);
+    SET
+      module = LOWER(COALESCE(module, 'system')),
+      attachment_count = COALESCE(attachment_count, 0);
+    `
+  );
 
   schemaReady = true;
 }
 
-function visibleCondition(startIndex = 1) {
+function buildVisibilityCondition(startIndex = 1) {
   return `
     (
       user_id = $${startIndex}
-      OR target_role = $${startIndex + 1}
-      OR target_role IS NULL
+      OR (
+        user_id IS NULL
+        AND target_role = $${startIndex + 1}
+      )
     )
   `;
 }
 
-// GET /api/notifications?module=helpdesk|production|admin|system
-router.get("/", async (req, res) => {
+router.get("/", async (request, response) => {
   try {
     await ensureNotificationColumns();
 
-    const { module } = req.query;
+    const parameters = [
+      request.user.id,
+      request.user.role,
+    ];
 
-    const params = [req.user.id, req.user.role];
-    const where = [visibleCondition(1)];
+    const conditions = [
+      buildVisibilityCondition(1),
+    ];
 
-    if (module) {
-      params.push(module);
-      where.push(`module = $${params.length}`);
+    if (request.query.module) {
+      parameters.push(
+        normalizeModule(request.query.module)
+      );
+
+      conditions.push(
+        `module = $${parameters.length}`
+      );
     }
 
-    const { rows } = await pool.query(
+    const result = await pool.query(
       `
       SELECT
         id,
@@ -78,118 +97,145 @@ router.get("/", async (req, res) => {
         read_at,
         created_at
       FROM notifications
-      WHERE ${where.join(" AND ")}
+      WHERE ${conditions.join(" AND ")}
       ORDER BY created_at DESC
-      LIMIT 50
+      LIMIT 100
       `,
-      params
+      parameters
     );
 
-    return res.json(rows);
-  } catch (err) {
-    console.error("Fetch notifications error:", err);
-    return res.status(500).json({
+    return response.json(result.rows);
+  } catch (error) {
+    console.error("Fetch notifications failed:", error);
+    return response.status(500).json({
       error: "Failed to fetch notifications",
     });
   }
 });
 
-// PATCH /api/notifications/:id/read
-router.patch("/:id/read", async (req, res) => {
+router.patch("/read-all", async (request, response) => {
   try {
     await ensureNotificationColumns();
 
-    const { rows } = await pool.query(
+    const parameters = [
+      request.user.id,
+      request.user.role,
+    ];
+
+    const conditions = [
+      buildVisibilityCondition(1),
+    ];
+
+    if (request.query.module) {
+      parameters.push(
+        normalizeModule(request.query.module)
+      );
+
+      conditions.push(
+        `module = $${parameters.length}`
+      );
+    }
+
+    const result = await pool.query(
       `
       UPDATE notifications
       SET
-        is_read = true,
+        is_read = TRUE,
         read_at = COALESCE(read_at, NOW())
-      WHERE id = $1
-        AND ${visibleCondition(2)}
-      RETURNING *
+      WHERE ${conditions.join(" AND ")}
+      RETURNING id
       `,
-      [req.params.id, req.user.id, req.user.role]
+      parameters
     );
 
-    if (!rows[0]) {
-      return res.status(404).json({
+    return response.json({
+      ok: true,
+      updated: result.rowCount,
+    });
+  } catch (error) {
+    console.error("Mark all notifications read failed:", error);
+    return response.status(500).json({
+      error: "Failed to mark notifications as read",
+    });
+  }
+});
+
+router.delete("/clear", async (request, response) => {
+  try {
+    await ensureNotificationColumns();
+
+    const parameters = [
+      request.user.id,
+      request.user.role,
+    ];
+
+    const conditions = [
+      buildVisibilityCondition(1),
+    ];
+
+    if (request.query.module) {
+      parameters.push(
+        normalizeModule(request.query.module)
+      );
+
+      conditions.push(
+        `module = $${parameters.length}`
+      );
+    }
+
+    const result = await pool.query(
+      `
+      DELETE FROM notifications
+      WHERE ${conditions.join(" AND ")}
+      RETURNING id
+      `,
+      parameters
+    );
+
+    return response.json({
+      ok: true,
+      deleted: result.rowCount,
+    });
+  } catch (error) {
+    console.error("Clear notifications failed:", error);
+    return response.status(500).json({
+      error: "Failed to clear notifications",
+    });
+  }
+});
+
+router.patch("/:id/read", async (request, response) => {
+  try {
+    await ensureNotificationColumns();
+
+    const result = await pool.query(
+      `
+      UPDATE notifications
+      SET
+        is_read = TRUE,
+        read_at = COALESCE(read_at, NOW())
+      WHERE id = $1
+        AND ${buildVisibilityCondition(2)}
+      RETURNING *
+      `,
+      [
+        request.params.id,
+        request.user.id,
+        request.user.role,
+      ]
+    );
+
+    if (!result.rows[0]) {
+      return response.status(404).json({
         error: "Notification not found",
       });
     }
 
-    return res.json(rows[0]);
-  } catch (err) {
-    console.error("Mark notification read error:", err);
-    return res.status(500).json({
-      error: "Failed to mark notification read",
-    });
-  }
-});
-
-// PATCH /api/notifications/read-all?module=production
-router.patch("/read-all", async (req, res) => {
-  try {
-    await ensureNotificationColumns();
-
-    const { module } = req.query;
-
-    const params = [req.user.id, req.user.role];
-    const where = [visibleCondition(1)];
-
-    if (module) {
-      params.push(module);
-      where.push(`module = $${params.length}`);
-    }
-
-    await pool.query(
-      `
-      UPDATE notifications
-      SET
-        is_read = true,
-        read_at = COALESCE(read_at, NOW())
-      WHERE ${where.join(" AND ")}
-      `,
-      params
-    );
-
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error("Mark all notifications read error:", err);
-    return res.status(500).json({
-      error: "Failed to mark notifications read",
-    });
-  }
-});
-
-// DELETE /api/notifications/clear?module=production
-router.delete("/clear", async (req, res) => {
-  try {
-    await ensureNotificationColumns();
-
-    const { module } = req.query;
-
-    const params = [req.user.id, req.user.role];
-    const where = [visibleCondition(1)];
-
-    if (module) {
-      params.push(module);
-      where.push(`module = $${params.length}`);
-    }
-
-    await pool.query(
-      `
-      DELETE FROM notifications
-      WHERE ${where.join(" AND ")}
-      `,
-      params
-    );
-
-    return res.json({ ok: true });
-  } catch (err) {
-    console.error("Clear notifications error:", err);
-    return res.status(500).json({
-      error: "Failed to clear notifications",
+    return response.json(result.rows[0]);
+  } catch (error) {
+    console.error("Mark notification read failed:", error);
+    return response.status(500).json({
+      error: "Failed to mark notification as read",
     });
   }
 });
