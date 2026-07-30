@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "migrate": "node src/db/migrate.js",
-    "seed": "node src/db/seed.js"
+    "seed": "node src/db/seed.js",
+    "test:graph-email": "node src/scripts/testGraphEmail.js"
   },
   "dependencies": {
     "@azure/msal-node": "^5.2.4",

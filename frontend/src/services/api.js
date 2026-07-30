@@ -43,7 +43,9 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
-
+// API service functions for different modules
+// Each function corresponds to a specific API endpoint and HTTP method
+// These functions can be imported and used in React components to interact with the backend API
 export const ticketsApi = {
   getAll: (params) => {
     return api.get("/tickets", { params });
@@ -193,6 +195,30 @@ export const userApi = {
   deleteUser: (id) => {
     return api.delete(`/users/${id}`);
   },
+
+  getPendingSignups: (params = {}) => {
+  return api.get("/users", {
+    params: { ...params, accountView: "pending" },
+  });
+},
+
+getActiveUsers: (params = {}) => {
+  return api.get("/users", {
+    params: { ...params, accountView: "active" },
+  });
+},
+
+getDeactivatedUsers: (params = {}) => {
+  return api.get("/users", {
+    params: { ...params, accountView: "deactivated" },
+  });
+},
+
+getArchivedUsers: (params = {}) => {
+  return api.get("/users", {
+    params: { ...params, accountView: "archived" },
+  });
+},
 };
 
 export const azureApi = {
@@ -257,6 +283,10 @@ export const notificationApi = {
       `/notifications/${id}/read`,
       {}
     );
+  },
+
+  getUnreadCount: (params) => {
+  return api.get("/notifications/unread-count", { params });
   },
 
   markAllRead: (module) => {

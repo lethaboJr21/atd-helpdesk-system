@@ -9,8 +9,12 @@ const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 const {
   sendApprovalEmail,
+  sendAccountRequestReceivedEmail,
   sendM365WelcomeEmail,
 } = require("../services/email");
+const {
+  createAccountApprovalNotifications,
+} = require("../services/notificationService");
 
 const ALLOWED_ROLES = [
   "user",
@@ -52,7 +56,15 @@ function getEmailDomain(email) {
   return normalizeEmail(email).split("@")[1] || "";
 }
 
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 function signToken(user) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error("JWT_SECRET is not configured.");
+  }
+
   return jwt.sign(
     {
       id: user.id,
@@ -87,7 +99,9 @@ function getMicrosoftConfig() {
   const allowedDomain = String(
     process.env.MICROSOFT_ALLOWED_DOMAIN ||
       "atdalliance.co.za"
-  ).toLowerCase();
+  )
+    .trim()
+    .toLowerCase();
 
   const autoApprove =
     process.env.MICROSOFT_AUTO_APPROVE !== "false";
@@ -164,12 +178,17 @@ async function exchangeMicrosoftCodeForToken(code) {
     scope: "openid profile email User.Read",
   });
 
-  const response = await axios.post(tokenUrl, body, {
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    timeout: 20000,
-  });
+  const response = await axios.post(
+    tokenUrl,
+    body.toString(),
+    {
+      headers: {
+        "Content-Type":
+          "application/x-www-form-urlencoded",
+      },
+      timeout: 20000,
+    }
+  );
 
   return response.data;
 }
@@ -205,6 +224,54 @@ async function getCurrentUser(userId) {
   return result.rows[0] || null;
 }
 
+function buildAccountAccessError(user) {
+  if (!user) {
+    return {
+      status: 401,
+      code: "ACCOUNT_NOT_FOUND",
+      message: "The account no longer exists.",
+    };
+  }
+
+  if (user.archived_at) {
+    return {
+      status: 403,
+      code: "ACCOUNT_ARCHIVED",
+      message:
+        "This account has been archived. Please contact IT for assistance.",
+    };
+  }
+
+  if (!user.approved || user.role === "pending") {
+    return {
+      status: 403,
+      code: "ACCOUNT_PENDING",
+      message:
+        "Your account is still awaiting administrator approval.",
+    };
+  }
+
+  if (user.status !== "active") {
+    return {
+      status: 403,
+      code: "ACCOUNT_DEACTIVATED",
+      message:
+        "This account is currently deactivated. Please contact IT for assistance.",
+    };
+  }
+
+  if (user.microsoft_account_enabled === false) {
+    return {
+      status: 403,
+      code: "MICROSOFT_ACCOUNT_DISABLED",
+      message:
+        "The linked Microsoft account is disabled. Please contact IT for assistance.",
+    };
+  }
+
+  return null;
+}
+
 async function findOrCreateMicrosoftUser(profile) {
   const email = normalizeEmail(
     profile.mail || profile.userPrincipalName
@@ -229,7 +296,8 @@ async function findOrCreateMicrosoftUser(profile) {
 
   if (getEmailDomain(email) !== allowedDomain) {
     const error = new Error(
-      `Only @${allowedDomain} Microsoft accounts are allowed.`
+      `Only @${allowedDomain} Microsoft accounts are allowed. ` +
+        "If you do not have a company Microsoft 365 account, create a local account or contact IT for assistance."
     );
     error.status = 403;
     throw error;
@@ -272,6 +340,13 @@ async function findOrCreateMicrosoftUser(profile) {
       throw error;
     }
 
+    // A verified company SSO can activate a genuinely pending registration.
+    // It must not silently reactivate an approved account that an admin deactivated.
+    const shouldActivatePendingAccount = Boolean(
+      autoApprove &&
+        (!existingUser.approved || existingUser.role === "pending")
+    );
+
     const updatedResult = await pool.query(
       `
       UPDATE users
@@ -297,12 +372,11 @@ async function findOrCreateMicrosoftUser(profile) {
           ELSE status
         END,
         role = CASE
-          WHEN role = 'pending' THEN 'user'
+          WHEN $13 = TRUE AND role = 'pending' THEN 'user'
           ELSE role
         END,
         last_microsoft_sync_at = NOW(),
         microsoft_sync_status = 'success',
-        last_login_at = NOW(),
         updated_at = NOW()
       WHERE id = $14
       RETURNING ${SAFE_USER_SELECT}
@@ -320,17 +394,37 @@ async function findOrCreateMicrosoftUser(profile) {
         profile.businessPhones?.[0] || null,
         microsoftAccountEnabled,
         profile.userType || null,
-        autoApprove,
+        shouldActivatePendingAccount,
         existingUser.id,
       ]
     );
 
+    const updatedUser = updatedResult.rows[0];
+    const accessError = buildAccountAccessError(updatedUser);
+
+    if (accessError) {
+      const error = new Error(accessError.message);
+      error.status = accessError.status;
+      error.code = accessError.code;
+      throw error;
+    }
+
+    await pool.query(
+      `
+      UPDATE users
+      SET last_login_at = NOW()
+      WHERE id = $1
+      `,
+      [updatedUser.id]
+    );
+
     return {
-      user: updatedResult.rows[0],
+      user: {
+        ...updatedUser,
+        last_login_at: new Date(),
+      },
       isNew: false,
-      wasActivated:
-        !existingUser.approved ||
-        existingUser.status !== "active",
+      wasActivated: shouldActivatePendingAccount,
     };
   }
 
@@ -418,43 +512,6 @@ async function findOrCreateMicrosoftUser(profile) {
   };
 }
 
-async function createNotification(
-  message,
-  type = "system",
-  targetRole = null
-) {
-  try {
-    await pool.query(
-      `
-      INSERT INTO notifications (
-        user_id,
-        target_role,
-        message,
-        type,
-        module,
-        is_read,
-        created_at
-      )
-      VALUES (
-        NULL,
-        $1,
-        $2,
-        $3,
-        'admin',
-        FALSE,
-        NOW()
-      )
-      `,
-      [targetRole, message, type]
-    );
-  } catch (error) {
-    console.error(
-      "Authentication notification creation failed:",
-      error.message
-    );
-  }
-}
-
 router.post("/login", async (request, response) => {
   const email = normalizeEmail(request.body.email);
   const password = String(request.body.password || "");
@@ -497,22 +554,15 @@ router.post("/login", async (request, response) => {
       });
     }
 
-    if (user.archived_at) {
-      return response.status(403).json({
-        message: "This account has been archived.",
-      });
-    }
+    const accessError = buildAccountAccessError(user);
 
-    if (!user.approved || user.status !== "active") {
-      return response.status(403).json({
-        message: "Your account is still awaiting administrator approval.",
-      });
-    }
-
-    if (user.microsoft_account_enabled === false) {
-      return response.status(403).json({
-        message: "The linked Microsoft account is disabled.",
-      });
+    if (accessError) {
+      return response
+        .status(accessError.status)
+        .json({
+          code: accessError.code,
+          message: accessError.message,
+        });
     }
 
     await pool.query(
@@ -525,12 +575,14 @@ router.post("/login", async (request, response) => {
     );
 
     const token = signToken(user);
-
     delete user.password_hash;
 
     return response.json({
       token,
-      user,
+      user: {
+        ...user,
+        last_login_at: new Date(),
+      },
     });
   } catch (error) {
     console.error("Login failed:", error);
@@ -551,10 +603,22 @@ router.post("/signup", async (request, response) => {
     });
   }
 
+  if (!isValidEmail(email)) {
+    return response.status(400).json({
+      error: "Enter a valid email address.",
+    });
+  }
+
+  if (password.length < 8) {
+    return response.status(400).json({
+      error: "Password must be at least 8 characters.",
+    });
+  }
+
   try {
     const existingResult = await pool.query(
       `
-      SELECT id
+      SELECT id, approved, status, archived_at
       FROM users
       WHERE LOWER(email::text) = LOWER($1::text)
       LIMIT 1
@@ -564,7 +628,8 @@ router.post("/signup", async (request, response) => {
 
     if (existingResult.rows[0]) {
       return response.status(409).json({
-        error: "User already exists",
+        error:
+          "An account already exists for this email address. Use Sign In or contact IT for assistance.",
       });
     }
 
@@ -595,25 +660,62 @@ router.post("/signup", async (request, response) => {
 
     const newUser = insertedResult.rows[0];
 
-    await createNotification(
-      `New local user signup pending approval: ${newUser.email}`,
-      "user_signup",
-      "admin"
-    );
-
-    sendApprovalEmail(newUser).catch((emailError) => {
+    try {
+      await createAccountApprovalNotifications(newUser);
+    } catch (notificationError) {
       console.error(
-        "Approval email failed, but signup continues:",
-        emailError.message
+        "Account approval notifications failed, but signup continues:",
+        {
+          userId: newUser.id,
+          message: notificationError.message,
+        }
       );
+    }
+
+    // Email is intentionally non-blocking. The account request is already saved.
+    Promise.allSettled([
+      sendApprovalEmail(newUser),
+      sendAccountRequestReceivedEmail(newUser),
+    ]).then((results) => {
+      const labels = [
+        "Administrator approval email",
+        "Requester confirmation email",
+      ];
+
+      results.forEach((result, index) => {
+        if (result.status === "rejected") {
+          console.error(
+            `${labels[index]} failed, but signup continues:`,
+            result.reason?.message || result.reason
+          );
+          return;
+        }
+
+        if (
+          result.value &&
+          !result.value.sent &&
+          !result.value.skipped
+        ) {
+          console.error(
+            `${labels[index]} was not delivered:`,
+            result.value.error || result.value
+          );
+        }
+      });
     });
 
     return response.status(201).json({
       message:
-        "Account created successfully. Please wait for administrator approval before signing in.",
+        "Account request submitted successfully. Administrators and authorised IT staff have been notified.",
       user: newUser,
     });
   } catch (error) {
+    if (error.code === "23505") {
+      return response.status(409).json({
+        error: "An account already exists for this email address.",
+      });
+    }
+
     console.error("Signup failed:", error);
     return response.status(500).json({
       error: "Signup failed",
@@ -646,8 +748,13 @@ router.get("/me", auth, async (request, response) => {
   }
 });
 
+// Backward-compatible administrative list. The primary administration API is /api/users.
 router.get("/users", auth, async (request, response) => {
-  if (!["admin", "superadmin"].includes(request.user.role)) {
+  if (![
+    "manager",
+    "admin",
+    "superadmin",
+  ].includes(request.user.role)) {
     return response.status(403).json({
       error: "Access denied",
     });
@@ -659,8 +766,12 @@ router.get("/users", auth, async (request, response) => {
       SELECT ${SAFE_USER_SELECT}
       FROM users
       ORDER BY
-        approved ASC,
-        archived_at NULLS FIRST,
+        CASE
+          WHEN role = 'pending' AND approved = FALSE THEN 1
+          WHEN archived_at IS NULL AND approved = TRUE AND status = 'active' THEN 2
+          WHEN archived_at IS NULL AND approved = TRUE AND status = 'inactive' THEN 3
+          ELSE 4
+        END,
         created_at DESC
       `
     );
@@ -675,14 +786,19 @@ router.get("/users", auth, async (request, response) => {
 });
 
 router.put("/approve/:id", auth, async (request, response) => {
-  if (!["admin", "superadmin"].includes(request.user.role)) {
+  if (![
+    "admin",
+    "superadmin",
+  ].includes(request.user.role)) {
     return response.status(403).json({
       error: "Access denied",
     });
   }
 
   const role = String(
-    request.body.role || request.query.role || "user"
+    request.body.role ||
+      request.query.role ||
+      "user"
   ).toLowerCase();
 
   if (!ALLOWED_ROLES.includes(role)) {
@@ -696,7 +812,8 @@ router.put("/approve/:id", auth, async (request, response) => {
     request.user.role !== "superadmin"
   ) {
     return response.status(403).json({
-      error: "Only a superadmin can assign protected roles.",
+      error:
+        "Only a superadmin can assign protected roles.",
     });
   }
 
@@ -708,11 +825,9 @@ router.put("/approve/:id", auth, async (request, response) => {
         role = $1,
         approved = TRUE,
         status = 'active',
-        archived_at = NULL,
-        archived_by = NULL,
-        archive_reason = NULL,
         updated_at = NOW()
       WHERE id = $2
+        AND archived_at IS NULL
       RETURNING ${SAFE_USER_SELECT}
       `,
       [role, request.params.id]
@@ -720,7 +835,8 @@ router.put("/approve/:id", auth, async (request, response) => {
 
     if (!result.rows[0]) {
       return response.status(404).json({
-        error: "User not found",
+        error:
+          "Pending user not found, or the account is archived.",
       });
     }
 
@@ -737,7 +853,10 @@ router.put("/approve/:id", auth, async (request, response) => {
 });
 
 router.delete("/reject/:id", auth, async (request, response) => {
-  if (!["admin", "superadmin"].includes(request.user.role)) {
+  if (![
+    "admin",
+    "superadmin",
+  ].includes(request.user.role)) {
     return response.status(403).json({
       error: "Access denied",
     });
@@ -749,6 +868,8 @@ router.delete("/reject/:id", auth, async (request, response) => {
       DELETE FROM users
       WHERE id = $1
         AND approved = FALSE
+        AND role = 'pending'
+        AND archived_at IS NULL
       RETURNING id, email
       `,
       [request.params.id]
@@ -794,6 +915,7 @@ router.get("/microsoft", async (_request, response) => {
     }
 
     const state = crypto.randomBytes(16).toString("hex");
+
     return response.redirect(
       buildMicrosoftAuthorizeUrl(state)
     );
@@ -814,11 +936,15 @@ router.get("/microsoft/callback", async (request, response) => {
 
   if (error) {
     const message = encodeURIComponent(
-      errorDescription || error || "Microsoft sign-in failed."
+      errorDescription ||
+        error ||
+        "Microsoft sign-in failed."
     );
 
     return response.redirect(
-      getPortalRedirectUrl(`/login?ssoError=${message}`)
+      getPortalRedirectUrl(
+        `/login?ssoError=${message}`
+      )
     );
   }
 
@@ -837,24 +963,43 @@ router.get("/microsoft/callback", async (request, response) => {
       await exchangeMicrosoftCodeForToken(code);
 
     const microsoftProfile =
-      await getMicrosoftProfile(tokenResponse.access_token);
+      await getMicrosoftProfile(
+        tokenResponse.access_token
+      );
 
     const {
       user,
       isNew,
       wasActivated,
-    } = await findOrCreateMicrosoftUser(microsoftProfile);
+    } = await findOrCreateMicrosoftUser(
+      microsoftProfile
+    );
 
     if (isNew || wasActivated) {
-      sendM365WelcomeEmail(user).catch((emailError) => {
-        console.error(
-          "Microsoft welcome email failed, but login continues:",
-          emailError.message
-        );
-      });
+      sendM365WelcomeEmail(user).catch(
+        (emailError) => {
+          console.error(
+            "Microsoft welcome email failed, but login continues:",
+            emailError.message
+          );
+        }
+      );
     }
 
     const currentUser = await getCurrentUser(user.id);
+    const accessError = buildAccountAccessError(currentUser);
+
+    if (accessError) {
+      const message = encodeURIComponent(
+        accessError.message
+      );
+      return response.redirect(
+        getPortalRedirectUrl(
+          `/login?ssoError=${message}`
+        )
+      );
+    }
+
     const token = signToken(currentUser);
 
     return response.redirect(
@@ -866,6 +1011,7 @@ router.get("/microsoft/callback", async (request, response) => {
     console.error("Microsoft callback failed:", {
       message: callbackError.message,
       status: callbackError.status || 500,
+      code: callbackError.code || null,
     });
 
     const message = encodeURIComponent(
@@ -875,7 +1021,9 @@ router.get("/microsoft/callback", async (request, response) => {
     );
 
     return response.redirect(
-      getPortalRedirectUrl(`/login?ssoError=${message}`)
+      getPortalRedirectUrl(
+        `/login?ssoError=${message}`
+      )
     );
   }
 });

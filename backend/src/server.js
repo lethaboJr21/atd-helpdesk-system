@@ -42,7 +42,8 @@ const {
 } = require("./services/productionSyncScheduler");
 
 const {
-  verifyEmailTransporter,
+  EMAIL_PROVIDER,
+  verifyEmailProvider,
 } = require("./services/email");
 
 const app = express();
@@ -75,7 +76,9 @@ const corsOptions = {
     }
 
     return callback(
-      new Error("The request origin is not allowed by CORS.")
+      new Error(
+        "The request origin is not allowed by CORS."
+      )
     );
   },
   credentials: true,
@@ -156,32 +159,19 @@ const apiLimiter = rateLimit({
   },
 });
 
-app.use(
-  "/api/auth/login",
-  loginLimiter
-);
-
-app.use(
-  "/api",
-  apiLimiter
-);
+app.use("/api/auth/login", loginLimiter);
+app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/logs", logRoutes);
-app.use(
-  "/api/notifications",
-  notificationRoutes
-);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/azure", azureRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/assets", assetRoutes);
-app.use(
-  "/api/production",
-  productionRoutes
-);
+app.use("/api/production", productionRoutes);
 app.use(
   "/api/production/sync",
   productionSyncRoutes
@@ -225,6 +215,7 @@ app.get("/api", (_request, response) => {
     environment:
       process.env.NODE_ENV ||
       "development",
+    emailProvider: EMAIL_PROVIDER,
     timestamp: new Date().toISOString(),
   });
 });
@@ -237,11 +228,12 @@ app.get(
     try {
       await pool.query("SELECT 1");
       databaseStatus = "healthy";
-    } catch (error) {
+    } catch (_error) {
       databaseStatus = "unhealthy";
     }
 
-    const healthy = databaseStatus === "healthy";
+    const healthy =
+      databaseStatus === "healthy";
 
     return response
       .status(healthy ? 200 : 503)
@@ -252,6 +244,7 @@ app.get(
           ? "healthy"
           : "degraded",
         database: databaseStatus,
+        emailProvider: EMAIL_PROVIDER,
         timestamp: new Date().toISOString(),
       });
   }
@@ -319,10 +312,14 @@ server.listen(
       }`
     );
 
+    console.log(
+      `Email provider: ${EMAIL_PROVIDER}`
+    );
+
     startBackgroundJobs();
 
     try {
-      await verifyEmailTransporter();
+      await verifyEmailProvider();
     } catch (error) {
       console.error(
         "Email verification startup failure:",

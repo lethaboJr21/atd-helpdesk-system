@@ -8,12 +8,12 @@ const VALID_MODULES = new Set([
 ]);
 
 function normalizeModule(moduleName) {
-  const normalizedModule = String(moduleName || "system")
+  const normalized = String(moduleName || "system")
     .trim()
     .toLowerCase();
 
-  return VALID_MODULES.has(normalizedModule)
-    ? normalizedModule
+  return VALID_MODULES.has(normalized)
+    ? normalized
     : "system";
 }
 
@@ -22,7 +22,9 @@ function normalizeRecipientIds(recipientUserIds) {
     new Set(
       (recipientUserIds || [])
         .map(Number)
-        .filter((userId) => Number.isInteger(userId) && userId > 0)
+        .filter(
+          (userId) => Number.isInteger(userId) && userId > 0
+        )
     )
   );
 }
@@ -34,14 +36,45 @@ async function getGroupMemberUserIds(groupId) {
 
   const result = await pool.query(
     `
-    SELECT user_id
-    FROM support_group_members
-    WHERE group_id = $1
+    SELECT DISTINCT u.id AS user_id
+    FROM support_group_members gm
+    JOIN users u ON u.id = gm.user_id
+    WHERE gm.group_id = $1
+      AND u.approved = TRUE
+      AND u.status = 'active'
+      AND u.archived_at IS NULL
+      AND u.role IN ('agent', 'operator', 'manager', 'admin', 'superadmin')
     `,
     [groupId]
   );
 
   return result.rows.map((row) => Number(row.user_id));
+}
+
+async function getAccountApprovalRecipientUserIds() {
+  const result = await pool.query(
+    `
+    SELECT DISTINCT u.id
+    FROM users u
+    LEFT JOIN support_group_members gm ON gm.user_id = u.id
+    LEFT JOIN support_groups g ON g.id = gm.group_id
+    WHERE u.approved = TRUE
+      AND u.status = 'active'
+      AND u.archived_at IS NULL
+      AND (
+        u.role IN ('admin', 'superadmin', 'manager')
+        OR (
+          u.role IN ('agent', 'operator')
+          AND (
+            LOWER(COALESCE(g.name, '')) LIKE '%infrastructure%'
+            OR LOWER(COALESCE(g.name, '')) LIKE '%it%'
+          )
+        )
+      )
+    `
+  );
+
+  return result.rows.map((row) => Number(row.id));
 }
 
 async function createNotifications({
@@ -55,112 +88,85 @@ async function createNotifications({
   targetUrl = null,
   attachmentCount = 0,
 }) {
-  const normalizedRecipients = normalizeRecipientIds(recipientUserIds);
+  const recipients = normalizeRecipientIds(recipientUserIds);
   const normalizedModule = normalizeModule(module);
+  const cleanMessage = String(message || "").trim();
 
-  if (!message || !String(message).trim()) {
+  if (!cleanMessage) {
     throw new Error("Notification message is required.");
   }
 
-  if (normalizedRecipients.length === 0 && !targetRole) {
+  if (recipients.length === 0 && !targetRole) {
     return [];
   }
 
-  const createdNotifications = [];
+  const created = [];
 
-  for (const userId of normalizedRecipients) {
+  for (const userId of recipients) {
     const result = await pool.query(
       `
       INSERT INTO notifications (
-        user_id,
-        target_role,
-        type,
-        module,
-        message,
-        target_type,
-        target_id,
-        target_url,
-        attachment_count,
-        is_read,
-        created_at
+        user_id, target_role, type, module, message,
+        target_type, target_id, target_url,
+        attachment_count, is_read, created_at
       )
-      VALUES (
-        $1,
-        NULL,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8,
-        FALSE,
-        NOW()
-      )
+      VALUES ($1, NULL, $2, $3, $4, $5, $6, $7, $8, FALSE, NOW())
       RETURNING *
       `,
       [
         userId,
         type,
         normalizedModule,
-        String(message).trim(),
+        cleanMessage,
         targetType,
         targetId,
         targetUrl,
         Number(attachmentCount) || 0,
       ]
     );
-
-    createdNotifications.push(result.rows[0]);
+    created.push(result.rows[0]);
   }
 
   if (targetRole) {
     const result = await pool.query(
       `
       INSERT INTO notifications (
-        user_id,
-        target_role,
-        type,
-        module,
-        message,
-        target_type,
-        target_id,
-        target_url,
-        attachment_count,
-        is_read,
-        created_at
+        user_id, target_role, type, module, message,
+        target_type, target_id, target_url,
+        attachment_count, is_read, created_at
       )
-      VALUES (
-        NULL,
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8,
-        FALSE,
-        NOW()
-      )
+      VALUES (NULL, $1, $2, $3, $4, $5, $6, $7, $8, FALSE, NOW())
       RETURNING *
       `,
       [
         targetRole,
         type,
         normalizedModule,
-        String(message).trim(),
+        cleanMessage,
         targetType,
         targetId,
         targetUrl,
         Number(attachmentCount) || 0,
       ]
     );
-
-    createdNotifications.push(result.rows[0]);
+    created.push(result.rows[0]);
   }
 
-  return createdNotifications;
+  return created;
+}
+
+async function createAccountApprovalNotifications(user) {
+  const recipientUserIds = await getAccountApprovalRecipientUserIds();
+
+  return createNotifications({
+    recipientUserIds,
+    type: "user_signup",
+    module: "admin",
+    message: `New account request awaiting approval: ${user.email}`,
+    targetType: "user",
+    targetId: user.id,
+    targetUrl: "/admin/users?view=pending",
+  });
 }
 
 async function createTicketAssignmentNotifications({
@@ -169,7 +175,6 @@ async function createTicketAssignmentNotifications({
   assignedToUserId,
 }) {
   const groupMemberIds = await getGroupMemberUserIds(assignedGroupId);
-
   const recipientUserIds = normalizeRecipientIds([
     ...groupMemberIds,
     assignedToUserId,
@@ -179,19 +184,13 @@ async function createTicketAssignmentNotifications({
     return [];
   }
 
-  const ticketReference =
-    ticket.ticket_ref ||
-    `TICKET-${ticket.id}`;
-
-  const message =
-    `${ticketReference}: ` +
-    `${ticket.title || "Ticket assigned"}`;
+  const ticketReference = ticket.ticket_ref || `TICKET-${ticket.id}`;
 
   return createNotifications({
     recipientUserIds,
     type: "assignment",
-    module: "admin",
-    message,
+    module: "helpdesk",
+    message: `${ticketReference}: ${ticket.title || "Ticket assigned"}`,
     targetType: "ticket",
     targetId: ticket.id,
     targetUrl: `/tickets/${ticket.id}`,
@@ -200,7 +199,10 @@ async function createTicketAssignmentNotifications({
 
 module.exports = {
   normalizeModule,
+  normalizeRecipientIds,
   createNotifications,
+  createAccountApprovalNotifications,
   createTicketAssignmentNotifications,
+  getAccountApprovalRecipientUserIds,
   getGroupMemberUserIds,
 };
