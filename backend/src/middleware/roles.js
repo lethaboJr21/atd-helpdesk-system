@@ -1,15 +1,12 @@
 module.exports = function allowRoles(...allowedRoles) {
-  return (req, res, next) => {
-    const userRole = req.user?.role;
+  const normalizedAllowedRoles = allowedRoles.map((role) => String(role).trim().toLowerCase());
 
-    if (!userRole) {
-      return res.status(403).json({ error: "No role assigned" });
+  return (request, response, next) => {
+    const userRole = String(request.user?.role || "").trim().toLowerCase();
+    if (!userRole) return response.status(403).json({ code: "ROLE_REQUIRED", error: "No role assigned" });
+    if (!normalizedAllowedRoles.includes(userRole)) {
+      return response.status(403).json({ code: "ROLE_ACCESS_DENIED", error: "Access denied" });
     }
-
-    if (!allowedRoles.includes(userRole)) {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
-    next();
+    return next();
   };
 };
