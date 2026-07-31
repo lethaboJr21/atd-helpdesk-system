@@ -2,10 +2,10 @@ import { Activity, Cloud, HeartPulse, Mail, ShieldCheck, Users, UsersRound } fro
 import { useNavigate } from "react-router-dom";
 
 const ITEMS = [
-  { icon: Users, title: "User Administration", description: "Manage pending signups, active, deactivated and archived accounts.", path: "/admin/users?view=active", available: true },
+  { icon: Users, title: "User Administration", description: "Manage pending signups, active, deactivated and archived accounts.", path: "/admin/users", available: true },
   { icon: ShieldCheck, title: "Employee Access Preview", description: "Review employee-visible tickets, assets and permissions without impersonation.", path: "/admin/employee-access", available: true },
   { icon: Cloud, title: "Microsoft Directory", description: "Synchronize Microsoft 365 identities while preserving portal roles and archive state.", path: "/admin/users?view=active", available: true },
-  { icon: UsersRound, title: "Roles & Support Groups", description: "Configure agent membership, group managers and escalation personnel.", path: null, available: false },
+  { icon: UsersRound, title: "Roles & Support Groups", description: "Configure agent membership, group managers and escalation personnel.", path: "/admin/groups?active", available: true },
   { icon: Mail, title: "Company Email", description: "Microsoft Graph company email is active. Delivery health and templates will be managed here.", path: null, available: false },
   { icon: Activity, title: "Audit Activity", description: "Review administrative and security-relevant actions.", path: null, available: false },
   { icon: HeartPulse, title: "System Health", description: "Monitor APIs, database connectivity, Graph email and scheduled jobs.", path: null, available: false },
