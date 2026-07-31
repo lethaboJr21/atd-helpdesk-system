@@ -33,6 +33,7 @@ api.interceptors.response.use(
 export const ticketsApi = {
   getAll: (params) => api.get("/tickets", { params }),
   getMine: () => api.get("/tickets/my-tickets"),
+  getEmployeeView: () =>api.get("/tickets/employee-view"),
   getById: (id) => api.get(`/tickets/${id}`),
   create: (data) => api.post("/tickets", data),
   update: (id, data) => api.put(`/tickets/${id}`, data),
@@ -42,24 +43,47 @@ export const ticketsApi = {
   assign: (id, assignedToUserId, assignedGroupId) => api.post(`/tickets/${id}/assign`, { assignedToUserId, assignedGroupId }),
 };
 
-export const groupsApi = { getAll: () => api.get("/groups") };
+export const groupsApi = {
+  getAll: () => api.get("/groups"),
+  getCatalogue: () => api.get("/groups/catalogue"),
+  getMembers: (groupId) => api.get(`/groups/${groupId}/members`),
+  getEligibleAgents: () => api.get("/groups/eligible-agents"),
+  create: (data) => api.post("/groups", data),
+  update: (groupId, data) => api.put(`/groups/${groupId}`, data),
+  addMember: (groupId, userId) => api.post(`/groups/${groupId}/members`, { userId }),
+  removeMember: (groupId, userId) => api.delete(`/groups/${groupId}/members/${userId}`),
+};
 
 export const assetsApi = {
-  getAll: (params) => api.get("/assets", { params }),
-  getById: (id) => api.get(`/assets/${id}`),
-  getStats: () => api.get("/assets/stats"),
-  getMine: () => api.get("/assets/by-user"),
-  getByUser: (params) => api.get("/assets/by-user", { params }),
+  getAll: (params) =>
+     api.get("/assets", { params }),
+
+  getById: (id) =>
+     api.get(`/assets/${id}`),
+
+  getStats: () =>
+     api.get("/assets/stats"),
+
+  getMine: () =>
+     api.get("/assets/mine"),
+
+  getByUser: (params) =>
+     api.get("/assets/by-user", { params }),
 };
 
 export const knowledgeApi = { getAll: (params) => api.get("/knowledge", { params }) };
 
 export const authApi = {
-  login: (credentials) => api.post("/auth/login", credentials),
-  signup: (data) => api.post("/auth/signup", data),
-  logout: () => api.post("/auth/logout", {}),
-  me: () => api.get("/auth/me"),
-  microsoftLoginUrl: () => `${API_BASE}/auth/microsoft`,
+  login: (credentials) =>
+     api.post("/auth/login", credentials),
+  signup: (data) =>
+     api.post("/auth/signup", data),
+  logout: () =>
+     api.post("/auth/logout", {}),
+  me: () =>
+     api.get("/auth/me"),
+  microsoftLoginUrl: () =>
+     `${API_BASE}/auth/microsoft`,
 };
 
 export const userApi = {

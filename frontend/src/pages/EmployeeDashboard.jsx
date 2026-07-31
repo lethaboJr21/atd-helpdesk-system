@@ -1,18 +1,19 @@
-﻿import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle,
   Bell,
   BookOpen,
+  BriefcaseBusiness,
+  ClipboardCheck,
+  FolderKanban,
   HardDrive,
   Headphones,
+  Laptop,
+  PackagePlus,
   RefreshCw,
   Ticket,
+  UserPlus,
   Wrench,
 } from "lucide-react";
 
@@ -25,132 +26,132 @@ import {
   ticketsApi,
 } from "../services/api";
 
-const CLOSED_TICKET_STATUSES = [
-  "closed",
-  "resolved",
-];
+const CLOSED_STATUSES = new Set(["closed", "resolved"]);
+const ACTION_STATUSES = new Set(["waiting approval", "pending"]);
 
-const EMPLOYEE_ACTION_STATUSES = [
-  "waiting approval",
-  "pending",
-];
-
-function classNames(...items) {
-  return items.filter(Boolean).join(" ");
+function classNames(...values) {
+  return values.filter(Boolean).join(" ");
 }
 
-function normalizeStatus(status) {
-  return String(status || "").trim().toLowerCase();
+function normalizeStatus(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function extractArray(response) {
-  if (Array.isArray(response?.data)) {
-    return response.data;
-  }
-
-  return [];
+  return Array.isArray(response?.data) ? response.data : [];
 }
 
 function extractAssets(response) {
-  if (Array.isArray(response?.data?.assets)) {
-    return response.data.assets;
-  }
-
-  if (Array.isArray(response?.data)) {
-    return response.data;
-  }
-
-  return [];
+  return Array.isArray(response?.data?.assets) ? response.data.assets : [];
 }
 
-function getRejectedRequestCount(results) {
-  return results.filter((result) => result.status === "rejected").length;
+function getErrorMessage(error, fallback) {
+  return error?.response?.data?.error || error?.message || fallback;
 }
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const {
+    user,
+    logout,
+    employeeView,
+    exitEmployeeView,
+  } = useAuth();
 
   const [tickets, setTickets] = useState([]);
   const [assets, setAssets] = useState([]);
-  const [knowledgeArticles, setKnowledgeArticles] = useState([]);
+  const [knowledge, setKnowledge] = useState([]);
   const [notifications, setNotifications] = useState([]);
-
+  const [sectionErrors, setSectionErrors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
-  const loadDashboardData = useCallback(async () => {
+  const operationsPreview = user?.role !== "user" && employeeView;
+
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
-    setError("");
+    setSectionErrors([]);
 
-    const results = await Promise.allSettled([
-      ticketsApi.getMine(),
-      assetsApi.getMine(),
-      knowledgeApi.getAll(),
-      notificationApi.getAll({ module: "helpdesk" }),
-    ]);
+    const requests = [
+      {
+        key: "tickets",
+        label: "Tickets",
+        execute: () => ticketsApi.getEmployeeView(),
+        apply: (response) => setTickets(extractArray(response)),
+      },
+      {
+        key: "assets",
+        label: "Assets",
+        execute: () => assetsApi.getMine(),
+        apply: (response) => setAssets(extractAssets(response)),
+      },
+      {
+        key: "knowledge",
+        label: "Knowledge",
+        execute: () => knowledgeApi.getAll(),
+        apply: (response) => setKnowledge(extractArray(response)),
+      },
+      {
+        key: "notifications",
+        label: "Notifications",
+        execute: () => notificationApi.getAll({ module: "helpdesk" }),
+        apply: (response) => setNotifications(extractArray(response)),
+      },
+    ];
 
-    const [
-      ticketResult,
-      assetResult,
-      knowledgeResult,
-      notificationResult,
-    ] = results;
+    const results = await Promise.allSettled(
+      requests.map((request) => request.execute())
+    );
 
-    if (ticketResult.status === "fulfilled") {
-      setTickets(extractArray(ticketResult.value));
-    }
+    const errors = [];
 
-    if (assetResult.status === "fulfilled") {
-      setAssets(extractAssets(assetResult.value));
-    }
+    results.forEach((result, index) => {
+      const request = requests[index];
 
-    if (knowledgeResult.status === "fulfilled") {
-      setKnowledgeArticles(extractArray(knowledgeResult.value));
-    }
+      if (result.status === "fulfilled") {
+        request.apply(result.value);
+        return;
+      }
 
-    if (notificationResult.status === "fulfilled") {
-      setNotifications(extractArray(notificationResult.value));
-    }
+      errors.push({
+        key: request.key,
+        label: request.label,
+        message: getErrorMessage(
+          result.reason,
+          `${request.label} could not be loaded.`
+        ),
+      });
+    });
 
-    const rejectedRequestCount = getRejectedRequestCount(results);
-
-    if (rejectedRequestCount > 0) {
-      setError(
-        `${rejectedRequestCount} dashboard section${
-          rejectedRequestCount === 1 ? "" : "s"
-        } could not be loaded. You can refresh to try again.`
-      );
-    }
-
+    setSectionErrors(errors);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
+    loadDashboard();
+  }, [loadDashboard]);
 
-  const openTickets = useMemo(() => {
-    return tickets.filter((ticketItem) => {
-      return !CLOSED_TICKET_STATUSES.includes(
-        normalizeStatus(ticketItem.status)
-      );
-    });
-  }, [tickets]);
+  const openTickets = useMemo(
+    () => tickets.filter((item) => !CLOSED_STATUSES.has(normalizeStatus(item.status))),
+    [tickets]
+  );
 
-  const ticketsWaitingForEmployee = useMemo(() => {
-    return tickets.filter((ticketItem) => {
-      return EMPLOYEE_ACTION_STATUSES.includes(
-        normalizeStatus(ticketItem.status)
-      );
-    });
-  }, [tickets]);
+  const waitingForMe = useMemo(
+    () => tickets.filter((item) => ACTION_STATUSES.has(normalizeStatus(item.status))),
+    [tickets]
+  );
 
-  const handleCreateTicket = (ticketType, asset = null) => {
-    navigate("/tickets", {
+  const createRequest = (type, catalogueItem, asset = null) => {
+    const parameters = new URLSearchParams({ type });
+
+    if (catalogueItem) {
+      parameters.set("catalogue", catalogueItem);
+    }
+
+    navigate(`/tickets/new?${parameters.toString()}`, {
       state: {
-        createMode: ticketType,
+        createMode: type,
+        catalogueItem,
         asset,
       },
     });
@@ -161,8 +162,9 @@ export default function EmployeeDashboard() {
     navigate("/login", { replace: true });
   };
 
-  const handleSidebarToggle = () => {
-    setSidebarCollapsed((currentValue) => !currentValue);
+  const returnToOperations = () => {
+    exitEmployeeView();
+    navigate("/", { replace: true });
   };
 
   return (
@@ -170,7 +172,7 @@ export default function EmployeeDashboard() {
       <Sidebar
         navigate={navigate}
         collapsed={sidebarCollapsed}
-        onToggle={handleSidebarToggle}
+        onToggle={() => setSidebarCollapsed((value) => !value)}
       />
 
       <main
@@ -185,22 +187,30 @@ export default function EmployeeDashboard() {
               <p className="text-sm font-semibold text-blue-700">
                 Employee Self-Service
               </p>
-
               <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
                 Welcome, {user?.name || user?.email}
               </h1>
-
               <p className="mt-1 text-sm text-slate-500">
-                How can IT help today?
+                Report issues, request services and track support from one place.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
+              {operationsPreview && (
+                <button
+                  type="button"
+                  onClick={returnToOperations}
+                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-700"
+                >
+                  Return to Operations View
+                </button>
+              )}
+
               <button
                 type="button"
-                onClick={loadDashboardData}
+                onClick={loadDashboard}
                 disabled={loading}
-                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm disabled:opacity-60"
               >
                 <RefreshCw
                   className={classNames(
@@ -214,7 +224,7 @@ export default function EmployeeDashboard() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm"
               >
                 Logout
               </button>
@@ -223,158 +233,151 @@ export default function EmployeeDashboard() {
         </header>
 
         <section className="space-y-6 p-5 xl:p-8">
-          {error && (
-            <div
-              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800"
-              role="alert"
-            >
-              {error}
+          {sectionErrors.length > 0 && (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="font-bold text-amber-900">
+                Some dashboard information could not be loaded.
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-amber-800">
+                {sectionErrors.map((item) => (
+                  <li key={item.key}>
+                    <strong>{item.label}:</strong> {item.message}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <ActionCard
               icon={AlertCircle}
               title="Report an Incident"
-              description="Something is broken, unavailable or not working correctly."
-              onClick={() => handleCreateTicket("incident")}
+              description="Something is broken, unavailable or behaving unexpectedly."
+              onClick={() => createRequest("incident")}
               primary
             />
-
             <ActionCard
               icon={Wrench}
               title="Request a Service"
-              description="Request access, equipment, software or another standard IT service."
-              onClick={() => handleCreateTicket("service_request")}
+              description="Request access, software or another standard IT service."
+              onClick={() => createRequest("service_request")}
+            />
+            <ActionCard
+              icon={PackagePlus}
+              title="Request an Asset"
+              description="Request equipment, accessories, replacement or a temporary loan."
+              onClick={() => createRequest("service_request", "asset_request")}
+            />
+            <ActionCard
+              icon={Laptop}
+              title="Laptop Checkup"
+              description="Ask IT to investigate performance, battery, heat or stability issues."
+              onClick={() => createRequest("service_request", "laptop_checkup")}
+            />
+            <ActionCard
+              icon={ClipboardCheck}
+              title="Register Current Device"
+              description="Submit a device for IT review and possible AMS registration."
+              onClick={() => createRequest("service_request", "device_registration")}
+            />
+            <ActionCard
+              icon={BriefcaseBusiness}
+              title="Request a Change"
+              description="Request a planned change requiring assessment and scheduling."
+              onClick={() => createRequest("change")}
+            />
+            <ActionCard
+              icon={UserPlus}
+              title="Create for Someone Else"
+              description="Available only where your operational permissions allow it."
+              onClick={() => createRequest("service_request", "create_for_other")}
+              disabled={user?.role === "user"}
+            />
+            <ActionCard
+              icon={FolderKanban}
+              title="Create Project"
+              description="Project creation and lifecycle tracking is coming soon."
+              disabled
+              badge="Coming Soon"
             />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <SummaryCard
-              icon={Ticket}
-              label="My Open Tickets"
-              value={openTickets.length}
-            />
-
-            <SummaryCard
-              icon={Headphones}
-              label="All My Tickets"
-              value={tickets.length}
-            />
-
-            <SummaryCard
-              icon={Bell}
-              label="Waiting for Me"
-              value={ticketsWaitingForEmployee.length}
-            />
-
-            <SummaryCard
-              icon={HardDrive}
-              label="My Assets"
-              value={assets.length}
-            />
+            <SummaryCard icon={Ticket} label="My Open Tickets" value={openTickets.length} onClick={() => navigate("/tickets?view=mine")} />
+            <SummaryCard icon={Headphones} label="All My Tickets" value={tickets.length} onClick={() => navigate("/tickets?view=mine")} />
+            <SummaryCard icon={Bell} label="Waiting for Me" value={waitingForMe.length} onClick={() => navigate("/tickets?view=mine&status=Waiting%20Approval")} />
+            <SummaryCard icon={HardDrive} label="My Assets" value={assets.length} onClick={() => navigate("/assets")} />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-3">
-            <DashboardPanel
-              title="Recent Tickets"
-              className="xl:col-span-2"
-            >
+            <DashboardPanel title="Recent Tickets" className="xl:col-span-2">
               {tickets.length > 0 ? (
-                tickets.slice(0, 8).map((ticketItem) => (
+                tickets.slice(0, 8).map((item) => (
                   <button
-                    key={ticketItem.id}
+                    key={item.id}
                     type="button"
-                    onClick={() => navigate(`/tickets/${ticketItem.id}`)}
+                    onClick={() => navigate(`/tickets/${item.id}`)}
                     className="flex w-full items-center justify-between gap-4 border-b border-slate-100 p-3 text-left last:border-0 hover:bg-slate-50"
                   >
                     <div className="min-w-0">
                       <p className="font-bold text-blue-700">
-                        {ticketItem.ticket_ref || `TICKET-${ticketItem.id}`}
+                        {item.ticket_ref || `TICKET-${item.id}`}
                       </p>
-
                       <p className="truncate font-semibold text-slate-950">
-                        {ticketItem.title}
+                        {item.title}
                       </p>
                     </div>
-
                     <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
-                      {ticketItem.status || "Open"}
+                      {item.status || "Open"}
                     </span>
                   </button>
                 ))
               ) : (
-                <EmptyState message="No tickets yet." />
+                <EmptyState message="No tickets have been created for this account." />
               )}
             </DashboardPanel>
 
-            <DashboardPanel title="My Assets">
+            <DashboardPanel title="Your Assets" icon={HardDrive}>
               {assets.length > 0 ? (
-                assets.slice(0, 5).map((assetItem) => (
+                assets.slice(0, 5).map((asset) => (
                   <button
-                    key={assetItem.id}
+                    key={asset.id}
                     type="button"
                     onClick={() => navigate("/assets")}
                     className="block w-full border-b border-slate-100 p-3 text-left last:border-0 hover:bg-slate-50"
                   >
                     <p className="font-bold text-blue-700">
-                      {assetItem.asset_tag || `ASSET-${assetItem.id}`}
+                      {asset.asset_tag || `ASSET-${asset.id}`}
                     </p>
-
                     <p className="font-semibold text-slate-950">
-                      {assetItem.name || "Unnamed asset"}
+                      {asset.name || "Assigned asset"}
                     </p>
-
                     <p className="text-xs text-slate-500">
-                      {assetItem.serial_number || "No serial number"}
+                      {asset.serial_number || "No serial number"}
                     </p>
                   </button>
                 ))
               ) : (
-                <EmptyState message="No assigned assets found." />
+                <EmptyState message="No assigned assets were found." />
               )}
             </DashboardPanel>
           </div>
 
           <div className="grid gap-6 xl:grid-cols-2">
-            <DashboardPanel
-              title="Knowledge Suggestions"
-              icon={BookOpen}
-            >
-              {knowledgeArticles.length > 0 ? (
-                knowledgeArticles.slice(0, 6).map((article) => (
-                  <div
-                    key={article.id || article.title}
-                    className="border-b border-slate-100 p-3 last:border-0"
-                  >
-                    <p className="font-semibold text-slate-950">
-                      {article.title}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <EmptyState message="No knowledge suggestions available." />
-              )}
+            <DashboardPanel title="Knowledge Suggestions" icon={BookOpen}>
+              {knowledge.length > 0 ? knowledge.slice(0, 6).map((article) => (
+                <div key={article.id || article.title} className="border-b border-slate-100 p-3 last:border-0">
+                  <p className="font-semibold text-slate-950">{article.title}</p>
+                </div>
+              )) : <EmptyState message="No knowledge suggestions are available." />}
             </DashboardPanel>
 
-            <DashboardPanel
-              title="My Notifications"
-              icon={Bell}
-            >
-              {notifications.length > 0 ? (
-                notifications.slice(0, 6).map((notification) => (
-                  <div
-                    key={notification.id}
-                    className="border-b border-slate-100 p-3 last:border-0"
-                  >
-                    <p className="font-semibold text-slate-950">
-                      {notification.message}
-                    </p>
-                  </div>
-                ))
-              ) : (
-                <EmptyState message="No notifications." />
-              )}
+            <DashboardPanel title="My Notifications" icon={Bell}>
+              {notifications.length > 0 ? notifications.slice(0, 6).map((notification) => (
+                <div key={notification.id} className="border-b border-slate-100 p-3 last:border-0">
+                  <p className="font-semibold text-slate-950">{notification.message}</p>
+                </div>
+              )) : <EmptyState message="No notifications." />}
             </DashboardPanel>
           </div>
         </section>
@@ -383,94 +386,43 @@ export default function EmployeeDashboard() {
   );
 }
 
-function ActionCard({
-  icon: Icon,
-  title,
-  description,
-  onClick,
-  primary = false,
-}) {
+function ActionCard({ icon: Icon, title, description, onClick, primary, disabled, badge }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={classNames(
-        "rounded-2xl border p-6 text-left shadow-sm transition",
+        "relative rounded-2xl border p-5 text-left shadow-sm transition",
         primary
           ? "border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
-          : "border-slate-200 bg-white text-slate-900 hover:border-blue-300 hover:bg-blue-50"
+          : "border-slate-200 bg-white text-slate-900 hover:border-blue-300 hover:bg-blue-50",
+        disabled && "cursor-not-allowed opacity-60"
       )}
     >
+      {badge && <span className="absolute right-4 top-4 rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">{badge}</span>}
       <Icon className="h-7 w-7" />
-
-      <h2 className="mt-4 text-xl font-bold">
-        {title}
-      </h2>
-
-      <p
-        className={classNames(
-          "mt-2 text-sm",
-          primary ? "text-blue-100" : "text-slate-500"
-        )}
-      >
-        {description}
-      </p>
+      <h2 className="mt-4 text-lg font-bold">{title}</h2>
+      <p className={classNames("mt-2 text-sm", primary ? "text-blue-100" : "text-slate-500")}>{description}</p>
     </button>
   );
 }
 
-function SummaryCard({ icon: Icon, label, value }) {
+function SummaryCard({ icon: Icon, label, value, onClick }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <button type="button" onClick={onClick} className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm hover:border-blue-300">
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm text-slate-500">
-            {label}
-          </p>
-
-          <p className="mt-2 text-3xl font-bold text-slate-950">
-            {value}
-          </p>
-        </div>
-
-        <div className="rounded-2xl bg-blue-100 p-3 text-blue-700">
-          <Icon className="h-6 w-6" />
-        </div>
+        <div><p className="text-sm text-slate-500">{label}</p><p className="mt-2 text-3xl font-bold text-slate-950">{value}</p></div>
+        <div className="rounded-2xl bg-blue-100 p-3 text-blue-700"><Icon className="h-6 w-6" /></div>
       </div>
-    </div>
+    </button>
   );
 }
 
-function DashboardPanel({
-  title,
-  children,
-  icon: Icon,
-  className,
-}) {
-  return (
-    <div
-      className={classNames(
-        "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm",
-        className
-      )}
-    >
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-slate-950">
-        {Icon && (
-          <Icon className="h-5 w-5 text-blue-700" />
-        )}
-        {title}
-      </h2>
-
-      {children}
-    </div>
-  );
+function DashboardPanel({ title, children, icon: Icon, className }) {
+  return <div className={classNames("rounded-2xl border border-slate-200 bg-white p-5 shadow-sm", className)}><h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-slate-950">{Icon && <Icon className="h-5 w-5 text-blue-700" />}{title}</h2>{children}</div>;
 }
 
 function EmptyState({ message }) {
-  return (
-    <p className="p-4 text-sm text-slate-500">
-      {message}
-    </p>
-  );
+  return <p className="p-4 text-sm text-slate-500">{message}</p>;
 }
-

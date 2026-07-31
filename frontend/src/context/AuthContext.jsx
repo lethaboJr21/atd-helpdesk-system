@@ -10,7 +10,14 @@ import { authApi } from "../services/api";
 
 export const AuthContext = createContext(undefined);
 
-function normalizeBoolean(value, fallbackValue = false) {
+const TOKEN_STORAGE_KEY = "token";
+const EMPLOYEE_VIEW_STORAGE_KEY =
+  "atd-helpdesk-employee-view";
+
+function normalizeBoolean(
+  value,
+  fallbackValue = false
+) {
   if (value === undefined || value === null) {
     return fallbackValue;
   }
@@ -23,11 +30,13 @@ function normalizeBoolean(value, fallbackValue = false) {
     return value === 1;
   }
 
-  const normalizedValue = String(value)
-    .trim()
-    .toLowerCase();
+  return ["true", "1", "yes"].includes(
+    String(value).trim().toLowerCase()
+  );
+}
 
-  return ["true", "1", "yes"].includes(normalizedValue);
+function normalizeNullableDate(value) {
+  return value || null;
 }
 
 function normalizeAuthenticatedUser(userData) {
@@ -46,22 +55,32 @@ function normalizeAuthenticatedUser(userData) {
     .trim()
     .toLowerCase();
 
-  // Backward compatibility for older /auth/me responses that omitted status.
-  // The refined backend now returns status explicitly.
-  const status = rawStatus || (approved ? "active" : "inactive");
-
   return {
     ...userData,
+    id: Number(userData.id || userData.user_id),
     role: String(userData.role || "user")
       .trim()
       .toLowerCase(),
+    status:
+      rawStatus ||
+      (approved ? "active" : "inactive"),
+    account_type: String(
+      userData.account_type || "person"
+    )
+      .trim()
+      .toLowerCase(),
     approved,
-    status,
-    microsoft_account_enabled: normalizeBoolean(
-      userData.microsoft_account_enabled,
-      true
+    microsoft_account_enabled:
+      normalizeBoolean(
+        userData.microsoft_account_enabled,
+        true
+      ),
+    archived_at: normalizeNullableDate(
+      userData.archived_at
     ),
-    archived_at: userData.archived_at || null,
+    deactivated_at: normalizeNullableDate(
+      userData.deactivated_at
+    ),
   };
 }
 
@@ -71,29 +90,58 @@ function extractUser(response) {
   );
 }
 
+function readEmployeeViewPreference() {
+  return (
+    sessionStorage.getItem(
+      EMPLOYEE_VIEW_STORAGE_KEY
+    ) === "true"
+  );
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [employeeView, setEmployeeView] = useState(
+    readEmployeeViewPreference
+  );
+
+  const clearLocalSession = useCallback(() => {
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(
+      EMPLOYEE_VIEW_STORAGE_KEY
+    );
+    setUser(null);
+    setEmployeeView(false);
+  }, []);
 
   const refreshUser = useCallback(async () => {
     const response = await authApi.me();
     const currentUser = extractUser(response);
 
     setUser(currentUser);
+
+    if (currentUser?.role === "user") {
+      setEmployeeView(false);
+      sessionStorage.removeItem(
+        EMPLOYEE_VIEW_STORAGE_KEY
+      );
+    }
+
     return currentUser;
   }, []);
 
   useEffect(() => {
     let cancelled = false;
 
-    const restoreSession = async () => {
-      const token = localStorage.getItem("token");
+    async function restoreSession() {
+      const token = localStorage.getItem(
+        TOKEN_STORAGE_KEY
+      );
 
       if (!token) {
         if (!cancelled) {
           setLoading(false);
         }
-
         return;
       }
 
@@ -103,19 +151,29 @@ export function AuthProvider({ children }) {
 
         if (!cancelled) {
           setUser(currentUser);
+
+          if (currentUser?.role === "user") {
+            setEmployeeView(false);
+            sessionStorage.removeItem(
+              EMPLOYEE_VIEW_STORAGE_KEY
+            );
+          }
         }
       } catch (_error) {
-        localStorage.removeItem("token");
+        localStorage.removeItem(
+          TOKEN_STORAGE_KEY
+        );
 
         if (!cancelled) {
           setUser(null);
+          setEmployeeView(false);
         }
       } finally {
         if (!cancelled) {
           setLoading(false);
         }
       }
-    };
+    }
 
     restoreSession();
 
@@ -124,36 +182,55 @@ export function AuthProvider({ children }) {
     };
   }, []);
 
-  const login = useCallback(async (email, password) => {
-    const response = await authApi.login({
-      email,
-      password,
-    });
+  const login = useCallback(
+    async (email, password) => {
+      const response = await authApi.login({
+        email,
+        password,
+      });
 
-    localStorage.setItem(
-      "token",
-      response.data.token
-    );
+      localStorage.setItem(
+        TOKEN_STORAGE_KEY,
+        response.data.token
+      );
 
-    const currentUser = normalizeAuthenticatedUser(
-      response.data.user
-    );
+      const currentUser =
+        normalizeAuthenticatedUser(
+          response.data.user
+        );
 
-    setUser(currentUser);
-    return currentUser;
-  }, []);
+      setUser(currentUser);
+      setEmployeeView(false);
+      sessionStorage.removeItem(
+        EMPLOYEE_VIEW_STORAGE_KEY
+      );
 
-  const completeSso = useCallback(async (token) => {
-    localStorage.setItem("token", token);
+      return currentUser;
+    },
+    []
+  );
 
-    try {
-      return await refreshUser();
-    } catch (error) {
-      localStorage.removeItem("token");
-      setUser(null);
-      throw error;
-    }
-  }, [refreshUser]);
+  const completeSso = useCallback(
+    async (token) => {
+      localStorage.setItem(
+        TOKEN_STORAGE_KEY,
+        token
+      );
+
+      try {
+        const currentUser = await refreshUser();
+        setEmployeeView(false);
+        sessionStorage.removeItem(
+          EMPLOYEE_VIEW_STORAGE_KEY
+        );
+        return currentUser;
+      } catch (error) {
+        clearLocalSession();
+        throw error;
+      }
+    },
+    [clearLocalSession, refreshUser]
+  );
 
   const loginWithMicrosoft = useCallback(() => {
     window.location.assign(
@@ -161,55 +238,83 @@ export function AuthProvider({ children }) {
     );
   }, []);
 
-  const signup = useCallback(async (
-    name,
-    email,
-    password
-  ) => {
-    const response = await authApi.signup({
-      name,
-      email,
-      password,
-    });
+  const signup = useCallback(
+    async (name, email, password) => {
+      const response = await authApi.signup({
+        name,
+        email,
+        password,
+      });
 
-    localStorage.removeItem("token");
-    setUser(null);
-
-    return response.data;
-  }, []);
+      clearLocalSession();
+      return response.data;
+    },
+    [clearLocalSession]
+  );
 
   const logout = useCallback(async () => {
     try {
       await authApi.logout();
     } catch (_error) {
-      // Always clear the local session, even if the API is unavailable.
+      // Local session removal is authoritative for this browser.
     } finally {
-      localStorage.removeItem("token");
-      setUser(null);
+      clearLocalSession();
     }
+  }, [clearLocalSession]);
+
+  const enterEmployeeView = useCallback(() => {
+    if (user?.role === "user") {
+      return;
+    }
+
+    sessionStorage.setItem(
+      EMPLOYEE_VIEW_STORAGE_KEY,
+      "true"
+    );
+    setEmployeeView(true);
+  }, [user?.role]);
+
+  const exitEmployeeView = useCallback(() => {
+    sessionStorage.removeItem(
+      EMPLOYEE_VIEW_STORAGE_KEY
+    );
+    setEmployeeView(false);
   }, []);
+
+  const effectiveExperience =
+    user?.role === "user" || employeeView
+      ? "employee"
+      : "operations";
 
   const contextValue = useMemo(
     () => ({
       user,
       loading,
       isAuthenticated: Boolean(user),
+      employeeView,
+      effectiveExperience,
       login,
       signup,
       logout,
       completeSso,
       loginWithMicrosoft,
       refreshUser,
+      enterEmployeeView,
+      exitEmployeeView,
     }),
     [
       user,
       loading,
+      employeeView,
+      effectiveExperience,
       login,
       signup,
       logout,
       completeSso,
       loginWithMicrosoft,
       refreshUser,
+      enterEmployeeView,
+      exitEmployeeView,
     ]
   );
 

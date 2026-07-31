@@ -1,8 +1,14 @@
-import React, { useEffect } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { useEffect } from "react";
+import {
+  BrowserRouter,
+  Navigate,
+  Route,
+  Routes,
+} from "react-router-dom";
 
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./hooks/useAuth";
+
 import AdminSettings from "./pages/AdminSettings";
 import AdminUsers from "./pages/AdminUsers";
 import AssetsPage from "./pages/AssetsPage";
@@ -17,78 +23,347 @@ import TicketCreatePage from "./pages/TicketCreatePage";
 import TicketDetailPage from "./pages/TicketDetailPage";
 import TicketWorkspace from "./pages/TicketWorkspace";
 import WaitingApproval from "./pages/WaitingApproval";
+import GroupManagementPage from "./pages/GroupManagementPage";
 
-const MODULE_BASES = { helpdesk: "/helpdesk", production: "/production" };
-const OPERATIONS_ROLES = ["agent", "operator", "manager", "admin", "superadmin"];
-const ADMIN_ROLES = ["manager", "admin", "superadmin"];
+const MODULE_BASES = {
+  helpdesk: "/helpdesk",
+  production: "/production",
+};
+
+const OPERATIONS_ROLES = [
+  "agent",
+  "operator",
+  "manager",
+  "admin",
+  "superadmin",
+];
+
+const ADMIN_ROLES = [
+  "manager",
+  "admin",
+  "superadmin",
+];
 
 function getModuleBase() {
-  return window.location.pathname.toLowerCase().startsWith(MODULE_BASES.production)
+  const pathname = window.location.pathname.toLowerCase();
+
+  return pathname.startsWith(MODULE_BASES.production)
     ? MODULE_BASES.production
     : MODULE_BASES.helpdesk;
 }
 
+function hasPortalAccess(user) {
+  return (
+    Boolean(user?.approved) &&
+    user?.status === "active" &&
+    !user?.archived_at &&
+    !user?.deactivated_at &&
+    user?.microsoft_account_enabled !== false &&
+    user?.account_type !== "non-person"
+  );
+}
+
 function LoadingScreen({ message = "Loading..." }) {
-  return <div className="flex min-h-screen items-center justify-center bg-[#172b57] px-4"><div className="rounded-2xl border border-white/20 bg-white px-6 py-4 text-sm font-semibold text-slate-600 shadow-xl" role="status">{message}</div></div>;
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#172b57] px-4">
+      <div
+        className="rounded-2xl border border-white/20 bg-white px-6 py-4 text-sm font-semibold text-slate-600 shadow-xl"
+        role="status"
+      >
+        {message}
+      </div>
+    </div>
+  );
 }
 
 function ExternalRedirect({ to }) {
-  useEffect(() => { window.location.assign(to); }, [to]);
+  useEffect(() => {
+    window.location.assign(to);
+  }, [to]);
+
   return <LoadingScreen message="Redirecting..." />;
 }
 
 function PrivateRoute({ children }) {
-  const { isAuthenticated, loading, user } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
-  const access = Boolean(user?.approved) && user?.status === "active" && !user?.archived_at && user?.microsoft_account_enabled !== false;
-  return access ? children : <Navigate to="/waiting-approval" replace />;
+  const {
+    isAuthenticated,
+    loading,
+    user,
+  } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return hasPortalAccess(user)
+    ? children
+    : <Navigate to="/waiting-approval" replace />;
 }
 
 function PublicRoute({ children }) {
-  const { isAuthenticated, loading, user } = useAuth();
-  if (loading) return <LoadingScreen />;
-  if (!isAuthenticated) return children;
-  const access = Boolean(user?.approved) && user?.status === "active" && !user?.archived_at && user?.microsoft_account_enabled !== false;
-  return <Navigate to={access ? "/" : "/waiting-approval"} replace />;
+  const {
+    isAuthenticated,
+    loading,
+    user,
+  } = useAuth();
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
+  if (!isAuthenticated) {
+    return children;
+  }
+
+  return (
+    <Navigate
+      to={hasPortalAccess(user) ? "/" : "/waiting-approval"}
+      replace
+    />
+  );
 }
 
 function RoleRoute({ allowedRoles, children }) {
   const { user } = useAuth();
-  return allowedRoles.includes(user?.role) ? children : <Navigate to="/" replace />;
+
+  return allowedRoles.includes(user?.role)
+    ? children
+    : <Navigate to="/" replace />;
+}
+
+function OperationsRoute({ children }) {
+  return (
+    <RoleRoute allowedRoles={OPERATIONS_ROLES}>
+      {children}
+    </RoleRoute>
+  );
+}
+
+function AdminRoute({ children }) {
+  return (
+    <RoleRoute allowedRoles={ADMIN_ROLES}>
+      {children}
+    </RoleRoute>
+  );
 }
 
 function HomeRoute({ production }) {
-  const { user } = useAuth();
-  if (production) return <RoleRoute allowedRoles={OPERATIONS_ROLES}><ProductionDashboard /></RoleRoute>;
-  return user?.role === "user" ? <EmployeeDashboard /> : <Dashboard />;
+  const {
+    user,
+    employeeView,
+  } = useAuth();
+
+  if (production) {
+    return (
+      <OperationsRoute>
+        <ProductionDashboard />
+      </OperationsRoute>
+    );
+  }
+
+  if (user?.role === "user" || employeeView) {
+    return <EmployeeDashboard />;
+  }
+
+  return <Dashboard />;
+}
+
+function EmployeeRoute({ children }) {
+  const {
+    user,
+    enterEmployeeView,
+  } = useAuth();
+
+  useEffect(() => {
+    if (user?.role !== "user") {
+      enterEmployeeView();
+    }
+  }, [enterEmployeeView, user?.role]);
+
+  return children;
 }
 
 function AppRoutes({ moduleBase }) {
   const production = moduleBase === MODULE_BASES.production;
+
   return (
     <Routes>
-      <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
-      <Route path="/signup" element={<PublicRoute><SignupPage /></PublicRoute>} />
-      <Route path="/waiting-approval" element={<WaitingApproval />} />
-      <Route path="/" element={<PrivateRoute><HomeRoute production={production} /></PrivateRoute>} />
-      <Route path="/dashboard" element={<PrivateRoute><HomeRoute production={production} /></PrivateRoute>} />
-      <Route path="/employee" element={<PrivateRoute><EmployeeDashboard /></PrivateRoute>} />
-      <Route path="/production" element={<ExternalRedirect to={MODULE_BASES.production} />} />
-      <Route path="/tickets" element={<PrivateRoute><TicketWorkspace /></PrivateRoute>} />
-      <Route path="/tickets/new" element={<PrivateRoute><TicketCreatePage /></PrivateRoute>} />
-      <Route path="/tickets/:id" element={<PrivateRoute><TicketDetailPage /></PrivateRoute>} />
-      <Route path="/assets" element={<PrivateRoute><AssetsPage /></PrivateRoute>} />
-      <Route path="/operations-hub" element={<PrivateRoute><RoleRoute allowedRoles={OPERATIONS_ROLES}><OperationsHubEmbed /></RoleRoute></PrivateRoute>} />
-      <Route path="/admin" element={<PrivateRoute><RoleRoute allowedRoles={ADMIN_ROLES}><AdminSettings /></RoleRoute></PrivateRoute>} />
-      <Route path="/admin/users" element={<PrivateRoute><RoleRoute allowedRoles={ADMIN_ROLES}><AdminUsers /></RoleRoute></PrivateRoute>} />
-      <Route path="/admin/employee-access" element={<PrivateRoute><RoleRoute allowedRoles={ADMIN_ROLES}><EmployeeAccessPreview /></RoleRoute></PrivateRoute>} />
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route
+        path="/login"
+        element={
+          <PublicRoute>
+            <LoginPage />
+          </PublicRoute>
+        }
+      />
+
+      <Route
+        path="/signup"
+        element={
+          <PublicRoute>
+            <SignupPage />
+          </PublicRoute>
+        }
+      />
+
+      <Route
+        path="/waiting-approval"
+        element={<WaitingApproval />}
+      />
+
+      <Route
+        path="/"
+        element={
+          <PrivateRoute>
+            <HomeRoute production={production} />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/dashboard"
+        element={
+          <PrivateRoute>
+            <HomeRoute production={production} />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/employee"
+        element={
+          <PrivateRoute>
+            <EmployeeRoute>
+              <EmployeeDashboard />
+            </EmployeeRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/production"
+        element={
+          <ExternalRedirect to={MODULE_BASES.production} />
+        }
+      />
+
+      <Route
+        path="/tickets"
+        element={
+          <PrivateRoute>
+            <TicketWorkspace />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/tickets/new"
+        element={
+          <PrivateRoute>
+            <TicketCreatePage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/tickets/:id"
+        element={
+          <PrivateRoute>
+            <TicketDetailPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/assets"
+        element={
+          <PrivateRoute>
+            <AssetsPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/operations-hub"
+        element={
+          <PrivateRoute>
+            <OperationsRoute>
+              <OperationsHubEmbed />
+            </OperationsRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminSettings />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin/users"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminUsers />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin/groups"
+        element={
+          <PrivateRoute>
+            <RoleRoute allowedRoles={ADMIN_ROLES}>
+              <GroupManagementPage />
+            </RoleRoute>
+          </PrivateRoute>
+      }
+    />
+
+      <Route
+        path="/admin/employee-access"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <EmployeeAccessPreview />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="*"
+        element={<Navigate to="/" replace />}
+      />
     </Routes>
   );
 }
 
 export default function App() {
   const moduleBase = getModuleBase();
-  return <AuthProvider><BrowserRouter basename={moduleBase} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><AppRoutes moduleBase={moduleBase} /></BrowserRouter></AuthProvider>;
+
+  return (
+    <AuthProvider>
+      <BrowserRouter
+        basename={moduleBase}
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        <AppRoutes moduleBase={moduleBase} />
+      </BrowserRouter>
+    </AuthProvider>
+  );
 }
