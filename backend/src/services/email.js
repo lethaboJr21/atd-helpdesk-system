@@ -6,19 +6,22 @@ const {
   verifyGraphEmailConfiguration,
   sendGraphMail,
 } = require("./graphEmail");
+const {
+  getEmailGovernance,
+  getUserEmailPreferences,
+} = require("./systemSettings");
+
+const pool = require("../db/pool");
 
 dns.setDefaultResultOrder("ipv4first");
 
 const EMAIL_ENABLED = process.env.EMAIL_ENABLED !== "false";
-const EMAIL_PROVIDER = String(process.env.EMAIL_PROVIDER || "smtp")
-  .trim()
-  .toLowerCase();
-
+const EMAIL_PROVIDER = String(process.env.EMAIL_PROVIDER || "smtp").trim().toLowerCase();
 const SMTP_HOST = process.env.SMTP_HOST || process.env.EMAIL_HOST || "";
 const SMTP_PORT = Number(process.env.SMTP_PORT || process.env.EMAIL_PORT || 587);
-const SMTP_SECURE = String(
-  process.env.SMTP_SECURE || process.env.EMAIL_SECURE || "false"
-).trim().toLowerCase() === "true";
+const SMTP_SECURE = String(process.env.SMTP_SECURE || process.env.EMAIL_SECURE || "false")
+  .trim()
+  .toLowerCase() === "true";
 const EMAIL_USER = process.env.EMAIL_USER || process.env.SMTP_USER || "";
 const EMAIL_PASS = process.env.EMAIL_PASS || process.env.SMTP_PASSWORD || "";
 const GRAPH_MAIL_SENDER = process.env.GRAPH_MAIL_SENDER || "";
@@ -73,44 +76,81 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replaceAll("'", "&#39;");
 }
 
 function normalizeRecipients(recipients) {
   if (!recipients) return [];
-  const values = Array.isArray(recipients) ? recipients : String(recipients).split(/[;,]/);
-  return Array.from(new Set(values.map((value) => String(value || "").trim().toLowerCase()).filter(Boolean)));
+  const values = Array.isArray(recipients)
+    ? recipients
+    : String(recipients).split(/[;,]/);
+
+  return Array.from(new Set(
+    values
+      .map((value) => String(value || "").trim().toLowerCase())
+      .filter(Boolean)
+  ));
+}
+
+function categoryPreferenceKey(category) {
+  return ({
+    ticket_assignment: "assignment_emails",
+    ticket_update: "ticket_update_emails",
+    reminder: "reminder_emails",
+    escalation: "escalation_emails",
+    account_request: "administrative_emails",
+    account_approval: "administrative_emails",
+    welcome: "administrative_emails",
+    requester_update: "ticket_update_emails",
+  })[category] || null;
+}
+
+async function filterRecipientsByPreference(recipients, category) {
+  const preferenceKey = categoryPreferenceKey(category);
+  if (!preferenceKey || recipients.length === 0) return recipients;
+
+  const result = await pool.query(
+    `SELECT id, LOWER(email) AS email
+       FROM users
+      WHERE LOWER(email) = ANY($1::text[])`,
+    [recipients]
+  );
+
+  const userByEmail = new Map(result.rows.map((row) => [row.email, row.id]));
+  const allowed = [];
+
+  for (const recipient of recipients) {
+    const userId = userByEmail.get(recipient);
+    if (!userId) {
+      allowed.push(recipient);
+      continue;
+    }
+
+    const preferences = await getUserEmailPreferences(userId);
+    if (preferences.email_enabled !== false && preferences[preferenceKey] !== false) {
+      allowed.push(recipient);
+    }
+  }
+
+  return allowed;
 }
 
 async function verifyEmailTransporter() {
-  if (!EMAIL_ENABLED) {
-    console.log("Email delivery is disabled with EMAIL_ENABLED=false.");
-    return false;
-  }
-  if (!isSmtpConfigured()) {
-    console.warn("SMTP email configuration is incomplete.", {
-      hostConfigured: Boolean(SMTP_HOST),
-      port: SMTP_PORT || null,
-      secure: SMTP_SECURE,
-      userConfigured: Boolean(EMAIL_USER),
-      passwordConfigured: Boolean(EMAIL_PASS),
-      fromConfigured: Boolean(EMAIL_FROM),
-    });
-    return false;
-  }
+  if (!EMAIL_ENABLED) return false;
+  if (!isSmtpConfigured()) return false;
+
   try {
     await getEmailTransporter().verify();
-    console.log("SMTP email transporter verified.", { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE });
+    console.log("SMTP email transporter verified.", {
+      host: SMTP_HOST,
+      port: SMTP_PORT,
+      secure: SMTP_SECURE,
+    });
     return true;
   } catch (error) {
     console.error("SMTP email verification failed:", {
       code: error.code || null,
-      command: error.command || null,
-      responseCode: error.responseCode || null,
       message: error.message,
-      host: SMTP_HOST,
-      port: SMTP_PORT,
-      secure: SMTP_SECURE,
     });
     return false;
   }
@@ -121,63 +161,106 @@ async function verifyEmailProvider() {
     console.log("Email delivery is disabled with EMAIL_ENABLED=false.");
     return false;
   }
+
   if (EMAIL_PROVIDER === "microsoft-graph") {
-    if (!isGraphEmailConfigured()) {
-      console.warn("Microsoft Graph email configuration is incomplete.", {
-        tenantConfigured: Boolean(process.env.GRAPH_MAIL_TENANT_ID),
-        clientConfigured: Boolean(process.env.GRAPH_MAIL_CLIENT_ID),
-        secretConfigured: Boolean(process.env.GRAPH_MAIL_CLIENT_SECRET),
-        senderConfigured: Boolean(process.env.GRAPH_MAIL_SENDER),
-      });
-      return false;
-    }
-    try {
-      const result = await verifyGraphEmailConfiguration();
-      console.log("Microsoft Graph email verified.", result);
-      return true;
-    } catch (error) {
-      console.error("Microsoft Graph email verification failed:", {
-        status: error.response?.status || null,
-        code: error.response?.data?.error?.code || error.code || null,
-        message: error.response?.data?.error?.message || error.message,
-        requestId: error.response?.headers?.["request-id"] || null,
-      });
-      return false;
-    }
+    if (!isGraphEmailConfigured()) return false;
+    const result = await verifyGraphEmailConfiguration();
+    console.log("Microsoft Graph email verified.", result);
+    return true;
   }
+
   if (EMAIL_PROVIDER === "smtp") return verifyEmailTransporter();
-  console.warn("Unsupported email provider.", { provider: EMAIL_PROVIDER });
   return false;
 }
 
-async function sendMailSafe({ to, cc, bcc, subject, html, text, replyTo }) {
-  const recipients = normalizeRecipients(to);
-  const ccRecipients = normalizeRecipients(cc);
-  const bccRecipients = normalizeRecipients(bcc);
+async function sendMailSafe({
+  to,
+  cc,
+  bcc,
+  subject,
+  html,
+  text,
+  replyTo,
+  category = "general",
+  bypassUserPreferences = false,
+}) {
+  const intendedTo = normalizeRecipients(to);
+  const intendedCc = normalizeRecipients(cc);
+  const intendedBcc = normalizeRecipients(bcc);
 
-  if (!EMAIL_ENABLED) return { sent: false, skipped: true, reason: "Email delivery is disabled." };
-  if (!isEmailConfigured()) return { sent: false, skipped: true, provider: EMAIL_PROVIDER, reason: "Email configuration is incomplete." };
-  if (recipients.length === 0) return { sent: false, skipped: true, reason: "No valid recipients were supplied." };
-  if (!String(subject || "").trim()) return { sent: false, skipped: true, reason: "Email subject is required." };
+  if (!EMAIL_ENABLED) {
+    return { sent: false, skipped: true, reason: "Email delivery is disabled by environment configuration." };
+  }
+
+  let governance = { mode: "live", testRecipients: [], categories: {} };
+
+  try {
+    governance = await getEmailGovernance();
+  } catch (error) {
+    if (error.code !== "42P01") throw error;
+  }
+
+  if (governance.mode === "disabled") {
+    return { sent: false, skipped: true, reason: "System email delivery is disabled." };
+  }
+
+  if (governance.categories?.[category] === false) {
+    return { sent: false, skipped: true, reason: `Email category '${category}' is disabled.` };
+  }
+
+  let recipients = intendedTo;
+  let ccRecipients = intendedCc;
+  let bccRecipients = intendedBcc;
+
+  if (!bypassUserPreferences && governance.mode === "live") {
+    recipients = await filterRecipientsByPreference(recipients, category);
+    ccRecipients = await filterRecipientsByPreference(ccRecipients, category);
+    bccRecipients = await filterRecipientsByPreference(bccRecipients, category);
+  }
+
+  let effectiveSubject = String(subject || "").trim();
+  let effectiveHtml = html;
+  let effectiveText = text;
+
+  if (governance.mode === "testing") {
+    const originalRecipients = [...recipients, ...ccRecipients, ...bccRecipients];
+    recipients = normalizeRecipients(governance.testRecipients);
+    ccRecipients = [];
+    bccRecipients = [];
+
+    if (recipients.length === 0) {
+      return { sent: false, skipped: true, reason: "Testing mode has no configured test recipients." };
+    }
+
+    const originalLabel = originalRecipients.join(", ") || "none";
+    effectiveSubject = `[TEST - Intended for ${originalLabel}] ${effectiveSubject}`;
+    effectiveHtml = `<div style="padding:12px;background:#fff7ed;border:1px solid #fdba74;margin-bottom:16px;"><strong>ATD Helpdesk testing mode</strong><br/>Original recipients: ${escapeHtml(originalLabel)}</div>${effectiveHtml || ""}`;
+    effectiveText = `ATD Helpdesk testing mode\nOriginal recipients: ${originalLabel}\n\n${effectiveText || ""}`;
+  }
+
+  if (!isEmailConfigured()) {
+    return { sent: false, skipped: true, provider: EMAIL_PROVIDER, reason: "Email configuration is incomplete." };
+  }
+
+  if (recipients.length === 0) {
+    return { sent: false, skipped: true, reason: "No recipients remain after email preferences were applied." };
+  }
+
+  if (!effectiveSubject) {
+    return { sent: false, skipped: true, reason: "Email subject is required." };
+  }
 
   try {
     if (EMAIL_PROVIDER === "microsoft-graph") {
-      const result = await sendGraphMail({
+      return await sendGraphMail({
         to: recipients,
         cc: ccRecipients,
         bcc: bccRecipients,
-        subject,
-        html,
-        text,
+        subject: effectiveSubject,
+        html: effectiveHtml,
+        text: effectiveText,
         replyTo: replyTo || EMAIL_REPLY_TO,
       });
-      console.log("Microsoft Graph email accepted:", {
-        status: result.status,
-        sender: result.sender,
-        recipientCount: result.recipientCount,
-        subject,
-      });
-      return result;
     }
 
     const info = await getEmailTransporter().sendMail({
@@ -186,33 +269,28 @@ async function sendMailSafe({ to, cc, bcc, subject, html, text, replyTo }) {
       to: recipients.join(","),
       cc: ccRecipients.length ? ccRecipients.join(",") : undefined,
       bcc: bccRecipients.length ? bccRecipients.join(",") : undefined,
-      subject,
-      html,
-      text,
+      subject: effectiveSubject,
+      html: effectiveHtml,
+      text: effectiveText,
     });
-    console.log("SMTP email sent successfully:", {
-      messageId: info.messageId,
-      acceptedCount: info.accepted?.length || 0,
-      rejectedCount: info.rejected?.length || 0,
-      subject,
-    });
+
     return { sent: true, skipped: false, provider: "smtp", info };
   } catch (error) {
-    const safeError = {
-      status: error.response?.status || null,
+    console.error("Email delivery failed:", {
       code: error.response?.data?.error?.code || error.code || null,
       message: error.response?.data?.error?.message || error.message,
-      requestId: error.response?.headers?.["request-id"] || null,
-      recipientCount: recipients.length,
-      subject,
+      category,
       provider: EMAIL_PROVIDER,
-    };
-    console.error("Email delivery failed:", safeError);
+    });
+
     return {
       sent: false,
       skipped: false,
       provider: EMAIL_PROVIDER,
-      error: { code: safeError.code, message: safeError.message, requestId: safeError.requestId },
+      error: {
+        code: error.response?.data?.error?.code || error.code || null,
+        message: error.response?.data?.error?.message || error.message,
+      },
     };
   }
 }
@@ -226,84 +304,46 @@ async function sendEmail(optionsOrTo, subject, html, text) {
 
 async function sendApprovalEmail(user) {
   const recipients = normalizeRecipients(process.env.ADMIN_EMAIL);
-  if (!recipients.length) return { sent: false, skipped: true, reason: "ADMIN_EMAIL is not configured." };
-
   const adminUsersUrl = `${PUBLIC_PORTAL_URL}/admin/users?view=pending`;
-  const subject = "New User Signup Pending Approval";
-  const html = `
-    <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;">
-      <p>Hi,</p>
-      <p>A new user has registered and is waiting for approval.</p>
-      <div style="margin:18px 0;padding:14px;background:#f8fafc;border-left:4px solid #2563eb;">
-        <p style="margin:0;"><strong>Name:</strong> ${escapeHtml(user?.name || "N/A")}</p>
-        <p style="margin:0;"><strong>Email:</strong> ${escapeHtml(user?.email || "N/A")}</p>
-      </div>
-      <p><a href="${adminUsersUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Review Pending Signups</a></p>
-      <p>Kind regards,<br/><strong>ATD Helpdesk</strong></p>
-    </div>`;
-  const text = `New account request pending approval.\n\nName: ${user?.name || "N/A"}\nEmail: ${user?.email || "N/A"}\n\nReview: ${adminUsersUrl}`;
-  return sendMailSafe({ to: recipients, subject, html, text });
+  return sendMailSafe({
+    to: recipients,
+    category: "account_approval",
+    subject: "New User Signup Pending Approval",
+    html: `<div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;"><p>Hi,</p><p>A new user has registered and is waiting for approval.</p><p><strong>Name:</strong> ${escapeHtml(user?.name || "N/A")}<br/><strong>Email:</strong> ${escapeHtml(user?.email || "N/A")}</p><p><a href="${adminUsersUrl}">Review Pending Signups</a></p></div>`,
+    text: `New account request pending approval.\nName: ${user?.name || "N/A"}\nEmail: ${user?.email || "N/A"}\nReview: ${adminUsersUrl}`,
+  });
 }
 
 async function sendAccountRequestReceivedEmail(user) {
-  if (!user?.email) return { sent: false, skipped: true, reason: "Requester email is unavailable." };
-  const loginUrl = `${PUBLIC_PORTAL_URL}/login`;
-  const subject = "ATD Helpdesk Account Request Received";
-  const html = `
-    <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;">
-      <p>Hi ${escapeHtml(user.name || "ATD user")},</p>
-      <p>Your ATD Helpdesk account request was received and is awaiting approval.</p>
-      <p>You can sign in after an administrator approves and activates the account.</p>
-      <p><a href="${loginUrl}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Return to Sign In</a></p>
-      <p>If assistance is required, contact the IT team.</p>
-      <p>Kind regards,<br/><strong>ATD Helpdesk</strong></p>
-    </div>`;
-  const text = `Hi ${user.name || "ATD user"},\n\nYour ATD Helpdesk account request was received and is awaiting approval.\n\nSign in: ${loginUrl}\n\nKind regards,\nATD Helpdesk`;
-  return sendMailSafe({ to: user.email, subject, html, text });
+  return sendMailSafe({
+    to: user?.email,
+    category: "account_request",
+    subject: "ATD Helpdesk Account Request Received",
+    html: `<div style="font-family:Segoe UI,Arial,sans-serif;"><p>Hi ${escapeHtml(user?.name || "ATD user")},</p><p>Your account request was received and is awaiting approval.</p><p><a href="${PUBLIC_PORTAL_URL}/login">Return to Sign In</a></p></div>`,
+    text: `Your ATD Helpdesk account request was received and is awaiting approval.\n${PUBLIC_PORTAL_URL}/login`,
+  });
 }
 
 async function sendM365WelcomeEmail(user) {
-  if (!user?.email) return { sent: false, skipped: true, reason: "Recipient email is unavailable." };
-  const subject = "Welcome to the ATD Helpdesk Portal";
-  const html = `
-    <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;">
-      <p>Hi ${escapeHtml(user.name || "ATD user")},</p>
-      <p>Your Microsoft 365 account has been registered on the <strong>ATD Helpdesk Portal</strong>.</p>
-      <div style="margin:18px 0;padding:14px;background:#f8fafc;border-left:4px solid #2563eb;">
-        <p style="margin:0;"><strong>Email:</strong> ${escapeHtml(user.email)}</p>
-        <p style="margin:0;"><strong>Portal role:</strong> ${escapeHtml(user.role || "user")}</p>
-      </div>
-      <p><a href="${PUBLIC_PORTAL_URL}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Open ATD Helpdesk</a></p>
-      <p>Kind regards,<br/><strong>ATD Helpdesk</strong></p>
-    </div>`;
-  const text = `Hi ${user.name || "ATD user"},\n\nYour Microsoft 365 account has been registered on the ATD Helpdesk Portal.\n\nOpen: ${PUBLIC_PORTAL_URL}`;
-  return sendMailSafe({ to: user.email, subject, html, text });
+  return sendMailSafe({
+    to: user?.email,
+    category: "welcome",
+    subject: "Welcome to the ATD Helpdesk Portal",
+    html: `<div style="font-family:Segoe UI,Arial,sans-serif;"><p>Hi ${escapeHtml(user?.name || "ATD user")},</p><p>Your Microsoft 365 account has been registered on ATD Helpdesk.</p><p><a href="${PUBLIC_PORTAL_URL}">Open ATD Helpdesk</a></p></div>`,
+    text: `Your Microsoft 365 account has been registered on ATD Helpdesk.\n${PUBLIC_PORTAL_URL}`,
+  });
 }
 
 async function sendTicketAssignmentEmail({ recipients, ticket, groupName }) {
-  const normalizedRecipients = normalizeRecipients(recipients);
-  if (!normalizedRecipients.length) return { sent: false, skipped: true, reason: "No assignment email recipients were found." };
-
   const reference = ticket?.ticket_ref || `TICKET-${ticket?.id}`;
-  const title = ticket?.title || "Untitled ticket";
   const url = `${PUBLIC_PORTAL_URL}/tickets/${ticket?.id}`;
-  const subject = `Ticket Assigned - ${reference}`;
-  const html = `
-    <div style="font-family:Segoe UI,Arial,sans-serif;color:#1f2937;font-size:14px;line-height:1.6;">
-      <p>Hi,</p>
-      <p>A Helpdesk ticket has been assigned to ${escapeHtml(groupName || "your team")}.</p>
-      <div style="margin:18px 0;padding:14px;background:#f8fafc;border-left:4px solid #2563eb;">
-        <p style="margin:0;"><strong>Ticket:</strong> ${escapeHtml(reference)}</p>
-        <p style="margin:0;"><strong>Title:</strong> ${escapeHtml(title)}</p>
-        <p style="margin:0;"><strong>Priority:</strong> ${escapeHtml(ticket?.priority || "Medium")}</p>
-        <p style="margin:0;"><strong>Status:</strong> ${escapeHtml(ticket?.status || "Open")}</p>
-      </div>
-      <p>${escapeHtml(ticket?.description || "No description provided.")}</p>
-      <p><a href="${url}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;">Open Ticket</a></p>
-      <p>Kind regards,<br/><strong>ATD Helpdesk</strong></p>
-    </div>`;
-  const text = `Ticket: ${reference}\nTitle: ${title}\nPriority: ${ticket?.priority || "Medium"}\nStatus: ${ticket?.status || "Open"}\n\n${url}`;
-  return sendMailSafe({ to: normalizedRecipients, subject, html, text });
+  return sendMailSafe({
+    to: recipients,
+    category: "ticket_assignment",
+    subject: `Ticket Assigned - ${reference}`,
+    html: `<div style="font-family:Segoe UI,Arial,sans-serif;"><p>A ticket has been assigned to ${escapeHtml(groupName || "your team")}.</p><p><strong>${escapeHtml(reference)}</strong><br/>${escapeHtml(ticket?.title || "Untitled ticket")}</p><p><a href="${url}">Open Ticket</a></p></div>`,
+    text: `Ticket: ${reference}\nTitle: ${ticket?.title || "Untitled ticket"}\n${url}`,
+  });
 }
 
 module.exports = {

@@ -21,6 +21,8 @@ const notificationRoutes = require("./routes/notifications");
 const groupRoutes = require("./routes/groups");
 const azureRoutes = require("./routes/azure");
 const userRoutes = require("./routes/users");
+const settingsRoutes = require("./routes/settings");
+const adminControlsRoutes = require("./routes/adminControls");
 const assetRoutes = require("./routes/assets");
 const productionSyncRoutes = require("./routes/productionSync");
 const productionEventRoutes = require("./routes/productionEvents");
@@ -39,8 +41,7 @@ function normalizeOrigin(value) {
 }
 
 const configuredOrigins = String(
-  process.env.CORS_ORIGIN ||
-    "https://portal.atdalliance.co.za,http://localhost:5173"
+  process.env.CORS_ORIGIN || "https://portal.atdalliance.co.za,http://localhost:5173"
 ).split(",").map(normalizeOrigin).filter(Boolean);
 const allowedOrigins = new Set(configuredOrigins);
 
@@ -69,9 +70,7 @@ app.disable("x-powered-by");
 
 const io = new Server(server, { cors: corsOptions, transports: ["websocket", "polling"] });
 app.set("io", io);
-io.on("connection", (socket) => {
-  socket.on("disconnect", () => {});
-});
+io.on("connection", (socket) => socket.on("disconnect", () => {}));
 
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(cors(corsOptions));
@@ -96,7 +95,6 @@ const apiLimiter = rateLimit({
 
 app.use("/api/auth/login", loginLimiter);
 app.use("/api", apiLimiter);
-
 app.use("/api/auth", authRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/stats", statsRoutes);
@@ -105,6 +103,8 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/azure", azureRoutes);
 app.use("/api/users", userRoutes);
+app.use("/api/settings", settingsRoutes);
+app.use("/api/admin-controls", adminControlsRoutes);
 app.use("/api/assets", assetRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/production/sync", productionSyncRoutes);
@@ -115,7 +115,6 @@ app.get("/api/knowledge", auth, async (_request, response) => {
     const result = await pool.query("SELECT * FROM knowledge_base ORDER BY title");
     return response.json(result.rows);
   } catch (error) {
-    console.error("Knowledge fetch failed:", error.message);
     return response.status(500).json({ error: "Failed to fetch knowledge articles." });
   }
 });

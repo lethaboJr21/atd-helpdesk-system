@@ -54,6 +54,26 @@ export const groupsApi = {
   removeMember: (groupId, userId) => api.delete(`/groups/${groupId}/members/${userId}`),
 };
 
+export const adminControlsApi = {
+  getUserControls: (userId) =>
+    api.get(`/admin-controls/${userId}`),
+
+  updateUserFeatures: (userId, data) =>
+    api.put(`/admin-controls/${userId}/features`, data),
+
+  updateUserEmailPreferences: (userId, data) =>
+    api.put(`/admin-controls/${userId}/email-preferences`, data),
+};
+
+export const settingsApi = {
+  getEmailSettings: () =>
+    api.get("/settings/email"),
+
+  updateEmailSettings: (data) =>
+    api.put("/settings/email", data),
+};
+
+
 export const assetsApi = {
   getAll: (params) =>
      api.get("/assets", { params }),
