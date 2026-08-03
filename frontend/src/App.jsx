@@ -19,6 +19,7 @@ import LoginPage from "./pages/LoginPage";
 import OperationsHubEmbed from "./pages/OperationsHubEmbed";
 import ProductionDashboard from "./pages/ProductionDashboard";
 import SignupPage from "./pages/SignupPage.jsx";
+import TicketArchivePage from "./pages/TicketArchivePage";
 import TicketCreatePage from "./pages/TicketCreatePage";
 import TicketDetailPage from "./pages/TicketDetailPage";
 import TicketWorkspace from "./pages/TicketWorkspace";
@@ -283,6 +284,15 @@ function AppRoutes({ moduleBase }) {
         element={
           <PrivateRoute>
             <AssetsPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/archive"
+        element={
+          <PrivateRoute>
+            <TicketArchivePage />
           </PrivateRoute>
         }
       />

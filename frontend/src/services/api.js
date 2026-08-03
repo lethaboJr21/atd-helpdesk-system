@@ -93,6 +93,19 @@ export const assetsApi = {
 
 export const knowledgeApi = { getAll: (params) => api.get("/knowledge", { params }) };
 
+export const archiveApi = {
+  getSummary: () => api.get("/archive/summary"),
+  getFilters: () => api.get("/archive/filters"),
+  searchTickets: (params) => api.get("/archive/tickets", { params }),
+  getMyTickets: (params) => api.get("/archive/my-tickets", { params }),
+  getTicket: (fsId) => api.get(`/archive/tickets/${fsId}`),
+  downloadAttachment: (fsId) =>
+    api.get(`/archive/attachments/${fsId}/download`, { responseType: "blob" }),
+  getKnowledge: (params) => api.get("/archive/knowledge", { params }),
+  getAssets: (params) => api.get("/archive/assets", { params }),
+  getSyncRuns: () => api.get("/archive/sync-runs"),
+};
+
 export const authApi = {
   login: (credentials) =>
      api.post("/auth/login", credentials),

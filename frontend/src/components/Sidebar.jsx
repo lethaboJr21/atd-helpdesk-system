@@ -1,5 +1,6 @@
 ﻿import {
   AlertTriangle,
+  Archive,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -68,6 +69,11 @@ export default function Sidebar({
       path: "/assets",
     },
     {
+      icon: Archive,
+      label: "My Ticket History",
+      path: "/archive",
+    },
+    {
       icon: User,
       label: "My Profile",
       disabled: true,
@@ -89,6 +95,11 @@ export default function Sidebar({
       icon: HardDrive,
       label: "Assets / CMDB",
       path: "/assets",
+    },
+    {
+      icon: Archive,
+      label: "Freshservice Archive",
+      path: "/archive",
     },
     {
       icon: Factory,
