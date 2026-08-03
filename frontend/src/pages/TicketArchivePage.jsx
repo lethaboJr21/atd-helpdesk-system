@@ -615,7 +615,7 @@ export default function TicketArchivePage() {
           <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600 shadow-sm">
             <Database className="h-4 w-4 text-slate-400" />
             <span className="font-bold text-slate-800">
-              Last sync #{summary.lastSync.id}
+              Last sync {summary.lastSync.id}
             </span>
             <Pill
               tone={
