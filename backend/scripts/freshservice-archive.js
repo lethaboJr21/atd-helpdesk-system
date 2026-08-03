@@ -935,7 +935,6 @@ async function linkLocalTickets() {
         AND (
           t.external_id = f.fs_id::TEXT
           OR t.external_ticket_id = f.fs_id::TEXT
-          OR t.ticket_ref = 'FS-' || f.fs_id::TEXT
         )`
   );
 
@@ -967,6 +966,9 @@ const TICKET_PRIORITY_MAP = {
  * a second pass fills in descriptions and replies without duplicating rows.
  * Requesters, agents and groups are matched by email or name; where no local
  * record exists the Freshservice name is kept on the ticket itself.
+ *
+ * Visible ticket references use the same INC-/REQ-/CHG- scheme as natively
+ * raised tickets. The Freshservice id stays on `external_id` for tracing.
  */
 async function promoteToTickets() {
   log("Phase: promoting Freshservice records into helpdesk tickets");
@@ -1007,7 +1009,8 @@ async function promoteToTickets() {
        external_assignee_name, external_group_name
      )
      SELECT
-       'FS-' || s.fs_id,
+       -- Temporary unique placeholder; rewritten to INC-/REQ-/CHG-<id> below.
+       'TMP-FS-' || s.fs_id,
        COALESCE(NULLIF(TRIM(s.subject), ''), 'Freshservice ticket ' || s.fs_id),
        s.description_text,
        COALESCE($1::jsonb ->> s.priority_label, 'Medium'),
@@ -1071,6 +1074,36 @@ async function promoteToTickets() {
 
   log(`  tickets written: ${promoted.rowCount}`);
   bump("promoted_tickets", promoted.rowCount);
+
+  // Assign the same INC-/REQ-/CHG-<padded id> format used by natively raised tickets.
+  const renumbered = await pool.query(
+    `UPDATE tickets
+        SET ticket_ref =
+          CASE
+            WHEN lower(COALESCE(ticket_type, '')) LIKE '%change%' THEN 'CHG'
+            WHEN lower(COALESCE(ticket_type, '')) LIKE '%request%'
+              OR lower(COALESCE(ticket_type, '')) LIKE '%service%' THEN 'REQ'
+            ELSE 'INC'
+          END
+          || '-' || lpad(id::text, 5, '0')
+      WHERE origin = 'freshservice'
+        AND (
+          ticket_ref LIKE 'TMP-FS-%'
+          OR ticket_ref LIKE 'FS-%'
+          OR ticket_ref IS DISTINCT FROM (
+            CASE
+              WHEN lower(COALESCE(ticket_type, '')) LIKE '%change%' THEN 'CHG'
+              WHEN lower(COALESCE(ticket_type, '')) LIKE '%request%'
+                OR lower(COALESCE(ticket_type, '')) LIKE '%service%' THEN 'REQ'
+              ELSE 'INC'
+            END
+            || '-' || lpad(id::text, 5, '0')
+          )
+        )`
+  );
+
+  log(`  ticket refs normalised: ${renumbered.rowCount}`);
+  bump("renumbered_tickets", renumbered.rowCount);
 
   // Point the mirror back at the helpdesk row it produced.
   await pool.query(
