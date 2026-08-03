@@ -216,13 +216,14 @@ router.get("/", allowRoles("manager", "admin", "superadmin"), async (request, re
 router.get("/meta", allowRoles("manager", "admin", "superadmin"), async (request, response) => {
   try {
     const [summaryResult, departmentsResult] = await Promise.all([
+      // Counts must match the list filters for each view (domain + archived rules).
       pool.query(`SELECT COUNT(*)::integer AS total,
-        COUNT(*) FILTER (WHERE approved=TRUE AND status='active' AND last_login_at IS NOT NULL AND archived_at IS NULL AND account_type='person')::integer AS active,
+        COUNT(*) FILTER (WHERE approved=TRUE AND status='active' AND last_login_at IS NOT NULL AND archived_at IS NULL AND account_type='person' AND LOWER(email) LIKE $1)::integer AS active,
         COUNT(*) FILTER (WHERE approved=FALSE AND role='pending' AND archived_at IS NULL)::integer AS pending,
-        COUNT(*) FILTER (WHERE approved=TRUE AND archived_at IS NULL AND account_type='person' AND (status='inactive' OR last_login_at IS NULL OR microsoft_account_enabled=FALSE OR deactivated_at IS NOT NULL))::integer AS deactivated,
+        COUNT(*) FILTER (WHERE approved=TRUE AND archived_at IS NULL AND account_type='person' AND LOWER(email) LIKE $1 AND (status='inactive' OR last_login_at IS NULL OR microsoft_account_enabled=FALSE OR deactivated_at IS NOT NULL))::integer AS deactivated,
         COUNT(*) FILTER (WHERE archived_at IS NOT NULL)::integer AS archived,
-        COUNT(*) FILTER (WHERE LOWER(email) NOT LIKE $1)::integer AS external,
-        COUNT(*) FILTER (WHERE account_type <> 'person')::integer AS non_person
+        COUNT(*) FILTER (WHERE LOWER(email) NOT LIKE $1 AND archived_at IS NULL)::integer AS external,
+        COUNT(*) FILTER (WHERE account_type <> 'person' AND archived_at IS NULL AND LOWER(email) LIKE $1)::integer AS non_person
         FROM users`, [`%@${COMPANY_DOMAIN}`]),
       pool.query("SELECT DISTINCT department FROM users WHERE COALESCE(TRIM(department),'') <> '' ORDER BY department"),
     ]);

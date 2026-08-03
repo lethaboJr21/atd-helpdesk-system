@@ -46,7 +46,10 @@ async function updateExistingUser(existingUser, microsoftUser, email) {
       office_location=COALESCE(NULLIF($8,''),office_location),mobile_phone=COALESCE(NULLIF($9,''),mobile_phone),
       business_phone=COALESCE(NULLIF($10,''),business_phone),microsoft_account_enabled=$11,
       microsoft_user_type=$12,microsoft_created_at=$13,
-      account_type=CASE WHEN COALESCE(account_type,'person')='person' THEN $14 ELSE account_type END,
+      -- Re-apply inference so false positives (e.g. "bot" inside a surname) can
+      -- correct back to person. Manually chosen shared/service/external types are
+      -- still overwritten on the next sync — admins should re-set after sync if needed.
+      account_type=$14,
       approved=CASE WHEN archived_at IS NOT NULL THEN approved WHEN $15=TRUE THEN TRUE ELSE approved END,
       status=CASE
         WHEN archived_at IS NOT NULL THEN status

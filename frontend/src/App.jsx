@@ -60,7 +60,7 @@ function hasPortalAccess(user) {
     !user?.archived_at &&
     !user?.deactivated_at &&
     user?.microsoft_account_enabled !== false &&
-    user?.account_type !== "non-person"
+    (!user?.account_type || user.account_type === "person")
   );
 }
 
