@@ -155,7 +155,8 @@ export const azureApi = {
 export const statsApi = {
   getDashboard: () => api.get("/stats/dashboard"),
   getSLATrend: () => api.get("/stats/sla-trend"),
-  getVolumeData: () => api.get("/stats/volume"),
+  getVolumeData: (params) => api.get("/stats/volume", { params }),
+  getServiceMix: () => api.get("/stats/service-mix"),
   getCategoryData: () => api.get("/stats/categories"),
   getAssetHealth: () => api.get("/stats/assets"),
 };

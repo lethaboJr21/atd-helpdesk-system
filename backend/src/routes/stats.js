@@ -59,36 +59,74 @@ router.get('/dashboard', async (req, res) => {
   }
 })
 
-// GET /api/stats/volume  — bar chart (last 7 days)
+// GET /api/stats/volume  — bar chart by created date (full table)
 router.get('/volume', async (req, res) => {
-  const days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
+  const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90)
+  try {
+    const { rows } = await pool.query(
+      `
+      WITH days AS (
+        SELECT generate_series(
+          (CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day')::date,
+          CURRENT_DATE,
+          INTERVAL '1 day'
+        )::date AS day
+      ),
+      counted AS (
+        SELECT
+          (created_at AT TIME ZONE 'Africa/Johannesburg')::date AS day,
+          COUNT(*) FILTER (WHERE UPPER(COALESCE(ticket_ref, '')) LIKE 'REQ%')::int AS requests,
+          COUNT(*) FILTER (WHERE UPPER(COALESCE(ticket_ref, '')) LIKE 'CHG%')::int AS changes,
+          COUNT(*) FILTER (
+            WHERE UPPER(COALESCE(ticket_ref, '')) NOT LIKE 'REQ%'
+              AND UPPER(COALESCE(ticket_ref, '')) NOT LIKE 'CHG%'
+          )::int AS incidents
+        FROM tickets
+        WHERE created_at >= (CURRENT_DATE - ($1::int - 1) * INTERVAL '1 day')
+        GROUP BY 1
+      )
+      SELECT
+        to_char(days.day, 'Dy') AS day,
+        COALESCE(counted.incidents, 0) AS incidents,
+        COALESCE(counted.requests, 0) AS requests,
+        COALESCE(counted.changes, 0) AS changes
+      FROM days
+      LEFT JOIN counted ON counted.day = days.day
+      ORDER BY days.day
+      `,
+      [days]
+    )
+    return res.json(rows)
+  } catch (err) {
+    console.error(err)
+    return res.status(500).json({ error: 'Server error' })
+  }
+})
+
+// GET /api/stats/service-mix — open workload by support group / workspace
+router.get('/service-mix', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT
-        to_char(created_at, 'Dy') AS day,
-        SUM(CASE WHEN COALESCE(category, workspace, '') <> 'Change Management' AND title NOT ILIKE '%request%' THEN 1 ELSE 0 END) AS incidents,
-        SUM(CASE WHEN title ILIKE '%request%' THEN 1 ELSE 0 END) AS requests,
-        SUM(CASE WHEN COALESCE(category, workspace, '') = 'Change Management' THEN 1 ELSE 0 END) AS changes
-      FROM tickets
-      WHERE created_at > NOW() - INTERVAL '7 days'
-      GROUP BY to_char(created_at, 'Dy')
-      ORDER BY MIN(created_at)
+        COALESCE(g.name, t.external_group_name, NULLIF(t.workspace, ''), 'Unassigned / Other') AS name,
+        COUNT(*)::int AS value
+      FROM tickets t
+      LEFT JOIN support_groups g ON g.id = t.assigned_group_id
+      WHERE t.status NOT IN ('Resolved', 'Closed')
+      GROUP BY 1
+      ORDER BY value DESC, name ASC
     `)
-    // Fallback static if not enough data
-    if (rows.length < 2) {
-      return res.json([
-        { day: 'Mon', incidents: 42, requests: 28, changes: 7 },
-        { day: 'Tue', incidents: 51, requests: 32, changes: 9 },
-        { day: 'Wed', incidents: 47, requests: 35, changes: 6 },
-        { day: 'Thu', incidents: 62, requests: 29, changes: 11 },
-        { day: 'Fri', incidents: 55, requests: 38, changes: 8 },
-        { day: 'Sat', incidents: 24, requests: 12, changes: 4 },
-        { day: 'Sun', incidents: 19, requests: 8,  changes: 2 },
-      ])
-    }
-    res.json(rows)
+    const colors = ['#2563eb', '#7c3aed', '#16a34a', '#f97316', '#0891b2', '#db2777', '#0f766e']
+    return res.json(
+      rows.map((row, index) => ({
+        name: row.name,
+        value: row.value,
+        color: colors[index % colors.length],
+      }))
+    )
   } catch (err) {
-    res.status(500).json({ error: 'Server error' })
+    console.error(err)
+    return res.status(500).json({ error: 'Server error' })
   }
 })
 
