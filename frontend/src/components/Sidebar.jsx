@@ -6,7 +6,6 @@
   ExternalLink,
   Factory,
   HardDrive,
-  Headphones,
   Home,
   LayoutDashboard,
   Settings,
