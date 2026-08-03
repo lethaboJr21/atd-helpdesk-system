@@ -241,9 +241,12 @@ export default function Dashboard() {
     ] = results;
 
     if (ticketResult.status === "fulfilled") {
-      const ticketData = Array.isArray(ticketResult.value.data)
-        ? ticketResult.value.data
-        : [];
+      const payload = ticketResult.value.data;
+      const ticketData = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.tickets)
+          ? payload.tickets
+          : [];
 
       setTickets(ticketData);
 
