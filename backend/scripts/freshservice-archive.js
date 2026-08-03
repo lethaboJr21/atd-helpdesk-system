@@ -1011,7 +1011,18 @@ async function promoteToTickets() {
      SELECT
        -- Temporary unique placeholder; rewritten to INC-/REQ-/CHG-<id> below.
        'TMP-FS-' || s.fs_id,
-       COALESCE(NULLIF(TRIM(s.subject), ''), 'Freshservice ticket ' || s.fs_id),
+       COALESCE(
+         NULLIF(
+           trim(both FROM regexp_replace(
+             COALESCE(s.subject, ''),
+             '^\s*((re|fw|fwd)\s*:\s*)?\[ticket\s*#\d+\]\s*',
+             '',
+             'i'
+           )),
+           ''
+         ),
+         'Freshservice ticket ' || s.fs_id
+       ),
        s.description_text,
        COALESCE($1::jsonb ->> s.priority_label, 'Medium'),
        COALESCE($2::jsonb ->> s.status_label, 'Closed'),
