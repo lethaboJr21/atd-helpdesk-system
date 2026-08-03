@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 
 function getModuleBase() {
   return window.location.pathname.toLowerCase().startsWith("/production")
@@ -170,4 +170,17 @@ export const productionEventsApi = {
   create: (data) => api.post("/production-events", data),
 };
 
+
+export const workspacesApi = { // BATCH1_WORKSPACES_API
+  getAll: (params) => api.get("/workspaces", { params }),
+  getById: (id) => api.get(`/workspaces/${id}`),
+  getDashboard: (id) => api.get(`/workspaces/${id}/dashboard`),
+  create: (data) => api.post("/workspaces", data),
+  update: (id, data) => api.put(`/workspaces/${id}`, data),
+  activate: (id) => api.post(`/workspaces/${id}/activate`, {}),
+  deactivate: (id) => api.post(`/workspaces/${id}/deactivate`, {}),
+  archive: (id) => api.post(`/workspaces/${id}/archive`, {}),
+  restore: (id) => api.post(`/workspaces/${id}/restore`, {}),
+};
 export default api;
+

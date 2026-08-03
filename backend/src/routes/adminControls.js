@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
@@ -24,6 +24,7 @@ const FEATURES = [
   "user_management",
   "group_management",
   "admin_settings",
+  "workspace_management", // BATCH1_WORKSPACE_AVAILABLE_FEATURE
 ];
 
 function getRoleBaseline(role) {
@@ -58,6 +59,7 @@ function getRoleBaseline(role) {
     user_management: administrator,
     group_management: administrator,
     admin_settings: administrator,
+    workspace_management: administrator, // BATCH1_WORKSPACE_ROLE_BASELINE
   };
 }
 
@@ -403,3 +405,5 @@ router.put(
 );
 
 module.exports = router;
+
+

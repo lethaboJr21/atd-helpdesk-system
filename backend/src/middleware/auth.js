@@ -1,4 +1,4 @@
-const jwt = require("jsonwebtoken");
+﻿const jwt = require("jsonwebtoken");
 
 const pool = require("../db/pool");
 
@@ -19,6 +19,7 @@ const FEATURE_DEFAULTS = Object.freeze({
   user_management: true,
   group_management: true,
   admin_settings: true,
+  workspace_management: true, // BATCH1_WORKSPACE_FEATURE
 });
 
 async function getFeatureEntitlements(userId) {
@@ -48,6 +49,7 @@ function buildEffectiveFeatures(user, overrides) {
     user_management: administrator,
     group_management: administrator,
     admin_settings: administrator,
+    workspace_management: administrator, // BATCH1_WORKSPACE_BASELINE
   };
 
   if (employee) {
@@ -58,6 +60,7 @@ function buildEffectiveFeatures(user, overrides) {
     baseline.user_management = false;
     baseline.group_management = false;
     baseline.admin_settings = false;
+    baseline.workspace_management = false; // BATCH1_WORKSPACE_EMPLOYEE_DISABLED
   }
 
   return Object.fromEntries(
@@ -195,3 +198,6 @@ module.exports = async function authMiddleware(request, response, next) {
     });
   }
 };
+
+
+

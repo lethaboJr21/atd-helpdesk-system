@@ -24,6 +24,8 @@ import TicketDetailPage from "./pages/TicketDetailPage";
 import TicketWorkspace from "./pages/TicketWorkspace";
 import WaitingApproval from "./pages/WaitingApproval";
 import GroupManagementPage from "./pages/GroupManagementPage";
+import Workspaces from "./pages/Workspaces"; // BATCH1_WORKSPACES_IMPORT
+import WorkspaceDashboard from "./pages/WorkspaceDashboard";
 
 const MODULE_BASES = {
   helpdesk: "/helpdesk",
@@ -341,12 +343,34 @@ function AppRoutes({ moduleBase }) {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/workspaces"
+        element={
+          <PrivateRoute>
+            <RoleRoute allowedRoles={ADMIN_ROLES}>
+              <Workspaces />
+            </RoleRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/workspaces/:id"
+        element={
+          <PrivateRoute>
+            <RoleRoute allowedRoles={ADMIN_ROLES}>
+              <WorkspaceDashboard />
+            </RoleRoute>
+          </PrivateRoute>
+        }
+      />
+
 
       <Route
         path="*"
         element={<Navigate to="/" replace />}
       />
-    </Routes>
+</Routes>
   );
 }
 
@@ -367,3 +391,5 @@ export default function App() {
     </AuthProvider>
   );
 }
+
+

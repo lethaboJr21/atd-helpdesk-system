@@ -1,5 +1,6 @@
-﻿import {
+import {
   AlertTriangle,
+  BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -84,6 +85,11 @@ export default function Sidebar({
       icon: Ticket,
       label: "Ticket Workspace",
       path: "/tickets",
+    },
+    {
+      icon: BriefcaseBusiness,
+      label: "Workspaces",
+      path: "/workspaces",
     },
     {
       icon: HardDrive,
