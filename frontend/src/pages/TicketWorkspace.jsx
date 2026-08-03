@@ -1,100 +1,43 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
+  CheckCircle2,
+  ExternalLink,
   Plus,
   RefreshCw,
   Search,
   Ticket,
+  UserCheck,
+  XCircle,
 } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
-import { ticketsApi } from "../services/api";
+import { groupsApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
 const OPERATIONS_ROLES = new Set(["agent", "operator", "manager", "admin", "superadmin"]);
-const CLOSED = new Set(["Resolved", "Closed"]);
-
-const QUEUES = [
-  { id: "unresolved", label: "Unresolved" },
-  { id: "overdue", label: "Overdue" },
-  { id: "unassigned", label: "Unassigned" },
-  { id: "mine", label: "My open" },
-  { id: "open", label: "Open" },
-  { id: "pending", label: "Pending" },
-  { id: "all", label: "All tickets" },
-];
+const STATUS_OPTIONS = ["Open", "Assigned", "Pending", "Investigating", "Waiting Approval", "Resolved", "Closed", "Escalated"];
+const STATUS_TABS = ["All", "Unresolved", ...STATUS_OPTIONS];
+const PRIORITY_OPTIONS = ["Low", "Medium", "High", "Critical"];
+const WORKSPACE_OPTIONS = ["IT", "IT Service Request", "Change Management", "ERP / Syspro", "Infrastructure", "Applications", "Access & Security"];
 
 function getErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback;
 }
-
 function formatAge(ticket) {
   if (ticket?.age) return ticket.age;
   const created = new Date(ticket?.created_at).getTime();
-  if (!Number.isFinite(created)) return "—";
+  if (!Number.isFinite(created)) return "N/A";
   const minutes = Math.max(0, Math.floor((Date.now() - created) / 60000));
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   return hours < 24 ? `${hours}h` : `${Math.floor(hours / 24)}d`;
 }
-
-function formatDue(ticket) {
-  if (!ticket?.due_at) return "—";
-  const due = new Date(ticket.due_at);
-  if (!Number.isFinite(due.getTime())) return "—";
-  return due.toLocaleString(undefined, {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function priorityClass(value) {
-  return (
-    {
-      Critical: "bg-red-100 text-red-700",
-      High: "bg-orange-100 text-orange-700",
-      Medium: "bg-amber-100 text-amber-800",
-      Low: "bg-emerald-100 text-emerald-700",
-    }[value] || "bg-slate-100 text-slate-700"
-  );
+  return ({ Critical: "bg-red-100 text-red-700 border-red-200", High: "bg-orange-100 text-orange-700 border-orange-200", Medium: "bg-amber-100 text-amber-700 border-amber-200", Low: "bg-emerald-100 text-emerald-700 border-emerald-200" })[value] || "bg-slate-100 text-slate-700";
 }
-
 function statusClass(value) {
-  return (
-    {
-      Open: "bg-blue-100 text-blue-700",
-      Assigned: "bg-sky-100 text-sky-800",
-      Pending: "bg-purple-100 text-purple-700",
-      Investigating: "bg-indigo-100 text-indigo-700",
-      "Waiting Approval": "bg-violet-100 text-violet-700",
-      Resolved: "bg-emerald-100 text-emerald-700",
-      Closed: "bg-slate-200 text-slate-700",
-      Escalated: "bg-red-100 text-red-700",
-    }[value] || "bg-slate-100 text-slate-700"
-  );
-}
-
-function matchesQueue(ticket, queue, userId) {
-  const open = !CLOSED.has(ticket.status);
-  switch (queue) {
-    case "unresolved":
-      return open;
-    case "overdue":
-      return open && Boolean(ticket.overdue);
-    case "unassigned":
-      return open && !ticket.assigned_to_user_id;
-    case "mine":
-      return open && String(ticket.assigned_to_user_id) === String(userId);
-    case "open":
-      return ticket.status === "Open";
-    case "pending":
-      return ticket.status === "Pending";
-    case "all":
-      return true;
-    default:
-      return ticket.status === queue;
-  }
+  return ({ Open: "bg-blue-100 text-blue-700", Assigned: "bg-slate-100 text-slate-700", Pending: "bg-purple-100 text-purple-700", Investigating: "bg-indigo-100 text-indigo-700", "Waiting Approval": "bg-purple-100 text-purple-700", Resolved: "bg-emerald-100 text-emerald-700", Closed: "bg-slate-200 text-slate-700", Escalated: "bg-red-100 text-red-700" })[value] || "bg-slate-100 text-slate-700";
 }
 
 export default function TicketWorkspace() {
@@ -103,20 +46,24 @@ export default function TicketWorkspace() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, employeeView } = useAuth();
   const operationsUser = OPERATIONS_ROLES.has(user?.role);
-  const employeeExperience =
-    user?.role === "user" || employeeView || location.pathname.startsWith("/employee");
+  const employeeExperience = user?.role === "user" || employeeView || location.pathname.startsWith("/employee");
 
-  const requestedQueue = searchParams.get("queue") || searchParams.get("view");
-  const defaultQueue = employeeExperience ? "all" : "unresolved";
-  const queue = QUEUES.some((item) => item.id === requestedQueue)
-    ? requestedQueue
-    : defaultQueue;
-
+  // Two years of imported Freshservice history shares the list with live work, so
+  // staff land on unresolved tickets and reach the rest through search.
+  const defaultStatus = searchParams.get("status") || (employeeExperience ? "All" : "Unresolved");
   const [tickets, setTickets] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [selectedTicket, setSelectedTicket] = useState(null);
   const [query, setQuery] = useState("");
-  const [appliedQuery, setAppliedQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState(STATUS_TABS.includes(defaultStatus) ? defaultStatus : "All");
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // The search term goes to the server because the client only holds a page of
+  // tickets, and history reaches back to June 2024.
+  const [appliedQuery, setAppliedQuery] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => setAppliedQuery(query.trim()), 350);
@@ -124,296 +71,180 @@ export default function TicketWorkspace() {
   }, [query]);
 
   const fetchTickets = useCallback(async () => {
-    setLoading(true);
-    setError("");
+    setLoading(true); setError("");
     try {
       const response = employeeExperience
         ? await ticketsApi.getEmployeeView()
-        : await ticketsApi.getAll({
-            limit: 500,
-            ...(appliedQuery ? { search: appliedQuery } : {}),
-          });
-      setTickets(Array.isArray(response.data) ? response.data : []);
+        : await ticketsApi.getAll({ limit: 500, ...(appliedQuery ? { search: appliedQuery } : {}) });
+      const data = Array.isArray(response.data) ? response.data : [];
+      setTickets(data);
+      // Keep current selection if it is still in the list; never auto-open the first ticket.
+      setSelectedTicket((current) => data.find((item) => String(item.id) === String(current?.id)) || null);
     } catch (requestError) {
       setError(getErrorMessage(requestError, "Tickets could not be loaded."));
-      setTickets([]);
-    } finally {
-      setLoading(false);
-    }
+      setTickets([]); setSelectedTicket(null);
+    } finally { setLoading(false); }
   }, [appliedQuery, employeeExperience]);
 
+  useEffect(() => { fetchTickets(); }, [fetchTickets]);
   useEffect(() => {
-    fetchTickets();
-  }, [fetchTickets]);
+    if (!operationsUser || employeeExperience) return;
+    groupsApi.getAll().then((response) => setGroups(Array.isArray(response.data) ? response.data : [])).catch((requestError) => setError(getErrorMessage(requestError, "Support groups could not be loaded.")));
+  }, [employeeExperience, operationsUser]);
 
   const filteredTickets = useMemo(() => {
     const search = query.trim().toLowerCase();
-    return tickets
-      .filter((item) => matchesQueue(item, queue, user?.id))
-      .filter((item) => {
-        if (!search) return true;
-        const haystack = [
-          item.ticket_ref,
-          item.title,
-          item.description,
-          item.priority,
-          item.status,
-          item.workspace,
-          item.requester_name,
-          item.requester_email,
-          item.assigned_to_name,
-          item.assigned_group_name,
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase();
-        return haystack.includes(search);
-      })
-      .sort((a, b) => {
-        const rank = { Critical: 1, High: 2, Medium: 3, Low: 4 };
-        const byPriority = (rank[a.priority] || 5) - (rank[b.priority] || 5);
-        if (byPriority) return byPriority;
-        if (Boolean(b.overdue) !== Boolean(a.overdue)) return a.overdue ? -1 : 1;
-        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-      });
-  }, [tickets, queue, query, user?.id]);
+    return tickets.filter((item) => {
+      const searchable = [item.ticket_ref, item.title, item.description, item.priority, item.status, item.workspace, item.requester_name, item.assigned_to_name, item.assigned_group_name].filter(Boolean).join(" ").toLowerCase();
+      const statusMatches = statusFilter === "All" || (statusFilter === "Unresolved" ? !["Resolved", "Closed"].includes(item.status) : item.status === statusFilter);
+      return (!search || searchable.includes(search)) && statusMatches;
+    }).sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+  }, [query, statusFilter, tickets]);
 
-  const queueCount = (id) =>
-    tickets.filter((item) => matchesQueue(item, id, user?.id)).length;
+  const statusCount = (status) => status === "All" ? tickets.length : status === "Unresolved" ? tickets.filter((item) => !["Resolved", "Closed"].includes(item.status)).length : tickets.filter((item) => item.status === status).length;
 
-  const changeQueue = (value) => {
+  const changeFilter = (value) => {
+    setStatusFilter(value);
     const next = new URLSearchParams(searchParams);
-    if (value === defaultQueue) next.delete("queue");
-    else next.set("queue", value);
+    if (value === "All") next.delete("status"); else next.set("status", value);
     setSearchParams(next, { replace: true });
   };
 
-  const openTicket = (ticket) => navigate(`/tickets/${ticket.id}`);
+  const runAction = async (action, message) => {
+    setActionLoading(true); setError(""); setSuccess("");
+    try { await action(); setSuccess(message); await fetchTickets(); }
+    catch (requestError) { setError(getErrorMessage(requestError, "The ticket action failed.")); }
+    finally { setActionLoading(false); }
+  };
+
+  const selectedGroup =
+    groups.find((group) => String(group.id) === String(selectedTicket?.assigned_group_id)) ||
+    groups.find(
+      (group) =>
+        selectedTicket?.assigned_group_name &&
+        String(group.name).toLowerCase() === String(selectedTicket.assigned_group_name).toLowerCase()
+    ) ||
+    null;
+
+  const assigneeOptions = useMemo(() => {
+    const members = Array.isArray(selectedGroup?.members) ? [...selectedGroup.members] : [];
+    if (
+      selectedTicket?.assigned_to_user_id &&
+      !members.some((member) => String(member.id) === String(selectedTicket.assigned_to_user_id))
+    ) {
+      members.unshift({
+        id: selectedTicket.assigned_to_user_id,
+        name: selectedTicket.assigned_to_name || "Current assignee",
+        email: selectedTicket.assigned_to_email || "",
+      });
+    }
+    return members;
+  }, [selectedGroup, selectedTicket]);
+
+  const resolvedGroupId = selectedTicket?.assigned_group_id || selectedGroup?.id || null;
+  const canOperate = operationsUser && !employeeExperience;
+
+  const assignTicket = (assigneeId, groupId = resolvedGroupId) =>
+    runAction(
+      () => ticketsApi.assign(selectedTicket.id, assigneeId || null, groupId || null),
+      assigneeId ? "Ticket assignment updated." : "Ticket unassigned."
+    );
 
   return (
-    <div className="min-h-screen bg-white text-slate-900">
-      <header className="border-b border-slate-200 bg-white px-5 py-4 xl:px-8">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-start justify-between gap-4">
-          <div>
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  employeeExperience
-                    ? user?.role === "user"
-                      ? "/"
-                      : "/employee"
-                    : "/"
-                )
-              }
-              className="mb-3 rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-            >
-              Back to Dashboard
-            </button>
-            <h1 className="text-2xl font-bold tracking-tight text-slate-950">
-              {employeeExperience ? "My Tickets" : "Tickets"}
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              {employeeExperience
-                ? "Support requests raised for your account."
-                : "Freshservice-style inbox — open a row to work the ticket."}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={fetchTickets}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-semibold hover:bg-slate-50 disabled:opacity-60"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              Refresh
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/tickets/new?type=incident")}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#12344d] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0c2434]"
-            >
-              <Plus className="h-4 w-4" />
-              New ticket
-            </button>
-          </div>
-        </div>
+    <div className="min-h-screen bg-slate-100 p-5 text-slate-900 xl:p-8">
+      <header className="mx-auto flex max-w-[1650px] flex-wrap items-start justify-between gap-4">
+        <div><button onClick={() => navigate(employeeExperience ? (user?.role === "user" ? "/" : "/employee") : "/")} className="mb-3 rounded-xl border bg-white px-4 py-2 text-sm font-bold">Back to Dashboard</button><p className="text-sm text-slate-500">Helpdesk / {employeeExperience ? "My Tickets" : "Ticket Workspace"}</p><h1 className="mt-1 text-3xl font-bold">{employeeExperience ? "My Tickets" : "Ticket Workspace"}</h1><p className="mt-1 text-sm text-slate-500">{employeeExperience ? "Track support requests created for your account." : "Review, triage, assign and manage all authorised tickets."}</p></div>
+        <div className="flex gap-2"><button onClick={fetchTickets} disabled={loading} className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-3 text-sm font-bold"><RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />Refresh</button><button onClick={() => navigate("/tickets/new?type=incident")} className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"><Plus className="h-4 w-4" />New Ticket</button></div>
       </header>
 
-      <main className="mx-auto max-w-[1600px] px-5 py-5 xl:px-8">
-        {error ? (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
-            {error}
-          </div>
-        ) : null}
+      <main className="mx-auto mt-6 max-w-[1650px]">
+        {error && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">{error}</div>}
+        {success && <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700">{success}</div>}
 
-        {!employeeExperience ? (
-          <section className="mb-4 grid gap-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-            {QUEUES.filter((item) => item.id !== "all").map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => changeQueue(item.id)}
-                className={`rounded-lg border px-3 py-3 text-left ${
-                  queue === item.id
-                    ? "border-[#2c5cc5] bg-[#e5f0ff]"
-                    : "border-slate-200 bg-white hover:border-slate-300"
-                }`}
-              >
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {item.label}
-                </p>
-                <p className="mt-1 text-2xl font-bold text-slate-950">
-                  {queueCount(item.id)}
-                </p>
-              </button>
-            ))}
+        <div className="grid gap-6 xl:grid-cols-[1fr_380px]">
+          <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+            <div className="flex flex-wrap gap-3 border-b p-4"><div className="relative min-w-[260px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tickets" className="w-full rounded-xl border py-2.5 pl-10 pr-3" /></div></div>
+            <div className="flex gap-2 overflow-x-auto border-b p-4">{STATUS_TABS.map((status) => <button key={status} onClick={() => changeFilter(status)} className={statusFilter === status ? "whitespace-nowrap rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white" : "whitespace-nowrap rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600"}>{status}<span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">{statusCount(status)}</span></button>)}</div>
+            <div className="divide-y">{loading ? <div className="p-10 text-center text-slate-500">Loading tickets...</div> : filteredTickets.length === 0 ? <div className="p-10 text-center"><Ticket className="mx-auto h-10 w-10 text-slate-400" /><p className="mt-3 font-bold">No tickets found</p></div> : filteredTickets.map((item) => <button key={item.id} onClick={() => setSelectedTicket(item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className={String(selectedTicket?.id) === String(item.id) ? "grid w-full gap-3 border-l-4 border-blue-600 bg-blue-50 p-5 text-left md:grid-cols-[1fr_120px_150px_80px]" : "grid w-full gap-3 border-l-4 border-transparent p-5 text-left hover:bg-slate-50 md:grid-cols-[1fr_120px_150px_80px]"}><div><div className="flex flex-wrap gap-2"><span className="font-bold text-blue-700">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={`rounded-full border px-2 py-1 text-xs font-bold ${priorityClass(item.priority)}`}>{item.priority || "Medium"}</span><span className={`rounded-full px-2 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status || "Open"}</span></div><p className="mt-2 font-semibold">{item.title}</p><p className="text-sm text-slate-500">{employeeExperience ? item.workspace : item.requester_name || item.requester_email}</p></div><p className="text-sm font-semibold">{item.workspace || "IT"}</p><p className="text-sm font-semibold">{item.assigned_group_name || "Triage"}</p><span className="text-xs font-bold text-slate-500">{formatAge(item)}</span></button>)}</div>
           </section>
-        ) : null}
 
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 px-4 py-3">
-            <div className="relative min-w-[240px] flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by ID, subject, requester, agent…"
-                className="w-full rounded-md border border-slate-200 py-2 pl-9 pr-3 text-sm outline-none focus:border-[#2c5cc5]"
-              />
-            </div>
-            <div className="flex flex-wrap gap-1">
-              {(employeeExperience
-                ? [
-                    { id: "all", label: "All" },
-                    { id: "unresolved", label: "Open" },
-                    { id: "pending", label: "Pending" },
-                  ]
-                : QUEUES
-              ).map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => changeQueue(item.id)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-semibold ${
-                    queue === item.id
-                      ? "bg-[#12344d] text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  {item.label}
-                  <span className="ml-1.5 text-xs opacity-80">{queueCount(item.id)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">Subject</th>
-                  <th className="px-4 py-3">{employeeExperience ? "Workspace" : "Requester"}</th>
-                  {!employeeExperience ? <th className="px-4 py-3">Agent</th> : null}
-                  <th className="px-4 py-3">Group</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Priority</th>
-                  <th className="px-4 py-3">Due</th>
-                  <th className="px-4 py-3">Age</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {loading ? (
-                  <tr>
-                    <td colSpan="9" className="px-4 py-16 text-center text-slate-500">
-                      Loading tickets…
-                    </td>
-                  </tr>
-                ) : filteredTickets.length === 0 ? (
-                  <tr>
-                    <td colSpan="9" className="px-4 py-16 text-center text-slate-500">
-                      <Ticket className="mx-auto mb-3 h-8 w-8 text-slate-300" />
-                      No tickets in this view
-                    </td>
-                  </tr>
-                ) : (
-                  filteredTickets.map((item) => (
-                    <tr
-                      key={item.id}
-                      onClick={() => openTicket(item)}
-                      className={`cursor-pointer hover:bg-[#f5f8fc] ${
-                        item.overdue ? "bg-red-50/50" : ""
-                      }`}
+          <aside className="xl:sticky xl:top-6 xl:self-start">
+            {!selectedTicket ? <div className="rounded-2xl border bg-white p-6 text-center text-slate-500">Select a ticket to view its details.</div> : <div className="rounded-2xl border bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-blue-700">{selectedTicket.ticket_ref}</p><h2 className="mt-1 text-lg font-bold">{selectedTicket.title}</h2></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${statusClass(selectedTicket.status)}`}>{selectedTicket.status}</span></div><p className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{selectedTicket.description || "No description"}</p><div className="mt-4 grid grid-cols-2 gap-3"><Info label="Priority" value={selectedTicket.priority} /><Info label="Workspace" value={selectedTicket.workspace} /><Info label="Group" value={selectedTicket.assigned_group_name || "Triage"} /><Info label="Assigned To" value={selectedTicket.assigned_to_name || "Unassigned"} /></div><button onClick={() => navigate(`/tickets/${selectedTicket.id}`)} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white"><ExternalLink className="h-4 w-4" />Open Full Ticket</button>{canOperate && (
+                <div className="mt-4 space-y-3 border-t pt-4">
+                  <select
+                    value={resolvedGroupId || ""}
+                    onChange={(event) =>
+                      runAction(
+                        () =>
+                          ticketsApi.assign(
+                            selectedTicket.id,
+                            selectedTicket.assigned_to_user_id || null,
+                            event.target.value || null
+                          ),
+                        "Support group updated."
+                      )
+                    }
+                    disabled={actionLoading}
+                    className="w-full rounded-xl border px-3 py-2"
+                  >
+                    <option value="">Select support group</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={selectedTicket.assigned_to_user_id || ""}
+                    onChange={(event) => assignTicket(event.target.value || null)}
+                    disabled={actionLoading || !resolvedGroupId}
+                    className="w-full rounded-xl border px-3 py-2"
+                  >
+                    <option value="">Unassigned</option>
+                    {assigneeOptions.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name || member.email}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() =>
+                      assignTicket(
+                        user.id,
+                        resolvedGroupId || groups[0]?.id || null
+                      )
+                    }
+                    disabled={actionLoading}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Assign to Me
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => runAction(() => ticketsApi.resolve(selectedTicket.id), "Ticket resolved.")}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white"
                     >
-                      <td className="whitespace-nowrap px-4 py-3 font-semibold text-[#2c5cc5]">
-                        {item.ticket_ref || `TICKET-${item.id}`}
-                      </td>
-                      <td className="max-w-[320px] px-4 py-3">
-                        <p className="truncate font-semibold text-slate-900">{item.title}</p>
-                        {item.overdue ? (
-                          <p className="mt-0.5 text-xs font-semibold text-red-600">Overdue</p>
-                        ) : null}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {employeeExperience
-                          ? item.workspace || "IT"
-                          : item.requester_name || item.requester_email || "—"}
-                      </td>
-                      {!employeeExperience ? (
-                        <td className="px-4 py-3 text-slate-600">
-                          {item.assigned_to_name || (
-                            <span className="text-slate-400">Unassigned</span>
-                          )}
-                        </td>
-                      ) : null}
-                      <td className="px-4 py-3 text-slate-600">
-                        {item.assigned_group_name || "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded px-2 py-0.5 text-xs font-semibold ${statusClass(
-                            item.status
-                          )}`}
-                        >
-                          {item.status || "Open"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded px-2 py-0.5 text-xs font-semibold ${priorityClass(
-                            item.priority
-                          )}`}
-                        >
-                          {item.priority || "Medium"}
-                        </span>
-                      </td>
-                      <td
-                        className={`whitespace-nowrap px-4 py-3 ${
-                          item.overdue ? "font-semibold text-red-600" : "text-slate-600"
-                        }`}
-                      >
-                        {formatDue(item)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-slate-500">
-                        {formatAge(item)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        {operationsUser && !employeeExperience ? (
-          <p className="mt-3 text-xs text-slate-400">
-            Showing {filteredTickets.length} ticket
-            {filteredTickets.length === 1 ? "" : "s"}. Click a row to open it.
-          </p>
-        ) : null}
+                      <CheckCircle2 className="h-4 w-4" />
+                      Resolve
+                    </button>
+                    <button
+                      onClick={() => runAction(() => ticketsApi.close(selectedTicket.id), "Ticket closed.")}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}{selectedTicket.priority === "Critical" && <div className="mt-4 flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"><AlertTriangle className="h-4 w-4 shrink-0" />Critical ticket requiring priority attention.</div>}</div>}
+          </aside>
+        </div>
       </main>
     </div>
   );
+}
+
+function Info({ label, value }) {
+  return <div className="rounded-xl bg-slate-50 p-3"><p className="text-xs font-bold uppercase text-slate-500">{label}</p><p className="mt-1 text-sm font-semibold">{value || "N/A"}</p></div>;
 }
