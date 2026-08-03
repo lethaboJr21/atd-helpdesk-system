@@ -20,7 +20,7 @@ import { useAuth } from "../hooks/useAuth";
 const OPERATIONS_ROLES = new Set(["agent", "operator", "manager", "admin", "superadmin"]);
 const STATUS_OPTIONS = ["Open", "Assigned", "Pending", "Investigating", "Waiting Approval", "Resolved", "Closed", "Escalated"];
 const STATUS_TABS = ["All", "Unresolved", ...STATUS_OPTIONS];
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 30;
 
 function getErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback;
@@ -47,6 +47,70 @@ function unwrapTickets(payload) {
     pagination: payload?.pagination || null,
     counts: payload?.counts || null,
   };
+}
+
+function pageWindow(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  const pages = new Set([1, total, current, current - 1, current + 1]);
+  if (current <= 3) [2, 3, 4].forEach((value) => pages.add(value));
+  if (current >= total - 2) [total - 1, total - 2, total - 3].forEach((value) => pages.add(value));
+  return [...pages].filter((value) => value >= 1 && value <= total).sort((a, b) => a - b);
+}
+
+function PaginationBar({ pagination, loading, onPageChange }) {
+  if (!pagination || pagination.total <= 0) return null;
+  const pages = pageWindow(pagination.page, pagination.totalPages);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-t border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-sm text-slate-600">
+        Page <span className="font-bold text-slate-950">{pagination.page}</span> of{" "}
+        <span className="font-bold text-slate-950">{pagination.totalPages}</span>
+        {" · "}
+        <span className="font-bold text-slate-950">{pagination.total.toLocaleString("en-ZA")}</span> tickets
+        {" · "}
+        {pagination.perPage} per page
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          disabled={pagination.page <= 1 || loading}
+          onClick={() => onPageChange(pagination.page - 1)}
+          className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" /> Previous
+        </button>
+        {pages.map((pageNumber, index) => {
+          const previous = pages[index - 1];
+          const showGap = previous && pageNumber - previous > 1;
+          return (
+            <span key={pageNumber} className="inline-flex items-center gap-1.5">
+              {showGap ? <span className="px-1 text-slate-400">…</span> : null}
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => onPageChange(pageNumber)}
+                className={
+                  pageNumber === pagination.page
+                    ? "min-w-9 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white"
+                    : "min-w-9 rounded-xl border bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                }
+              >
+                {pageNumber}
+              </button>
+            </span>
+          );
+        })}
+        <button
+          type="button"
+          disabled={pagination.page >= pagination.totalPages || loading}
+          onClick={() => onPageChange(pagination.page + 1)}
+          className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"
+        >
+          Next <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function TicketWorkspace() {
@@ -198,24 +262,26 @@ export default function TicketWorkspace() {
           <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
             <div className="flex flex-wrap gap-3 border-b p-4"><div className="relative min-w-[260px] flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search tickets" className="w-full rounded-xl border py-2.5 pl-10 pr-3" /></div></div>
             <div className="flex gap-2 overflow-x-auto border-b p-4">{STATUS_TABS.map((status) => <button key={status} onClick={() => changeFilter(status)} className={statusFilter === status ? "whitespace-nowrap rounded-full bg-blue-600 px-4 py-2 text-sm font-bold text-white" : "whitespace-nowrap rounded-full bg-slate-100 px-4 py-2 text-sm font-bold text-slate-600"}>{status}<span className="ml-2 rounded-full bg-white/20 px-2 py-0.5 text-xs">{statusCount(status)}</span></button>)}</div>
-            <div className="divide-y">{loading ? <div className="p-10 text-center text-slate-500">Loading tickets...</div> : tickets.length === 0 ? <div className="p-10 text-center"><Ticket className="mx-auto h-10 w-10 text-slate-400" /><p className="mt-3 font-bold">No tickets found</p></div> : tickets.map((item) => <button key={item.id} onClick={() => setSelectedTicket((current) => String(current?.id) === String(item.id) ? null : item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className={String(selectedTicket?.id) === String(item.id) ? "grid w-full gap-3 border-l-4 border-blue-600 bg-blue-50 p-5 text-left md:grid-cols-[1fr_120px_150px_80px]" : "grid w-full gap-3 border-l-4 border-transparent p-5 text-left hover:bg-slate-50 md:grid-cols-[1fr_120px_150px_80px]"}><div><div className="flex flex-wrap gap-2"><span className="font-bold text-blue-700">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={`rounded-full border px-2 py-1 text-xs font-bold ${priorityClass(item.priority)}`}>{item.priority || "Medium"}</span><span className={`rounded-full px-2 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status || "Open"}</span></div><p className="mt-2 font-semibold">{item.title}</p><p className="text-sm text-slate-500">{employeeExperience ? item.workspace : item.requester_name || item.requester_email}</p></div><p className="text-sm font-semibold">{item.workspace || "IT"}</p><p className="text-sm font-semibold">{item.assigned_group_name || "Triage"}</p><span className="text-xs font-bold text-slate-500">{formatAge(item)}</span></button>)}</div>
-            {pagination && pagination.totalPages > 1 ? (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3">
-                <p className="text-sm text-slate-600">
-                  Page <span className="font-bold text-slate-950">{pagination.page}</span> of{" "}
-                  <span className="font-bold text-slate-950">{pagination.totalPages}</span>
-                  {" · "}
-                  <span className="font-bold text-slate-950">{pagination.total.toLocaleString("en-ZA")}</span> tickets
-                </p>
-                <div className="flex gap-2">
-                  <button type="button" disabled={pagination.page <= 1 || loading} onClick={() => setPage((current) => Math.max(1, current - 1))} className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40">
-                    <ChevronLeft className="h-4 w-4" /> Previous
-                  </button>
-                  <button type="button" disabled={pagination.page >= pagination.totalPages || loading} onClick={() => setPage((current) => current + 1)} className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40">
-                    Next <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
+            {!employeeExperience ? (
+              <PaginationBar
+                pagination={pagination}
+                loading={loading}
+                onPageChange={(nextPage) => {
+                  setPage(nextPage);
+                  setSelectedTicket(null);
+                }}
+              />
+            ) : null}
+            <div className="max-h-[65vh] divide-y overflow-y-auto">{loading ? <div className="p-10 text-center text-slate-500">Loading tickets...</div> : tickets.length === 0 ? <div className="p-10 text-center"><Ticket className="mx-auto h-10 w-10 text-slate-400" /><p className="mt-3 font-bold">No tickets found</p></div> : tickets.map((item) => <button key={item.id} onClick={() => setSelectedTicket((current) => String(current?.id) === String(item.id) ? null : item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className={String(selectedTicket?.id) === String(item.id) ? "grid w-full gap-3 border-l-4 border-blue-600 bg-blue-50 p-5 text-left md:grid-cols-[1fr_120px_150px_80px]" : "grid w-full gap-3 border-l-4 border-transparent p-5 text-left hover:bg-slate-50 md:grid-cols-[1fr_120px_150px_80px]"}><div><div className="flex flex-wrap gap-2"><span className="font-bold text-blue-700">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={`rounded-full border px-2 py-1 text-xs font-bold ${priorityClass(item.priority)}`}>{item.priority || "Medium"}</span><span className={`rounded-full px-2 py-1 text-xs font-bold ${statusClass(item.status)}`}>{item.status || "Open"}</span></div><p className="mt-2 font-semibold">{item.title}</p><p className="text-sm text-slate-500">{employeeExperience ? item.workspace : item.requester_name || item.requester_email}</p></div><p className="text-sm font-semibold">{item.workspace || "IT"}</p><p className="text-sm font-semibold">{item.assigned_group_name || "Triage"}</p><span className="text-xs font-bold text-slate-500">{formatAge(item)}</span></button>)}</div>
+            {!employeeExperience ? (
+              <PaginationBar
+                pagination={pagination}
+                loading={loading}
+                onPageChange={(nextPage) => {
+                  setPage(nextPage);
+                  setSelectedTicket(null);
+                }}
+              />
             ) : null}
           </section>
 
