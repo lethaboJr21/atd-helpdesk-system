@@ -292,7 +292,9 @@ function AppRoutes({ moduleBase }) {
         path="/archive"
         element={
           <PrivateRoute>
-            <TicketArchivePage />
+            <AdminRoute>
+              <TicketArchivePage />
+            </AdminRoute>
           </PrivateRoute>
         }
       />

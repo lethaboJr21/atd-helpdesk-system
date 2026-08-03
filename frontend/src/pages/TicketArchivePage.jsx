@@ -548,15 +548,23 @@ export default function TicketArchivePage() {
             </button>
             <p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
               <Archive className="h-4 w-4" />
-              Historical Records
+              Data Migration
             </p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-              Freshservice Ticket Archive
+              Freshservice Import
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              {operational
-                ? "Every ticket, reply and attachment mirrored out of Freshservice into ATD Helpdesk. This record stays searchable after the Freshservice subscription ends."
-                : "Your full support history carried over from Freshservice."}
+              Raw mirror of the Freshservice tenant, used to confirm nothing is
+              missing before the subscription is cancelled. The tickets themselves
+              live in the{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/tickets")}
+                className="font-semibold text-blue-700 underline hover:text-blue-800"
+              >
+                Ticket Workspace
+              </button>{" "}
+              alongside everything else.
             </p>
           </div>
 

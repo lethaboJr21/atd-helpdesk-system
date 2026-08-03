@@ -8,7 +8,9 @@ router.use(auth)
 router.get('/dashboard', async (req, res) => {
   try {
     const [openRes, pendingRes, slaRes, avgRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*) FROM tickets WHERE status NOT IN ('Closed','Resolved') AND category != 'Change Management'`),
+      // Imported tickets carry a Freshservice category while natively raised ones
+      // only set a workspace, so fall back before comparing or the NULL swallows the row.
+      pool.query(`SELECT COUNT(*) FROM tickets WHERE status NOT IN ('Closed','Resolved') AND COALESCE(category, workspace, '') <> 'Change Management'`),
       pool.query(`SELECT COUNT(*) FROM tickets WHERE status IN ('Open','Assigned','Waiting Approval')`),
       pool.query(`SELECT ROUND(AVG(sla_pct)) AS sla FROM tickets WHERE created_at > NOW() - INTERVAL '7 days'`),
       pool.query(`SELECT ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(closed_at, NOW()) - created_at))/60)) AS mins FROM tickets WHERE created_at > NOW() - INTERVAL '7 days'`),
@@ -40,9 +42,9 @@ router.get('/volume', async (req, res) => {
     const { rows } = await pool.query(`
       SELECT
         to_char(created_at, 'Dy') AS day,
-        SUM(CASE WHEN category != 'Change Management' AND title NOT ILIKE '%request%' THEN 1 ELSE 0 END) AS incidents,
+        SUM(CASE WHEN COALESCE(category, workspace, '') <> 'Change Management' AND title NOT ILIKE '%request%' THEN 1 ELSE 0 END) AS incidents,
         SUM(CASE WHEN title ILIKE '%request%' THEN 1 ELSE 0 END) AS requests,
-        SUM(CASE WHEN category = 'Change Management' THEN 1 ELSE 0 END) AS changes
+        SUM(CASE WHEN COALESCE(category, workspace, '') = 'Change Management' THEN 1 ELSE 0 END) AS changes
       FROM tickets
       WHERE created_at > NOW() - INTERVAL '7 days'
       GROUP BY to_char(created_at, 'Dy')
@@ -96,9 +98,13 @@ router.get('/sla-trend', async (_req, res) => {
 router.get('/categories', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT category AS name, COUNT(*) AS cnt
-      FROM tickets WHERE status NOT IN ('Closed','Resolved')
-      GROUP BY category
+      SELECT COALESCE(category, workspace) AS name, COUNT(*) AS cnt
+      FROM tickets
+      WHERE status NOT IN ('Closed','Resolved')
+        AND COALESCE(category, workspace) IS NOT NULL
+      GROUP BY COALESCE(category, workspace)
+      ORDER BY cnt DESC
+      LIMIT 8
     `)
     const total = rows.reduce((s, r) => s + parseInt(r.cnt), 0) || 1
     const colors = { Infrastructure: '#2563eb', 'Application Development': '#7c3aed', 'Change Management': '#f97316', 'Access / Security': '#16a34a' }

@@ -943,6 +943,188 @@ async function linkLocalTickets() {
   bump("linked_tickets", linked.rowCount);
 }
 
+// Freshservice status and priority names line up with the helpdesk vocabulary
+// apart from Urgent, which the helpdesk calls Critical.
+const TICKET_STATUS_MAP = {
+  Open: "Open",
+  Pending: "Pending",
+  Resolved: "Resolved",
+  Closed: "Closed",
+};
+
+const TICKET_PRIORITY_MAP = {
+  Low: "Low",
+  Medium: "Medium",
+  High: "High",
+  Urgent: "Critical",
+};
+
+/**
+ * Turns mirrored Freshservice records into first-class helpdesk tickets so they
+ * appear in the normal workspace rather than a separate archive.
+ *
+ * Keyed on `tickets.external_id`, so it is safe to re-run as more detail lands:
+ * a second pass fills in descriptions and replies without duplicating rows.
+ * Requesters, agents and groups are matched by email or name; where no local
+ * record exists the Freshservice name is kept on the ticket itself.
+ */
+async function promoteToTickets() {
+  log("Phase: promoting Freshservice records into helpdesk tickets");
+
+  const promoted = await pool.query(
+    `WITH source AS (
+       SELECT
+         f.*,
+         requester.id            AS local_requester_id,
+         COALESCE(f.requester_name, requester_person.name)   AS best_requester_name,
+         COALESCE(f.requester_email, requester_person.email) AS best_requester_email,
+         assignee.id             AS local_assignee_id,
+         COALESCE(f.responder_name, responder_person.name)   AS best_assignee_name,
+         local_group.id          AS local_group_id,
+         COALESCE(f.group_name, group_record.name)           AS best_group_name,
+         workspace_record.name   AS workspace_name
+       FROM fs_tickets f
+       LEFT JOIN fs_people requester_person ON requester_person.fs_id = f.requester_fs_id
+       LEFT JOIN fs_people responder_person ON responder_person.fs_id = f.responder_fs_id
+       LEFT JOIN fs_records group_record
+              ON group_record.kind = 'group' AND group_record.fs_id = f.group_fs_id
+       LEFT JOIN fs_records workspace_record
+              ON workspace_record.kind = 'workspace' AND workspace_record.fs_id = f.workspace_id
+       LEFT JOIN users requester
+              ON lower(requester.email) = lower(COALESCE(f.requester_email, requester_person.email))
+       LEFT JOIN users assignee
+              ON lower(assignee.email) = lower(responder_person.email)
+       LEFT JOIN support_groups local_group
+              ON lower(local_group.name) = lower(COALESCE(f.group_name, group_record.name))
+     )
+     INSERT INTO tickets (
+       ticket_ref, title, description, priority, status, workspace,
+       requester_id, created_by_user_id, assigned_to_user_id, assigned_group_id,
+       category, sub_category, source, ticket_type,
+       created_at, updated_at, due_at, closed_at, resolved_at, first_responded_at,
+       sla_pct, origin, external_id,
+       external_requester_name, external_requester_email,
+       external_assignee_name, external_group_name
+     )
+     SELECT
+       'FS-' || s.fs_id,
+       COALESCE(NULLIF(TRIM(s.subject), ''), 'Freshservice ticket ' || s.fs_id),
+       s.description_text,
+       COALESCE($1::jsonb ->> s.priority_label, 'Medium'),
+       COALESCE($2::jsonb ->> s.status_label, 'Closed'),
+       COALESCE(NULLIF(TRIM(s.workspace_name), ''), 'IT'),
+       s.local_requester_id,
+       s.local_requester_id,
+       s.local_assignee_id,
+       s.local_group_id,
+       s.category,
+       s.sub_category,
+       s.source_label,
+       s.ticket_type,
+       s.created_at,
+       s.updated_at,
+       s.due_by,
+       s.closed_at,
+       s.resolved_at,
+       s.first_responded_at,
+       CASE
+         WHEN s.due_by IS NULL THEN NULL
+         WHEN COALESCE(s.resolved_at, s.closed_at) IS NULL THEN
+           CASE WHEN NOW() <= s.due_by THEN 100 ELSE 0 END
+         WHEN COALESCE(s.resolved_at, s.closed_at) <= s.due_by THEN 100
+         ELSE 0
+       END,
+       'freshservice',
+       s.fs_id::TEXT,
+       s.best_requester_name,
+       s.best_requester_email,
+       s.best_assignee_name,
+       s.best_group_name
+     FROM source s
+     WHERE COALESCE(s.spam, FALSE) = FALSE
+       AND COALESCE(s.deleted, FALSE) = FALSE
+     ON CONFLICT (external_id) DO UPDATE SET
+       title = EXCLUDED.title,
+       description = COALESCE(EXCLUDED.description, tickets.description),
+       priority = EXCLUDED.priority,
+       status = EXCLUDED.status,
+       workspace = EXCLUDED.workspace,
+       requester_id = COALESCE(EXCLUDED.requester_id, tickets.requester_id),
+       assigned_to_user_id = COALESCE(EXCLUDED.assigned_to_user_id, tickets.assigned_to_user_id),
+       assigned_group_id = COALESCE(EXCLUDED.assigned_group_id, tickets.assigned_group_id),
+       category = EXCLUDED.category,
+       sub_category = EXCLUDED.sub_category,
+       source = EXCLUDED.source,
+       ticket_type = EXCLUDED.ticket_type,
+       updated_at = EXCLUDED.updated_at,
+       due_at = EXCLUDED.due_at,
+       closed_at = EXCLUDED.closed_at,
+       resolved_at = EXCLUDED.resolved_at,
+       first_responded_at = EXCLUDED.first_responded_at,
+       sla_pct = EXCLUDED.sla_pct,
+       external_requester_name = COALESCE(EXCLUDED.external_requester_name, tickets.external_requester_name),
+       external_requester_email = COALESCE(EXCLUDED.external_requester_email, tickets.external_requester_email),
+       external_assignee_name = COALESCE(EXCLUDED.external_assignee_name, tickets.external_assignee_name),
+       external_group_name = COALESCE(EXCLUDED.external_group_name, tickets.external_group_name)`,
+    [JSON.stringify(TICKET_PRIORITY_MAP), JSON.stringify(TICKET_STATUS_MAP)]
+  );
+
+  log(`  tickets written: ${promoted.rowCount}`);
+  bump("promoted_tickets", promoted.rowCount);
+
+  // Point the mirror back at the helpdesk row it produced.
+  await pool.query(
+    `UPDATE fs_tickets f
+        SET local_ticket_id = t.id
+       FROM tickets t
+      WHERE t.external_id = f.fs_id::TEXT
+        AND f.local_ticket_id IS DISTINCT FROM t.id`
+  );
+
+  const comments = await pool.query(
+    `INSERT INTO ticket_comments (
+       ticket_id, author_user_id, body, is_internal, created_at,
+       external_id, author_name, author_email, origin
+     )
+     SELECT
+       t.id,
+       author.id,
+       COALESCE(NULLIF(TRIM(c.body_text), ''), '(no message content captured)'),
+       COALESCE(c.private, FALSE),
+       c.created_at,
+       'fs-' || c.fs_id,
+       COALESCE(person.name, c.from_email),
+       COALESCE(person.email, c.from_email),
+       'freshservice'
+     FROM fs_ticket_conversations c
+     JOIN tickets t ON t.external_id = c.ticket_fs_id::TEXT
+     LEFT JOIN fs_people person ON person.fs_id = c.user_fs_id
+     LEFT JOIN users author ON lower(author.email) = lower(person.email)
+     ON CONFLICT (external_id) WHERE external_id IS NOT NULL DO UPDATE SET
+       body = EXCLUDED.body,
+       is_internal = EXCLUDED.is_internal,
+       author_user_id = COALESCE(EXCLUDED.author_user_id, ticket_comments.author_user_id),
+       author_name = COALESCE(EXCLUDED.author_name, ticket_comments.author_name),
+       author_email = COALESCE(EXCLUDED.author_email, ticket_comments.author_email)`
+  );
+
+  log(`  replies written: ${comments.rowCount}`);
+  bump("promoted_comments", comments.rowCount);
+
+  const summary = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE origin = 'freshservice')                         AS imported,
+       COUNT(*) FILTER (WHERE origin = 'freshservice' AND requester_id IS NULL) AS no_local_requester,
+       COUNT(*) FILTER (WHERE origin = 'freshservice' AND status NOT IN ('Resolved','Closed')) AS still_active
+       FROM tickets`
+  );
+
+  const row = summary.rows[0];
+  log(
+    `  imported ${row.imported} tickets (${row.still_active} still active, ${row.no_local_requester} without a local requester account)`
+  );
+}
+
 // --- runner ---------------------------------------------------------------
 
 const PHASES = {
@@ -953,6 +1135,7 @@ const PHASES = {
   files: syncAttachmentFiles,
   assets: syncAssets,
   link: linkLocalTickets,
+  promote: promoteToTickets,
 };
 
 const ALL_PHASES = [
@@ -963,6 +1146,7 @@ const ALL_PHASES = [
   "files",
   "assets",
   "link",
+  "promote",
 ];
 
 async function main() {

@@ -48,7 +48,9 @@ export default function TicketWorkspace() {
   const operationsUser = OPERATIONS_ROLES.has(user?.role);
   const employeeExperience = user?.role === "user" || employeeView || location.pathname.startsWith("/employee");
 
-  const defaultStatus = searchParams.get("status") || (employeeExperience ? "All" : "All");
+  // Two years of imported Freshservice history shares the list with live work, so
+  // staff land on unresolved tickets and reach the rest through search.
+  const defaultStatus = searchParams.get("status") || (employeeExperience ? "All" : "Unresolved");
   const [tickets, setTickets] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -59,10 +61,21 @@ export default function TicketWorkspace() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
+  // The search term goes to the server because the client only holds a page of
+  // tickets, and history reaches back to June 2024.
+  const [appliedQuery, setAppliedQuery] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setAppliedQuery(query.trim()), 350);
+    return () => clearTimeout(timer);
+  }, [query]);
+
   const fetchTickets = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const response = employeeExperience ? await ticketsApi.getEmployeeView() : await ticketsApi.getAll({ limit: 500 });
+      const response = employeeExperience
+        ? await ticketsApi.getEmployeeView()
+        : await ticketsApi.getAll({ limit: 500, ...(appliedQuery ? { search: appliedQuery } : {}) });
       const data = Array.isArray(response.data) ? response.data : [];
       setTickets(data);
       setSelectedTicket((current) => data.find((item) => String(item.id) === String(current?.id)) || data[0] || null);
@@ -70,7 +83,7 @@ export default function TicketWorkspace() {
       setError(getErrorMessage(requestError, "Tickets could not be loaded."));
       setTickets([]); setSelectedTicket(null);
     } finally { setLoading(false); }
-  }, [employeeExperience]);
+  }, [appliedQuery, employeeExperience]);
 
   useEffect(() => { fetchTickets(); }, [fetchTickets]);
   useEffect(() => {
