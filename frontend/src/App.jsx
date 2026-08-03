@@ -9,6 +9,8 @@ import {
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./hooks/useAuth";
 
+import AdminAuditPage from "./pages/AdminAuditPage";
+import AdminHealthPage from "./pages/AdminHealthPage";
 import AdminSettings from "./pages/AdminSettings";
 import AdminUsers from "./pages/AdminUsers";
 import AssetsPage from "./pages/AssetsPage";
@@ -349,6 +351,28 @@ function AppRoutes({ moduleBase }) {
           <PrivateRoute>
             <AdminRoute>
               <EmployeeAccessPreview />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin/audit"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminAuditPage />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin/health"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminHealthPage />
             </AdminRoute>
           </PrivateRoute>
         }

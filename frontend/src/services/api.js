@@ -63,6 +63,12 @@ export const adminControlsApi = {
 
   updateUserEmailPreferences: (userId, data) =>
     api.put(`/admin-controls/${userId}/email-preferences`, data),
+
+  getAudit: (params) =>
+    api.get("/admin-controls/audit", { params }),
+
+  getHealth: () =>
+    api.get("/admin-controls/health"),
 };
 
 export const settingsApi = {

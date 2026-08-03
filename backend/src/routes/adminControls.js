@@ -123,6 +123,83 @@ function normalizeEmailPreferences(row) {
   };
 }
 
+router.get("/audit", async (request, response) => {
+  const limit = Math.min(Math.max(Number(request.query.limit) || 100, 1), 500);
+  try {
+    const result = await pool.query(
+      `SELECT
+         a.id, a.action, a.old_value, a.new_value, a.details, a.created_at,
+         actor.name AS actor_name, actor.email AS actor_email,
+         target.name AS target_name, target.email AS target_email
+       FROM administration_audit_log a
+       LEFT JOIN users actor ON actor.id = a.actor_user_id
+       LEFT JOIN users target ON target.id = a.target_user_id
+       ORDER BY a.created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return response.json(result.rows);
+  } catch (error) {
+    if (error.code === "42P01") {
+      return response.json([]);
+    }
+    console.error("Fetch admin audit failed:", error);
+    return response.status(500).json({ error: "Failed to fetch audit activity" });
+  }
+});
+
+router.get("/health", async (_request, response) => {
+  const checks = {};
+  try {
+    await pool.query("SELECT 1");
+    checks.database = { status: "healthy" };
+  } catch (error) {
+    checks.database = { status: "unhealthy", detail: error.message };
+  }
+
+  try {
+    const sync = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE last_microsoft_sync_at IS NOT NULL)::integer AS synced_users,
+         MAX(last_microsoft_sync_at) AS last_sync_at
+       FROM users`
+    );
+    checks.microsoft_directory = {
+      status: sync.rows[0].last_sync_at ? "healthy" : "unknown",
+      syncedUsers: sync.rows[0].synced_users,
+      lastSyncAt: sync.rows[0].last_sync_at,
+    };
+  } catch (error) {
+    checks.microsoft_directory = { status: "unhealthy", detail: error.message };
+  }
+
+  try {
+    const tickets = await pool.query(
+      `SELECT
+         COUNT(*)::integer AS total,
+         COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed'))::integer AS open
+       FROM tickets`
+    );
+    checks.tickets = {
+      status: "healthy",
+      total: tickets.rows[0].total,
+      open: tickets.rows[0].open,
+    };
+  } catch (error) {
+    checks.tickets = { status: "unhealthy", detail: error.message };
+  }
+
+  const unhealthy = Object.values(checks).some((item) => item.status === "unhealthy");
+  return response.status(unhealthy ? 503 : 200).json({
+    ok: !unhealthy,
+    status: unhealthy ? "degraded" : "healthy",
+    service: "ATD Helpdesk",
+    emailProvider: process.env.EMAIL_PROVIDER || "graph",
+    timestamp: new Date().toISOString(),
+    checks,
+  });
+});
+
 router.get("/:id", async (request, response) => {
   try {
     const target = await loadTarget(request.params.id);

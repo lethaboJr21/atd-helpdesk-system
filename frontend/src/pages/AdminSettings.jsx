@@ -35,7 +35,7 @@ const ITEMS = [
     icon: Cloud,
     title: "Microsoft Directory",
     description:
-      "Synchronize Microsoft 365 identities while preserving portal roles and archive state.",
+      "Open Active Users and sync Microsoft 365 identities (use Sync Microsoft 365).",
     path: "/admin/users?view=active",
     available: true,
   },
@@ -60,16 +60,16 @@ const ITEMS = [
     title: "Audit Activity",
     description:
       "Review administrative and security-relevant actions.",
-    path: null,
-    available: false,
+    path: "/admin/audit",
+    available: true,
   },
   {
     icon: HeartPulse,
     title: "System Health",
     description:
       "Monitor APIs, database connectivity, Graph email and scheduled jobs.",
-    path: null,
-    available: false,
+    path: "/admin/health",
+    available: true,
   },
 ];
 

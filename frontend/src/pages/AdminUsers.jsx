@@ -21,8 +21,8 @@ import { adminControlsApi, azureApi, userApi } from "../services/api";
 
 const VIEWS = [
   { id: "pending", label: "Pending Signups", icon: UserCheck, countKey: "pending" },
-  { id: "active", label: "Active Users", icon: CheckCircle2, countKey: "active", hint: "Signed in at least once" },
-  { id: "deactivated", label: "Never signed in / Inactive", icon: UserX, countKey: "deactivated", hint: "Synced from Microsoft but not yet used, or deactivated" },
+  { id: "active", label: "Active Users", icon: CheckCircle2, countKey: "active", hint: "Microsoft-enabled people, same as Freshservice" },
+  { id: "deactivated", label: "Deactivated", icon: UserX, countKey: "deactivated", hint: "Admin-deactivated or Microsoft account disabled" },
   { id: "archived", label: "Archived Accounts", icon: Archive, countKey: "archived" },
   { id: "external", label: "External Emails", icon: ExternalLink, countKey: "external" },
   { id: "non-person", label: "Non-Person Accounts", icon: ShieldCheck, countKey: "non_person", hint: "Shared mailboxes and service accounts" },

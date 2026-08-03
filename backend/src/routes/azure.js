@@ -55,6 +55,7 @@ async function updateExistingUser(existingUser, microsoftUser, email) {
         WHEN archived_at IS NOT NULL THEN status
         WHEN microsoft_account_enabled=FALSE THEN 'inactive'
         WHEN deactivated_at IS NOT NULL THEN 'inactive'
+        WHEN $11=TRUE THEN 'active'
         WHEN $15=TRUE THEN 'active'
         ELSE status
       END,
@@ -78,8 +79,9 @@ async function updateExistingUser(existingUser, microsoftUser, email) {
 async function createUser(microsoftUser, email) {
   const accountEnabled = isMicrosoftAccountEnabled(microsoftUser);
   const approved = AUTO_APPROVE_MICROSOFT_USERS && accountEnabled;
-  // Synced users remain inactive until first successful portal sign-in.
-  const status = "inactive";
+  // Freshservice-style: Microsoft-enabled people are active in the directory
+  // immediately. Portal "Never signed in" is a state label, not a bucket.
+  const status = accountEnabled ? "active" : "inactive";
 
   const result = await pool.query(
     `
