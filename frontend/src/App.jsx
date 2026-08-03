@@ -11,6 +11,7 @@ import { useAuth } from "./hooks/useAuth";
 
 import AdminAuditPage from "./pages/AdminAuditPage";
 import AdminHealthPage from "./pages/AdminHealthPage";
+import AdminMicrosoftDirectory from "./pages/AdminMicrosoftDirectory";
 import AdminSettings from "./pages/AdminSettings";
 import AdminUsers from "./pages/AdminUsers";
 import AssetsPage from "./pages/AssetsPage";
@@ -329,6 +330,17 @@ function AppRoutes({ moduleBase }) {
           <PrivateRoute>
             <AdminRoute>
               <AdminUsers />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin/microsoft"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminMicrosoftDirectory />
             </AdminRoute>
           </PrivateRoute>
         }

@@ -35,8 +35,8 @@ const ITEMS = [
     icon: Cloud,
     title: "Microsoft Directory",
     description:
-      "Open Active Users and sync Microsoft 365 identities (use Sync Microsoft 365).",
-    path: "/admin/users?view=active",
+      "Browse Microsoft 365 identities and sync them into the helpdesk.",
+    path: "/admin/microsoft",
     available: true,
   },
   {
