@@ -1,13 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ATD">
-  <rect width="64" height="64" rx="14" fill="#152349"/>
-  <text
-    x="32"
-    y="40"
-    text-anchor="middle"
-    font-family="Arial Black, Arial, sans-serif"
-    font-size="22"
-    font-style="italic"
-    font-weight="800"
-    fill="#3b99fc"
-  >ATD</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#152349"/>
+  <path fill="#3b99fc" d="M6.2 23 L11.4 9.2 H14.2 L19.4 23 H16.5 L15.5 20.1 H10.1 L9.1 23 Z M11 17.4 H14.6 L12.8 12.2 Z"/>
+  <path fill="#5eb0ff" d="M20.2 23 V11.1 H22.8 V20.6 H28 V23 Z"/>
 </svg>

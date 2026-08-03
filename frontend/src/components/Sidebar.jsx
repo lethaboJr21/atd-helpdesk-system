@@ -210,7 +210,7 @@ export default function Sidebar({
           )}
         >
           <img
-            src={`${import.meta.env.BASE_URL}atd-logo-mark.png`}
+            src={`/helpdesk/atd-logo-mark.png`}
             alt="ATD"
             className="h-11 w-11 rounded-2xl bg-white object-contain p-1.5"
           />
