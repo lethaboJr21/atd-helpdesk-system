@@ -173,6 +173,8 @@ function buildTicketFilters(query, restrictToEmail = null) {
   if (search) {
     values.push(search);
     const index = values.length;
+    // Literal ILIKE covers stock codes like N1XB-16450-AAW; english full-text
+    // splits on hyphens and often misses them.
     clauses.push(`(
       to_tsvector('english',
         coalesce(t.subject, '') || ' ' ||
@@ -181,13 +183,18 @@ function buildTicketFilters(query, restrictToEmail = null) {
         coalesce(t.requester_email, '')
       ) @@ websearch_to_tsquery('english', $${index})
       OR t.subject ILIKE '%' || $${index} || '%'
+      OR t.description_text ILIKE '%' || $${index} || '%'
       OR t.requester_email ILIKE '%' || $${index} || '%'
+      OR t.requester_name ILIKE '%' || $${index} || '%'
       OR t.fs_id::TEXT = regexp_replace($${index}, '\\D', '', 'g')
       OR EXISTS (
         SELECT 1 FROM fs_ticket_conversations c
          WHERE c.ticket_fs_id = t.fs_id
-           AND to_tsvector('english', coalesce(c.body_text, ''))
-               @@ websearch_to_tsquery('english', $${index})
+           AND (
+             coalesce(c.body_text, '') ILIKE '%' || $${index} || '%'
+             OR to_tsvector('english', coalesce(c.body_text, ''))
+                 @@ websearch_to_tsquery('english', $${index})
+           )
       )
     )`);
   }
