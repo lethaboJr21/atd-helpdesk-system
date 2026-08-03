@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
-import { AlertCircle, Eye, EyeOff, Lock, Mail } from "lucide-react";
+import { AlertCircle } from "lucide-react";
 
 import { useAuth } from "../hooks/useAuth";
 
@@ -21,7 +21,6 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -89,123 +88,94 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#eef1f8] px-4 py-8 font-[DM_Sans,system-ui,sans-serif]">
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,#152349_0%,#152349_38%,#eef1f8_38%)]"
-      />
-
-      <div className="relative z-10 w-full max-w-[480px]">
-        <div className="rounded-[20px] bg-white px-8 py-10 shadow-[0_8px_40px_rgba(0,0,0,0.1),0_1px_3px_rgba(0,0,0,0.04)] sm:px-12">
-          <div className="mb-8 flex flex-col items-center text-center">
-            <img
-              src={`${import.meta.env.BASE_URL}atd-logo.png`}
-              alt="ATD Alliance"
-              className="mb-4 h-14 w-auto object-contain"
-            />
-            <h1 className="text-[22px] font-extrabold tracking-tight text-[#0d1829]">
-              IT Helpdesk
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">Sign in to continue</p>
-          </div>
-
-          {error ? (
-            <div className="mb-5 flex items-center gap-2 rounded-[10px] border border-red-200 bg-red-50 px-4 py-3 text-[13px] text-red-600">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          ) : null}
-
-          <button
-            type="button"
-            onClick={loginWithMicrosoft}
-            disabled={submitting}
-            className="flex w-full items-center justify-center gap-3 rounded-xl bg-[#152349] px-4 py-[15px] text-[15px] font-bold text-white shadow-[0_2px_12px_rgba(21,35,73,0.3)] transition hover:bg-[#0d1829] hover:-translate-y-px disabled:opacity-60"
-          >
-            <MicrosoftLogo />
-            Sign in with Microsoft
-          </button>
-
-          <div className="my-6 flex items-center gap-4">
-            <div className="h-px flex-1 bg-slate-200" />
-            <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
-              OR
-            </span>
-            <div className="h-px flex-1 bg-slate-200" />
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                  autoComplete="username"
-                  className="w-full rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 py-[13px] pl-11 pr-4 text-sm text-[#0d1829] outline-none transition focus:border-[#3b99fc] focus:bg-white focus:shadow-[0_0_0_3px_rgba(59,153,252,0.1)]"
-                  placeholder="you@atdalliance.co.za"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-1.5 block text-[13px] font-semibold text-slate-700">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                  required
-                  autoComplete="current-password"
-                  className="w-full rounded-[10px] border-[1.5px] border-slate-200 bg-slate-50 py-[13px] pl-11 pr-11 text-sm text-[#0d1829] outline-none transition focus:border-[#3b99fc] focus:bg-white focus:shadow-[0_0_0_3px_rgba(59,153,252,0.1)]"
-                  placeholder="Enter password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((current) => !current)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-600"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="mt-1 w-full rounded-xl border-[1.5px] border-[#d1d9e8] bg-white py-3.5 text-sm font-bold text-[#152349] transition hover:-translate-y-px hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {submitting ? "Signing in..." : "Sign In"}
-            </button>
-          </form>
-
-          <p className="mt-6 text-center text-sm text-slate-500">
-            Don&apos;t have an account?{" "}
-            <Link to="/signup" className="font-semibold text-[#1a5fd1] hover:underline">
-              Sign Up
-            </Link>
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
+        <div className="mb-8 flex flex-col items-center">
+          <img
+            src={`${import.meta.env.BASE_URL}atd-logo.png`}
+            alt="ATD Alliance"
+            className="mb-4 h-14 w-auto object-contain"
+          />
+          <h1 className="text-2xl font-bold text-slate-950">
+            ATD Alliance Portal
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            IT Helpdesk Management System
           </p>
         </div>
 
-        <p className="mt-5 text-center text-xs text-slate-400">
-          Need access?{" "}
-          <a
-            href="mailto:itsupport@atdalliance.co.za"
-            className="font-semibold text-[#1a5fd1] hover:underline"
+        {error && (
+          <div className="mb-4 flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle className="h-4 w-4 flex-shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={loginWithMicrosoft}
+          disabled={submitting}
+          className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+        >
+          <MicrosoftLogo />
+          Sign in with Microsoft 365
+        </button>
+
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-px flex-1 bg-slate-200" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            or use local login
+          </span>
+          <div className="h-px flex-1 bg-slate-200" />
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-slate-700">
+              Email Address
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              placeholder="you@atdalliance.co.za"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-semibold text-slate-700">
+              Password
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              placeholder="Enter password"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full rounded-xl bg-blue-600 py-3 text-sm font-bold text-white transition hover:bg-blue-700 disabled:opacity-60"
           >
-            Contact IT
-          </a>
-          <span className="mx-2">·</span>
-          © {new Date().getFullYear()} ATD Alliance
+            {submitting ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
+
+        <p className="mt-6 text-center text-sm text-slate-500">
+          Don&apos;t have an account?{" "}
+          <Link to="/signup" className="font-semibold text-blue-600 hover:text-blue-700">
+            Sign Up
+          </Link>
+        </p>
+
+        <p className="mt-6 text-center text-xs text-slate-400">
+          © {new Date().getFullYear()} ATD Alliance · portal.atdalliance.co.za
         </p>
       </div>
     </div>
