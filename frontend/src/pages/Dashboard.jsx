@@ -46,6 +46,7 @@ import api, {
   knowledgeApi,
   notificationApi,
   ticketsApi,
+  statsApi,
 } from "../services/api";
 
 const DASHBOARD_TICKET_LIMIT = 100;
@@ -197,6 +198,7 @@ export default function Dashboard() {
   const { logout, user } = useAuth();
 
   const [tickets, setTickets] = useState([]);
+  const [kpiStats, setKpiStats] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [assetStats, setAssetStats] = useState(null);
   const [knowledgeArticles, setKnowledgeArticles] = useState([]);
@@ -226,6 +228,7 @@ export default function Dashboard() {
 
     const results = await Promise.allSettled([
       ticketsApi.getAll({ limit: DASHBOARD_TICKET_LIMIT }),
+      statsApi.getDashboard(),
       notificationApi.getAll({ module: NOTIFICATION_MODULE }),
       assetsApi.getStats(),
       knowledgeApi.getAll(),
@@ -234,11 +237,18 @@ export default function Dashboard() {
 
     const [
       ticketResult,
+      statsResult,
       notificationResult,
       assetResult,
       knowledgeResult,
       userResult,
     ] = results;
+
+    if (statsResult.status === "fulfilled" && statsResult.value?.data) {
+      setKpiStats(statsResult.value.data);
+    } else {
+      setKpiStats(null);
+    }
 
     if (ticketResult.status === "fulfilled") {
       const payload = ticketResult.value.data;
@@ -418,6 +428,17 @@ export default function Dashboard() {
       averageResolution,
     };
   }, [tickets]);
+
+  const dashboardKpis = kpiStats
+    ? {
+        open: kpiStats.open ?? statistics.open,
+        total: kpiStats.total ?? statistics.total,
+        critical: kpiStats.critical ?? statistics.critical,
+        slaCompliance: kpiStats.slaCompliance ?? statistics.slaCompliance,
+        averageResolution:
+          kpiStats.averageResolution ?? statistics.averageResolution,
+      }
+    : statistics;
 
   const volumeData = useMemo(() => {
     const now = new Date();
@@ -783,8 +804,8 @@ export default function Dashboard() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <StatCard
               title="Open Tickets"
-              value={statistics.open}
-              supportingValue={`${statistics.total} total`}
+              value={dashboardKpis.open}
+              supportingValue={`${dashboardKpis.total} total`}
               supportingText="tickets in system"
               icon={Ticket}
               accent="bg-blue-100 text-blue-700"
@@ -792,7 +813,7 @@ export default function Dashboard() {
 
             <StatCard
               title="SLA Compliance"
-              value={statistics.slaCompliance}
+              value={dashboardKpis.slaCompliance}
               supportingValue="Live"
               supportingText="based on due dates"
               icon={Gauge}
@@ -801,7 +822,7 @@ export default function Dashboard() {
 
             <StatCard
               title="Critical / At Risk"
-              value={statistics.critical}
+              value={dashboardKpis.critical}
               supportingValue="Review"
               supportingText="tickets needing attention"
               icon={AlertTriangle}
@@ -810,7 +831,7 @@ export default function Dashboard() {
 
             <StatCard
               title="Average Resolution"
-              value={statistics.averageResolution}
+              value={dashboardKpis.averageResolution}
               supportingValue="Closed"
               supportingText="average duration"
               icon={Clock}

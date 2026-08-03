@@ -4,30 +4,54 @@ const auth = require('../middleware/auth')
 
 router.use(auth)
 
-// GET /api/stats/dashboard  — KPI cards
+// GET /api/stats/dashboard  — KPI cards (full ticket table, not a page sample)
 router.get('/dashboard', async (req, res) => {
   try {
-    const [openRes, pendingRes, slaRes, avgRes] = await Promise.all([
-      // Imported tickets carry a Freshservice category while natively raised ones
-      // only set a workspace, so fall back before comparing or the NULL swallows the row.
-      pool.query(`SELECT COUNT(*) FROM tickets WHERE status NOT IN ('Closed','Resolved') AND COALESCE(category, workspace, '') <> 'Change Management'`),
-      pool.query(`SELECT COUNT(*) FROM tickets WHERE status IN ('Open','Assigned','Waiting Approval')`),
-      pool.query(`SELECT ROUND(AVG(sla_pct)) AS sla FROM tickets WHERE created_at > NOW() - INTERVAL '7 days'`),
-      pool.query(`SELECT ROUND(AVG(EXTRACT(EPOCH FROM (COALESCE(closed_at, NOW()) - created_at))/60)) AS mins FROM tickets WHERE created_at > NOW() - INTERVAL '7 days'`),
-    ])
+    const { rows } = await pool.query(`
+      SELECT
+        COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed'))::int AS open_tickets,
+        COUNT(*) FILTER (
+          WHERE status NOT IN ('Resolved','Closed')
+            AND (priority = 'Critical' OR (due_at IS NOT NULL AND due_at < NOW()))
+        )::int AS critical_at_risk,
+        COUNT(*) FILTER (WHERE due_at IS NOT NULL)::int AS with_due,
+        COUNT(*) FILTER (
+          WHERE due_at IS NOT NULL
+            AND COALESCE(closed_at, NOW()) <= due_at
+        )::int AS within_sla,
+        ROUND(
+          AVG(EXTRACT(EPOCH FROM (closed_at - created_at)))
+          FILTER (WHERE closed_at IS NOT NULL AND status IN ('Resolved','Closed'))
+        )::bigint AS avg_close_secs
+      FROM tickets
+    `)
 
-    const avgMins = parseInt(avgRes.rows[0].mins) || 0
-    const avgFmt = avgMins >= 60 ? `${Math.floor(avgMins/60)}h ${avgMins%60}m` : `${avgMins}m`
+    const row = rows[0]
+    const withDue = row.with_due || 0
+    const withinSla = row.within_sla || 0
+    const avgSecs = Number(row.avg_close_secs) || 0
+    let averageResolution = 'N/A'
+    if (avgSecs > 0) {
+      const days = Math.floor(avgSecs / 86400)
+      const hours = Math.floor((avgSecs % 86400) / 3600)
+      const minutes = Math.floor((avgSecs % 3600) / 60)
+      if (days > 0) averageResolution = hours > 0 ? `${days}d ${hours}h` : `${days}d`
+      else if (hours > 0) averageResolution = `${hours}h ${minutes}m`
+      else averageResolution = `${minutes}m`
+    }
 
     res.json({
-      open_incidents:    parseInt(openRes.rows[0].count),
-      pending_requests:  parseInt(pendingRes.rows[0].count),
-      sla_compliance:    parseInt(slaRes.rows[0].sla) || 0,
-      avg_resolution:    avgFmt,
-      incidents_delta:   '+3',
-      requests_delta:    '-2',
-      sla_delta:         '+1.2%',
-      resolution_delta:  '12m',
+      open: row.open_tickets,
+      total: row.total,
+      critical: row.critical_at_risk,
+      slaCompliance: withDue ? `${Math.round((withinSla / withDue) * 100)}%` : 'N/A',
+      averageResolution,
+      // legacy keys kept for older clients
+      open_incidents: row.open_tickets,
+      pending_requests: row.open_tickets,
+      sla_compliance: withDue ? Math.round((withinSla / withDue) * 100) : 0,
+      avg_resolution: averageResolution,
     })
   } catch (err) {
     console.error(err)
