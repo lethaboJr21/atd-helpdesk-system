@@ -92,7 +92,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
         <div className="mb-8 flex flex-col items-center">
           <img
-            src="/helpdesk/atd-logo.png?v=2"
+            src="/helpdesk/atd-logo.png?v=3"
             alt="ATD Alliance"
             className="mb-4 h-14 w-auto object-contain"
           />
