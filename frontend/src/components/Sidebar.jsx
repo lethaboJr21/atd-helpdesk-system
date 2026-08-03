@@ -210,9 +210,11 @@ export default function Sidebar({
               : "gap-3 px-6"
           )}
         >
-          <div className="rounded-2xl bg-blue-500 p-3">
-            <Headphones className="h-7 w-7" />
-          </div>
+          <img
+            src={`${import.meta.env.BASE_URL}atd-logo-mark.png`}
+            alt="ATD"
+            className="h-11 w-11 rounded-2xl bg-white object-contain p-1.5"
+          />
 
           {!collapsed && (
             <div>
