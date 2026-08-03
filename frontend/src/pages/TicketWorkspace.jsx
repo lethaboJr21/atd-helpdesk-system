@@ -116,8 +116,38 @@ export default function TicketWorkspace() {
     finally { setActionLoading(false); }
   };
 
-  const selectedGroup = groups.find((group) => String(group.id) === String(selectedTicket?.assigned_group_id));
+  const selectedGroup =
+    groups.find((group) => String(group.id) === String(selectedTicket?.assigned_group_id)) ||
+    groups.find(
+      (group) =>
+        selectedTicket?.assigned_group_name &&
+        String(group.name).toLowerCase() === String(selectedTicket.assigned_group_name).toLowerCase()
+    ) ||
+    null;
+
+  const assigneeOptions = useMemo(() => {
+    const members = Array.isArray(selectedGroup?.members) ? [...selectedGroup.members] : [];
+    if (
+      selectedTicket?.assigned_to_user_id &&
+      !members.some((member) => String(member.id) === String(selectedTicket.assigned_to_user_id))
+    ) {
+      members.unshift({
+        id: selectedTicket.assigned_to_user_id,
+        name: selectedTicket.assigned_to_name || "Current assignee",
+        email: selectedTicket.assigned_to_email || "",
+      });
+    }
+    return members;
+  }, [selectedGroup, selectedTicket]);
+
+  const resolvedGroupId = selectedTicket?.assigned_group_id || selectedGroup?.id || null;
   const canOperate = operationsUser && !employeeExperience;
+
+  const assignTicket = (assigneeId, groupId = resolvedGroupId) =>
+    runAction(
+      () => ticketsApi.assign(selectedTicket.id, assigneeId || null, groupId || null),
+      assigneeId ? "Ticket assignment updated." : "Ticket unassigned."
+    );
 
   return (
     <div className="min-h-screen bg-slate-100 p-5 text-slate-900 xl:p-8">
@@ -138,7 +168,75 @@ export default function TicketWorkspace() {
           </section>
 
           <aside className="xl:sticky xl:top-6 xl:self-start">
-            {!selectedTicket ? <div className="rounded-2xl border bg-white p-6 text-center text-slate-500">Select a ticket to view its details.</div> : <div className="rounded-2xl border bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-blue-700">{selectedTicket.ticket_ref}</p><h2 className="mt-1 text-lg font-bold">{selectedTicket.title}</h2></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${statusClass(selectedTicket.status)}`}>{selectedTicket.status}</span></div><p className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{selectedTicket.description || "No description"}</p><div className="mt-4 grid grid-cols-2 gap-3"><Info label="Priority" value={selectedTicket.priority} /><Info label="Workspace" value={selectedTicket.workspace} /><Info label="Group" value={selectedTicket.assigned_group_name || "Triage"} /><Info label="Assigned To" value={selectedTicket.assigned_to_name || "Unassigned"} /></div><button onClick={() => navigate(`/tickets/${selectedTicket.id}`)} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white"><ExternalLink className="h-4 w-4" />Open Full Ticket</button>{canOperate && <div className="mt-4 space-y-3 border-t pt-4"><select value={selectedTicket.assigned_to_user_id || ""} onChange={(event) => runAction(() => ticketsApi.assign(selectedTicket.id, event.target.value || null, selectedTicket.assigned_group_id || null), "Ticket assignment updated.")} disabled={actionLoading || !selectedTicket.assigned_group_id} className="w-full rounded-xl border px-3 py-2"><option value="">Unassigned</option>{(selectedGroup?.members || []).map((member) => <option key={member.id} value={member.id}>{member.name || member.email}</option>)}</select><button onClick={() => runAction(() => ticketsApi.assign(selectedTicket.id, user.id, selectedTicket.assigned_group_id || null), "Ticket assigned to you.")} disabled={actionLoading} className="inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold"><UserCheck className="h-4 w-4" />Assign to Me</button><div className="grid grid-cols-2 gap-2"><button onClick={() => runAction(() => ticketsApi.resolve(selectedTicket.id), "Ticket resolved.")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white"><CheckCircle2 className="h-4 w-4" />Resolve</button><button onClick={() => runAction(() => ticketsApi.close(selectedTicket.id), "Ticket closed.")} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white"><XCircle className="h-4 w-4" />Close</button></div></div>}{selectedTicket.priority === "Critical" && <div className="mt-4 flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"><AlertTriangle className="h-4 w-4 shrink-0" />Critical ticket requiring priority attention.</div>}</div>}
+            {!selectedTicket ? <div className="rounded-2xl border bg-white p-6 text-center text-slate-500">Select a ticket to view its details.</div> : <div className="rounded-2xl border bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-bold text-blue-700">{selectedTicket.ticket_ref}</p><h2 className="mt-1 text-lg font-bold">{selectedTicket.title}</h2></div><span className={`rounded-full px-2 py-1 text-xs font-bold ${statusClass(selectedTicket.status)}`}>{selectedTicket.status}</span></div><p className="mt-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-4 text-sm text-slate-600">{selectedTicket.description || "No description"}</p><div className="mt-4 grid grid-cols-2 gap-3"><Info label="Priority" value={selectedTicket.priority} /><Info label="Workspace" value={selectedTicket.workspace} /><Info label="Group" value={selectedTicket.assigned_group_name || "Triage"} /><Info label="Assigned To" value={selectedTicket.assigned_to_name || "Unassigned"} /></div><button onClick={() => navigate(`/tickets/${selectedTicket.id}`)} className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-3 text-sm font-bold text-white"><ExternalLink className="h-4 w-4" />Open Full Ticket</button>{canOperate && (
+                <div className="mt-4 space-y-3 border-t pt-4">
+                  <select
+                    value={resolvedGroupId || ""}
+                    onChange={(event) =>
+                      runAction(
+                        () =>
+                          ticketsApi.assign(
+                            selectedTicket.id,
+                            selectedTicket.assigned_to_user_id || null,
+                            event.target.value || null
+                          ),
+                        "Support group updated."
+                      )
+                    }
+                    disabled={actionLoading}
+                    className="w-full rounded-xl border px-3 py-2"
+                  >
+                    <option value="">Select support group</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={selectedTicket.assigned_to_user_id || ""}
+                    onChange={(event) => assignTicket(event.target.value || null)}
+                    disabled={actionLoading || !resolvedGroupId}
+                    className="w-full rounded-xl border px-3 py-2"
+                  >
+                    <option value="">Unassigned</option>
+                    {assigneeOptions.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name || member.email}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() =>
+                      assignTicket(
+                        user.id,
+                        resolvedGroupId || groups[0]?.id || null
+                      )
+                    }
+                    disabled={actionLoading}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Assign to Me
+                  </button>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => runAction(() => ticketsApi.resolve(selectedTicket.id), "Ticket resolved.")}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white"
+                    >
+                      <CheckCircle2 className="h-4 w-4" />
+                      Resolve
+                    </button>
+                    <button
+                      onClick={() => runAction(() => ticketsApi.close(selectedTicket.id), "Ticket closed.")}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Close
+                    </button>
+                  </div>
+                </div>
+              )}{selectedTicket.priority === "Critical" && <div className="mt-4 flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"><AlertTriangle className="h-4 w-4 shrink-0" />Critical ticket requiring priority attention.</div>}</div>}
           </aside>
         </div>
       </main>
