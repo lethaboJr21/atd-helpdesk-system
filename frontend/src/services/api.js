@@ -35,6 +35,7 @@ export const ticketsApi = {
   getMine: () => api.get("/tickets/my-tickets"),
   getEmployeeView: () =>api.get("/tickets/employee-view"),
   getById: (id) => api.get(`/tickets/${id}`),
+  getHistory: (id) => api.get(`/tickets/${id}/history`),
   create: (data) => api.post("/tickets", data),
   update: (id, data) => api.put(`/tickets/${id}`, data),
   updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),

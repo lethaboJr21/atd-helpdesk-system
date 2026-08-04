@@ -46,6 +46,22 @@ function canView(user,ticket){ return operations(user)||Number(ticket.requester_
 
 async function getTicket(ticketId,database=pool){ const result=await database.query(`${TICKET_SELECT} WHERE t.id=$1 LIMIT 1`,[ticketId]); return result.rows[0]||null; }
 async function history(database,ticketId,actorId,action,oldValue,newValue){ try{ await database.query(`INSERT INTO ticket_history(ticket_id,actor_user_id,action,old_value,new_value) VALUES($1,$2,$3,$4,$5)`,[ticketId,actorId||null,action,oldValue==null?null:String(oldValue),newValue==null?null:String(newValue)]); }catch(error){ if(error.code!=="42P01")console.error("Ticket history write failed:",error); } }
+function assignmentLabel(ticket){
+  if(!ticket)return "Unassigned";
+  const agent=ticket.assigned_to_name||(ticket.assigned_to_user_id?`User #${ticket.assigned_to_user_id}`:"Unassigned");
+  const group=ticket.assigned_group_name||(ticket.assigned_group_id?`Group #${ticket.assigned_group_id}`:"No group");
+  return `${agent} · ${group}`;
+}
+async function logAssignmentChange(database,ticketId,actorId,before,after){
+  const from=assignmentLabel(before);
+  const to=assignmentLabel(after);
+  if(from===to)return;
+  await history(database,ticketId,actorId,"assigned",from,to);
+}
+async function logStatusChange(database,ticketId,actorId,fromStatus,toStatus,action="status_changed"){
+  if(!toStatus||fromStatus===toStatus)return;
+  await history(database,ticketId,actorId,action,fromStatus||null,toStatus);
+}
 async function defaultGroup(database){ const configured=id(process.env.DEFAULT_HELPDESK_GROUP_ID); if(configured){ const found=await database.query(`SELECT id FROM support_groups WHERE id=$1 AND COALESCE(is_active,TRUE)=TRUE`,[configured]); if(found.rows[0])return configured; } const result=await database.query(`SELECT id FROM support_groups WHERE COALESCE(is_active,TRUE)=TRUE ORDER BY COALESCE(is_default_triage,FALSE) DESC, CASE WHEN LOWER(name) IN ('service desk','helpdesk','it helpdesk','infrastructure team') THEN 0 ELSE 1 END,name LIMIT 1`); return result.rows[0]?.id||null; }
 async function validRequester(database,userId){ const result=await database.query(`SELECT id,name,email FROM users WHERE id=$1 AND approved=TRUE AND status='active' AND archived_at IS NULL AND COALESCE(account_type,'person')='person' LIMIT 1`,[userId]); return result.rows[0]||null; }
 async function validateAssignment(database,groupId,assigneeId){
@@ -159,6 +175,27 @@ router.get("/",async(req,res)=>{
     return res.status(500).json({error:"Failed to fetch tickets."});
   }
 });
+router.get("/:id/history",async(req,res)=>{
+  try{
+    const ticket=await getTicket(req.params.id);
+    if(!ticket)return res.status(404).json({error:"Ticket not found."});
+    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
+    const result=await pool.query(
+      `SELECT th.id, th.ticket_id, th.actor_user_id, th.action, th.old_value, th.new_value, th.created_at,
+              u.name AS actor_name, u.email AS actor_email
+       FROM ticket_history th
+       LEFT JOIN users u ON u.id = th.actor_user_id
+       WHERE th.ticket_id = $1
+       ORDER BY th.created_at DESC, th.id DESC`,
+      [req.params.id]
+    );
+    return res.json(result.rows);
+  }catch(error){
+    if(error.code==="42P01")return res.json([]);
+    console.error("Fetch ticket history failed:",error);
+    return res.status(500).json({error:"Failed to fetch ticket history."});
+  }
+});
 router.get("/:id",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});return res.json(decorate(ticket));}catch(error){return res.status(500).json({error:"Failed to fetch the ticket."});}});
 
 router.post("/",async(req,res)=>{
@@ -170,10 +207,102 @@ router.post("/",async(req,res)=>{
  }catch(error){if(open)await client.query("ROLLBACK").catch(()=>{});console.error("Create ticket failed:",error);return res.status(error.status||500).json({error:error.status?error.message:"Failed to create ticket."});}finally{client.release();}
 });
 
-router.put("/:id",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const existing=await getTicket(req.params.id);if(!existing)return res.status(404).json({error:"Ticket not found."});const groupId=req.body.assignedGroupId===undefined?existing.assigned_group_id:id(req.body.assignedGroupId);const assigneeId=req.body.assignedToUserId===undefined?existing.assigned_to_user_id:id(req.body.assignedToUserId);await validateAssignment(pool,groupId,assigneeId);const nextStatus=req.body.status===undefined?existing.status:status(req.body.status);const nextPriority=req.body.priority===undefined?existing.priority:priority(req.body.priority);if(!nextStatus||!nextPriority)return res.status(400).json({error:"Invalid ticket status or priority."});await pool.query(`UPDATE tickets SET title=$1,description=$2,priority=$3,status=$4,workspace=$5,assigned_group_id=$6,assigned_to_user_id=$7,due_at=$8,closed_at=CASE WHEN $4='Closed' THEN COALESCE(closed_at,NOW()) WHEN $4='Resolved' THEN closed_at ELSE NULL END,updated_at=NOW() WHERE id=$9`,[text(req.body.title??existing.title,180),text(req.body.description??existing.description),nextPriority,nextStatus,text(req.body.workspace??existing.workspace,100),groupId,assigneeId,req.body.dueAt===undefined?existing.due_at:req.body.dueAt||null,req.params.id]);const ticket=await getTicket(req.params.id);return res.json(decorate(ticket));}catch(error){return res.status(error.status||500).json({error:error.status?error.message:"Failed to update ticket."});}});
-router.post("/:id/assign",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const existing=await getTicket(req.params.id);if(!existing)return res.status(404).json({error:"Ticket not found."});const groupId=req.body.assignedGroupId===undefined?existing.assigned_group_id:id(req.body.assignedGroupId);const assigneeId=id(req.body.assignedToUserId);if(!groupId&&!assigneeId)return res.status(400).json({error:"Select a support group or eligible agent."});await validateAssignment(pool,groupId,assigneeId);await pool.query(`UPDATE tickets SET assigned_group_id=$1,assigned_to_user_id=$2,status='Assigned',updated_at=NOW() WHERE id=$3`,[groupId,assigneeId,req.params.id]);const ticket=await getTicket(req.params.id);setImmediate(()=>notify(ticket));return res.json(decorate(ticket));}catch(error){return res.status(error.status||500).json({error:error.status?error.message:"Failed to assign ticket."});}});
-router.patch("/:id/status",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{const next=status(req.body.status);if(!next)return res.status(400).json({error:"Invalid ticket status."});try{const result=await pool.query(`UPDATE tickets SET status=$1,closed_at=CASE WHEN $1='Closed' THEN COALESCE(closed_at,NOW()) WHEN $1='Resolved' THEN closed_at ELSE NULL END,updated_at=NOW() WHERE id=$2 RETURNING *`,[next,req.params.id]);if(!result.rows[0])return res.status(404).json({error:"Ticket not found."});return res.json(decorate(result.rows[0]));}catch(error){return res.status(500).json({error:"Failed to update ticket status."});}});
-router.patch("/:id/resolve",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const result=await pool.query(`UPDATE tickets SET status='Resolved',updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id]);if(!result.rows[0])return res.status(404).json({error:"Ticket not found."});return res.json(decorate(result.rows[0]));}catch(error){return res.status(500).json({error:"Failed to resolve ticket."});}});
-router.patch("/:id/close",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const result=await pool.query(`UPDATE tickets SET status='Closed',closed_at=NOW(),updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id]);if(!result.rows[0])return res.status(404).json({error:"Ticket not found."});return res.json(decorate(result.rows[0]));}catch(error){return res.status(500).json({error:"Failed to close ticket."});}});
+router.put("/:id",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+  try{
+    const existing=await getTicket(req.params.id);
+    if(!existing)return res.status(404).json({error:"Ticket not found."});
+    const groupId=req.body.assignedGroupId===undefined?existing.assigned_group_id:id(req.body.assignedGroupId);
+    const assigneeId=req.body.assignedToUserId===undefined?existing.assigned_to_user_id:id(req.body.assignedToUserId);
+    await validateAssignment(pool,groupId,assigneeId);
+    const nextStatus=req.body.status===undefined?existing.status:status(req.body.status);
+    const nextPriority=req.body.priority===undefined?existing.priority:priority(req.body.priority);
+    if(!nextStatus||!nextPriority)return res.status(400).json({error:"Invalid ticket status or priority."});
+    const nextTitle=text(req.body.title??existing.title,180);
+    const nextDescription=text(req.body.description??existing.description);
+    const nextWorkspace=text(req.body.workspace??existing.workspace,100);
+    const nextDueAt=req.body.dueAt===undefined?existing.due_at:req.body.dueAt||null;
+    await pool.query(
+      `UPDATE tickets SET title=$1,description=$2,priority=$3,status=$4,workspace=$5,assigned_group_id=$6,assigned_to_user_id=$7,due_at=$8,closed_at=CASE WHEN $4='Closed' THEN COALESCE(closed_at,NOW()) WHEN $4='Resolved' THEN closed_at ELSE NULL END,updated_at=NOW() WHERE id=$9`,
+      [nextTitle,nextDescription,nextPriority,nextStatus,nextWorkspace,groupId,assigneeId,nextDueAt,req.params.id]
+    );
+    const ticket=await getTicket(req.params.id);
+    await logAssignmentChange(pool,req.params.id,req.user.id,existing,ticket);
+    await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status);
+    if(existing.priority!==ticket.priority)await history(pool,req.params.id,req.user.id,"priority_changed",existing.priority,ticket.priority);
+    const fieldChanges=[];
+    if(existing.title!==ticket.title)fieldChanges.push("title");
+    if(existing.description!==ticket.description)fieldChanges.push("description");
+    if(existing.workspace!==ticket.workspace)fieldChanges.push("workspace");
+    const oldDue=existing.due_at?new Date(existing.due_at).toISOString():null;
+    const newDue=ticket.due_at?new Date(ticket.due_at).toISOString():null;
+    if(oldDue!==newDue)fieldChanges.push("due date");
+    if(fieldChanges.length)await history(pool,req.params.id,req.user.id,"updated",null,fieldChanges.join(", "));
+    if(Number(existing.assigned_to_user_id)!==Number(ticket.assigned_to_user_id)||Number(existing.assigned_group_id)!==Number(ticket.assigned_group_id)){
+      setImmediate(()=>notify(ticket));
+    }
+    return res.json(decorate(ticket));
+  }catch(error){
+    return res.status(error.status||500).json({error:error.status?error.message:"Failed to update ticket."});
+  }
+});
+router.post("/:id/assign",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+  try{
+    const existing=await getTicket(req.params.id);
+    if(!existing)return res.status(404).json({error:"Ticket not found."});
+    const groupId=req.body.assignedGroupId===undefined?existing.assigned_group_id:id(req.body.assignedGroupId);
+    const assigneeId=id(req.body.assignedToUserId);
+    if(!groupId&&!assigneeId)return res.status(400).json({error:"Select a support group or eligible agent."});
+    await validateAssignment(pool,groupId,assigneeId);
+    await pool.query(`UPDATE tickets SET assigned_group_id=$1,assigned_to_user_id=$2,status='Assigned',updated_at=NOW() WHERE id=$3`,[groupId,assigneeId,req.params.id]);
+    const ticket=await getTicket(req.params.id);
+    await logAssignmentChange(pool,req.params.id,req.user.id,existing,ticket);
+    await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status);
+    setImmediate(()=>notify(ticket));
+    return res.json(decorate(ticket));
+  }catch(error){
+    return res.status(error.status||500).json({error:error.status?error.message:"Failed to assign ticket."});
+  }
+});
+router.patch("/:id/status",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+  const next=status(req.body.status);
+  if(!next)return res.status(400).json({error:"Invalid ticket status."});
+  try{
+    const existing=await getTicket(req.params.id);
+    if(!existing)return res.status(404).json({error:"Ticket not found."});
+    await pool.query(
+      `UPDATE tickets SET status=$1,closed_at=CASE WHEN $1='Closed' THEN COALESCE(closed_at,NOW()) WHEN $1='Resolved' THEN closed_at ELSE NULL END,updated_at=NOW() WHERE id=$2`,
+      [next,req.params.id]
+    );
+    const ticket=await getTicket(req.params.id);
+    await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status);
+    return res.json(decorate(ticket));
+  }catch(error){
+    return res.status(500).json({error:"Failed to update ticket status."});
+  }
+});
+router.patch("/:id/resolve",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+  try{
+    const existing=await getTicket(req.params.id);
+    if(!existing)return res.status(404).json({error:"Ticket not found."});
+    await pool.query(`UPDATE tickets SET status='Resolved',updated_at=NOW() WHERE id=$1`,[req.params.id]);
+    const ticket=await getTicket(req.params.id);
+    await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status,"resolve");
+    return res.json(decorate(ticket));
+  }catch(error){
+    return res.status(500).json({error:"Failed to resolve ticket."});
+  }
+});
+router.patch("/:id/close",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+  try{
+    const existing=await getTicket(req.params.id);
+    if(!existing)return res.status(404).json({error:"Ticket not found."});
+    await pool.query(`UPDATE tickets SET status='Closed',closed_at=NOW(),updated_at=NOW() WHERE id=$1`,[req.params.id]);
+    const ticket=await getTicket(req.params.id);
+    await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status,"closed");
+    return res.json(decorate(ticket));
+  }catch(error){
+    return res.status(500).json({error:"Failed to close ticket."});
+  }
+});
 
 module.exports = router;
