@@ -728,7 +728,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <section className="space-y-6 px-5 py-6 xl:px-8">
+        <section className="space-y-4 px-4 py-4 xl:px-6">
           {error && (
             <div
               className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800"
@@ -807,7 +807,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-3">
+          <div className="grid gap-4 xl:grid-cols-3">
             <ChartPanel
               title="Ticket Volume"
               description="Incidents, service requests and changes by created date."
@@ -874,9 +874,9 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-3">
+          <div className="grid items-start gap-4 xl:grid-cols-3">
             <TicketQueue
-              tickets={filteredTickets.slice(0, 10)}
+              tickets={filteredTickets.slice(0, 8)}
               selectedTicketId={selectedTicket?.id}
               workspaceFilter={workspaceFilter}
               workspaces={workspaces}
@@ -887,7 +887,7 @@ export default function Dashboard() {
               error={sectionErrors.tickets}
             />
 
-            <div className="space-y-6">
+            <div className="space-y-4">
               <TicketPreview
                 ticket={selectedTicket}
                 onOpenCase={() => {
@@ -906,7 +906,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="grid items-start gap-6 xl:grid-cols-3">
+          <div className="grid items-start gap-4 xl:grid-cols-3">
             <AssetSummary
               assetStats={assetStats}
               onOpenAssets={() => navigate("/assets")}
@@ -1001,8 +1001,8 @@ function StatCard({
   accent,
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+      <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-1.5">
             <p className="text-sm font-medium text-slate-500">{title}</p>
@@ -1012,17 +1012,17 @@ function StatCard({
               </span>
             )}
           </div>
-          <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
+          <p className="mt-1.5 text-3xl font-bold leading-none text-slate-950">
+            {value}
+          </p>
         </div>
 
-        <div className={classNames("rounded-lg p-2.5", accent)}>
+        <div className={classNames("rounded-lg p-2", accent)}>
           <Icon className="h-5 w-5" />
         </div>
       </div>
 
-      <p className="mt-3 text-sm leading-5 text-slate-500">
-        {supportingText}
-      </p>
+      <p className="mt-2 text-sm leading-5 text-slate-500">{supportingText}</p>
     </div>
   );
 }
@@ -1253,11 +1253,11 @@ function ChartPanel({
   return (
     <div
       className={classNames(
-        "rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
+        "rounded-xl border border-slate-200 bg-white p-4 shadow-sm",
         className
       )}
     >
-      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-lg font-bold text-slate-950">{title}</h2>
           <p className="text-sm text-slate-500">{description}</p>
@@ -1269,16 +1269,16 @@ function ChartPanel({
       {error && hasData && (
         <SectionError
           message={`${error} Showing the last loaded data.`}
-          className="mb-4"
+          className="mb-3"
         />
       )}
 
       {loading && !hasData ? (
-        <PanelSkeleton className="h-72" />
+        <PanelSkeleton className="h-56" />
       ) : error && !hasData ? (
-        <SectionError message={error} className="min-h-72" />
+        <SectionError message={error} className="min-h-56" />
       ) : (
-        <div className="h-72">{children}</div>
+        <div className="h-56">{children}</div>
       )}
     </div>
   );
@@ -1286,7 +1286,7 @@ function ChartPanel({
 
 function ServiceMixPanel({ data, loading, error, hasData }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-slate-950">Service Mix</h2>
       <p className="text-sm text-slate-500">
         Workload by support group or workspace.
@@ -1295,29 +1295,29 @@ function ServiceMixPanel({ data, loading, error, hasData }) {
       {error && hasData && (
         <SectionError
           message={`${error} Showing the last loaded data.`}
-          className="mt-4"
+          className="mt-3"
         />
       )}
 
       {loading && !hasData ? (
-        <PanelSkeleton className="mt-4 h-72" />
+        <PanelSkeleton className="mt-3 h-56" />
       ) : error && !hasData ? (
-        <SectionError message={error} className="mt-4 min-h-72" />
+        <SectionError message={error} className="mt-3 min-h-56" />
       ) : data.length === 0 ? (
-        <p className="mt-6 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
+        <p className="mt-4 rounded-lg bg-slate-50 p-3 text-sm text-slate-500">
           No open ticket data is available.
         </p>
       ) : (
         <>
-          <div className="mt-4 h-56">
+          <div className="mt-3 h-44">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
                   data={data}
                   dataKey="value"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={4}
+                  innerRadius={48}
+                  outerRadius={72}
+                  paddingAngle={3}
                 >
                   {data.map((entry) => (
                     <Cell key={entry.name} fill={entry.color} />
@@ -1367,8 +1367,8 @@ function TicketQueue({
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:col-span-2">
-      <div className="border-b border-slate-200 p-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      <div className="border-b border-slate-200 px-4 py-3">
+        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-950">
               Priority Ticket Queue
@@ -1382,7 +1382,7 @@ function TicketQueue({
           <select
             value={workspaceFilter}
             onChange={(event) => onWorkspaceChange(event.target.value)}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
           >
             {workspaces.map((workspace) => (
               <option key={workspace}>{workspace}</option>
@@ -1396,21 +1396,21 @@ function TicketQueue({
           Array.from({ length: 5 }, (_, index) => (
             <div
               key={index}
-              className="grid animate-pulse gap-4 p-4 lg:grid-cols-[1fr_160px_110px]"
+              className="grid animate-pulse gap-3 px-4 py-2.5 lg:grid-cols-[1fr_150px_100px]"
             >
               <div>
                 <div className="h-4 w-32 rounded bg-slate-200" />
-                <div className="mt-3 h-4 w-3/4 rounded bg-slate-100" />
-                <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+                <div className="mt-2 h-4 w-3/4 rounded bg-slate-100" />
+                <div className="mt-1.5 h-3 w-1/2 rounded bg-slate-100" />
               </div>
               <div className="h-4 w-24 rounded bg-slate-100" />
               <div className="h-3 w-full rounded bg-slate-100" />
             </div>
           ))
         ) : error ? (
-          <SectionError message={error} className="m-4" />
+          <SectionError message={error} className="m-3" />
         ) : tickets.length === 0 ? (
-          <div className="p-8 text-center text-sm text-slate-500">
+          <div className="p-6 text-center text-sm text-slate-500">
             No tickets found.
           </div>
         ) : (
@@ -1423,7 +1423,7 @@ function TicketQueue({
                 type="button"
                 onClick={() => onSelectTicket(ticketItem)}
                 className={classNames(
-                  "grid w-full gap-4 p-4 text-left transition hover:bg-slate-50 lg:grid-cols-[1fr_160px_110px] lg:items-center",
+                  "grid w-full gap-3 px-4 py-2.5 text-left transition hover:bg-slate-50 lg:grid-cols-[1fr_150px_100px] lg:items-center",
                   selectedTicketId === ticketItem.id && "bg-blue-50/70"
                 )}
               >
@@ -1435,7 +1435,7 @@ function TicketQueue({
 
                     <span
                       className={classNames(
-                        "rounded-full border px-2.5 py-1 text-xs font-bold",
+                        "rounded-full border px-2 py-0.5 text-xs font-bold",
                         getPriorityClassName(ticketItem.priority)
                       )}
                     >
@@ -1444,7 +1444,7 @@ function TicketQueue({
 
                     <span
                       className={classNames(
-                        "rounded-full px-2.5 py-1 text-xs font-bold",
+                        "rounded-full px-2 py-0.5 text-xs font-bold",
                         getStatusClassName(ticketItem.status)
                       )}
                     >
@@ -1452,11 +1452,11 @@ function TicketQueue({
                     </span>
                   </div>
 
-                  <p className="mt-2 font-semibold text-slate-950">
+                  <p className="mt-1 font-semibold text-slate-950">
                     {ticketItem.title}
                   </p>
 
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-0.5 text-sm text-slate-500">
                     {ticketItem.requester_name || "Unknown requester"} ·{" "}
                     {ticketItem.assigned_group_name ||
                       ticketItem.workspace ||
@@ -1496,11 +1496,11 @@ function TicketQueue({
         )}
       </div>
 
-      <div className="border-t border-slate-200 p-4">
+      <div className="border-t border-slate-200 px-4 py-3">
         <button
           type="button"
           onClick={onOpenWorkspace}
-          className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
+          className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
         >
           View all in Ticket Workspace →
         </button>
@@ -1517,20 +1517,20 @@ function TicketPreview({
 }) {
   if (!ticket) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
         Select a ticket to view details.
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-slate-950">Ticket Preview</h2>
 
         <span
           className={classNames(
-            "rounded-full border px-2.5 py-1 text-xs font-bold",
+            "rounded-full border px-2 py-0.5 text-xs font-bold",
             getPriorityClassName(ticket.priority)
           )}
         >
@@ -1538,7 +1538,7 @@ function TicketPreview({
         </span>
       </div>
 
-      <p className="mt-3 text-sm font-bold text-blue-700">
+      <p className="mt-2 text-sm font-bold text-blue-700">
         {ticket.ticket_ref || `TICKET-${ticket.id}`}
       </p>
 
@@ -1546,11 +1546,11 @@ function TicketPreview({
         {ticket.title}
       </p>
 
-      <p className="mt-2 text-sm leading-6 text-slate-500">
+      <p className="mt-1.5 line-clamp-3 text-sm leading-5 text-slate-500">
         {ticket.description || "No description provided."}
       </p>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+      <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
         <InfoBox label="Workspace" value={ticket.workspace} />
         <InfoBox label="Status" value={ticket.status} />
         <InfoBox
@@ -1563,11 +1563,11 @@ function TicketPreview({
         />
       </div>
 
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <button
           type="button"
           onClick={onOpenCase}
-          className="rounded-xl bg-slate-950 px-3 py-2.5 text-sm font-semibold text-white hover:bg-slate-800"
+          className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
         >
           Open Case
         </button>
@@ -1575,7 +1575,7 @@ function TicketPreview({
         <button
           type="button"
           onClick={onAssign}
-          className="rounded-xl border border-blue-200 px-3 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+          className="rounded-xl border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
         >
           Assign
         </button>
@@ -1583,7 +1583,7 @@ function TicketPreview({
         <button
           type="button"
           onClick={onEscalate}
-          className="rounded-xl border border-red-200 px-3 py-2.5 text-sm font-semibold text-red-700 hover:bg-red-50"
+          className="rounded-xl border border-red-200 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50"
         >
           Escalate
         </button>
@@ -1617,13 +1617,13 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-slate-950">Quick Actions</h2>
       <p className="text-sm text-slate-500">
         Fast workflows for the support team.
       </p>
 
-      <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="mt-3 grid grid-cols-2 gap-2">
         {actions.map((action) => {
           const Icon = action.icon;
 
@@ -1632,10 +1632,10 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
               key={action.label}
               type="button"
               onClick={action.onClick}
-              className="rounded-lg border border-slate-200 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50"
+              className="rounded-lg border border-slate-200 p-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50"
             >
-              <Icon className="h-5 w-5 text-blue-700" />
-              <p className="mt-3 text-sm font-bold text-slate-950">
+              <Icon className="h-4 w-4 text-blue-700" />
+              <p className="mt-2 text-sm font-bold text-slate-950">
                 {action.label}
               </p>
             </button>
@@ -1648,15 +1648,15 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
 
 function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-slate-950">Asset Inventory</h2>
       <p className="text-sm text-slate-500">
         Live from the Asset Management System.
       </p>
 
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 space-y-2">
         {loading && !assetStats ? (
-          <PanelSkeleton className="h-72" />
+          <PanelSkeleton className="h-56" />
         ) : error && !assetStats ? (
           <SectionError message={error} />
         ) : !assetStats ? (
@@ -1669,9 +1669,9 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
               />
             )}
 
-            <div className="rounded-lg border border-slate-100 p-3">
+            <div className="rounded-lg border border-slate-100 p-2.5">
               <p className="text-sm text-slate-500">Total Assets</p>
-              <p className="mt-1 text-3xl font-bold text-slate-950">
+              <p className="mt-1 text-3xl font-bold leading-none text-slate-950">
                 {formatCount(assetStats.total || 0)}
               </p>
             </div>
@@ -1690,14 +1690,14 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
               return (
                 <div
                   key={key}
-                  className="rounded-lg border border-slate-100 p-3"
+                  className="rounded-lg border border-slate-100 p-2.5"
                 >
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-slate-950">{label}</p>
                     <span className="font-bold text-slate-950">{count}</span>
                   </div>
 
-                  <div className="mt-3 h-2 rounded-full bg-slate-100">
+                  <div className="mt-2 h-2 rounded-full bg-slate-100">
                     <div
                       className={classNames("h-2 rounded-full", barClass)}
                       style={{ width: `${percentage}%` }}
@@ -1710,7 +1710,7 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
             <button
               type="button"
               onClick={onOpenAssets}
-              className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
+              className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
             >
               View all assets →
             </button>
@@ -1723,7 +1723,7 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
 
 function KnowledgePanel({ articles, loading, error }) {
   return (
-    <div className="self-start rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+    <div className="self-start rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
       <h2 className="text-lg font-bold text-slate-950">
         Knowledge Suggestions
       </h2>
@@ -1734,15 +1734,15 @@ function KnowledgePanel({ articles, loading, error }) {
       {error && articles !== null && (
         <SectionError
           message={`${error} Showing the last loaded titles.`}
-          className="mt-4"
+          className="mt-3"
         />
       )}
 
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
         {loading && !articles ? (
           <>
-            <PanelSkeleton className="h-24" />
-            <PanelSkeleton className="h-24" />
+            <PanelSkeleton className="h-20" />
+            <PanelSkeleton className="h-20" />
           </>
         ) : error && !articles ? (
           <SectionError message={error} className="md:col-span-2" />
@@ -1754,7 +1754,7 @@ function KnowledgePanel({ articles, loading, error }) {
           articles?.map((article, index) => (
             <div
               key={article.id || article.title}
-              className="flex w-full items-start gap-3 rounded-lg border border-slate-100 p-4 text-left"
+              className="flex w-full items-start gap-3 rounded-lg border border-slate-100 p-3 text-left"
             >
               <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
                 {index + 1}
@@ -1764,7 +1764,7 @@ function KnowledgePanel({ articles, loading, error }) {
                 <p className="font-semibold text-slate-950">
                   {article.title}
                 </p>
-                <p className="mt-1 text-sm text-slate-500">
+                <p className="mt-0.5 text-sm text-slate-500">
                   Reference title available to the support team.
                 </p>
               </div>
@@ -1852,11 +1852,11 @@ function ConfirmationModal({
 
 function InfoBox({ label, value }) {
   return (
-    <div className="rounded-lg bg-slate-50 p-3">
+    <div className="rounded-lg bg-slate-50 px-2.5 py-2">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </p>
-      <p className="mt-1 font-semibold text-slate-950">{value || "N/A"}</p>
+      <p className="mt-0.5 font-semibold text-slate-950">{value || "N/A"}</p>
     </div>
   );
 }
