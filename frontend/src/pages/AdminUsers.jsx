@@ -358,50 +358,57 @@ export default function AdminUsers() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-5 xl:p-8">
-      <div className="mx-auto max-w-[1700px]">
-        <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 p-4 xl:p-5">
+      <div className="mx-auto flex h-full w-full max-w-[1700px] min-h-0 flex-col">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-sm font-semibold text-blue-700">Administration</p>
-            <h1 className="mt-1 text-3xl font-bold text-slate-950">User Administration</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage accounts, roles, access layouts and communication preferences.</p>
+            <h1 className="mt-0.5 text-2xl font-bold text-slate-950 xl:text-3xl">User Administration</h1>
+            <p className="mt-0.5 text-sm text-slate-500">Manage accounts, roles, access layouts and communication preferences.</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={load} disabled={loading} className="rounded-xl border bg-white px-4 py-3 text-sm font-bold disabled:opacity-60">
+            <button type="button" onClick={load} disabled={loading} className="rounded-xl border bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-60">
               <RefreshCw className={`mr-2 inline h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh
             </button>
-            <button type="button" onClick={syncMicrosoft} disabled={syncing} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+            <button type="button" onClick={syncMicrosoft} disabled={syncing} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
               <RefreshCw className={`mr-2 inline h-4 w-4 ${syncing ? "animate-spin" : ""}`} />Sync Microsoft 365
             </button>
           </div>
         </header>
 
         {message && (
-          <div className={`mt-4 rounded-xl border p-3 text-sm font-semibold ${message.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+          <div className={`mt-3 shrink-0 rounded-xl border p-3 text-sm font-semibold ${message.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
             {message.text}
           </div>
         )}
 
-        <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <section className="mt-3 grid shrink-0 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {VIEWS.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} type="button" onClick={() => changeView(item.id)} className={`rounded-2xl border p-4 text-left shadow-sm ${view === item.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}>
-                <Icon className="h-5 w-5 text-blue-700" />
-                <p className="mt-3 text-xs font-bold uppercase text-slate-500">{item.label}</p>
-                <p className="mt-1 text-3xl font-bold text-slate-950">{meta.summary?.[item.countKey] || 0}</p>
-                {item.hint ? <p className="mt-1 text-[11px] font-medium leading-snug text-slate-400">{item.hint}</p> : null}
+              <button
+                key={item.id}
+                type="button"
+                title={item.hint || item.label}
+                onClick={() => changeView(item.id)}
+                className={`rounded-xl border px-3 py-3 text-left shadow-sm ${view === item.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Icon className="h-4 w-4 text-blue-700" />
+                  <p className="text-2xl font-bold text-slate-950">{meta.summary?.[item.countKey] || 0}</p>
+                </div>
+                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{item.label}</p>
               </button>
             );
           })}
         </section>
 
-        <div className="mt-6 grid gap-5 lg:grid-cols-[270px_1fr]">
-          <aside className="rounded-2xl border bg-white p-3 shadow-sm lg:sticky lg:top-5 lg:self-start">
+        <div className="mt-3 grid min-h-0 flex-1 gap-4 lg:grid-cols-[250px_1fr]">
+          <aside className="min-h-0 overflow-y-auto rounded-2xl border bg-white p-2 shadow-sm">
             {VIEWS.map((item) => {
               const Icon = item.icon;
               return (
-                <button key={item.id} type="button" onClick={() => changeView(item.id)} className={`mb-2 flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm font-bold ${view === item.id ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
+                <button key={item.id} type="button" onClick={() => changeView(item.id)} className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-bold ${view === item.id ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
                   <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{item.label}</span>
                   <span className={`rounded-full px-2 py-0.5 text-xs ${view === item.id ? "bg-white/20" : "bg-slate-100"}`}>{meta.summary?.[item.countKey] || 0}</span>
                 </button>
@@ -409,9 +416,9 @@ export default function AdminUsers() {
             })}
           </aside>
 
-          <main className="flex max-h-[calc(100vh-12rem)] flex-col overflow-hidden rounded-2xl border bg-white shadow-sm">
-            <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border-b bg-white p-4">
-              <div className="relative min-w-[280px] flex-1">
+          <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-white shadow-sm">
+            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-white p-3">
+              <div className="relative min-w-[240px] flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, department or employee number" className="w-full rounded-xl border py-2.5 pl-10 pr-3 text-sm" />
               </div>
@@ -459,14 +466,16 @@ export default function AdminUsers() {
               </table>
             </div>
 
-            <PaginationBar
-              pagination={pagination}
-              loading={loading}
-              onPageChange={(nextPage) => {
-                setPage(nextPage);
-                setSelectedIds([]);
-              }}
-            />
+            <div className="shrink-0">
+              <PaginationBar
+                pagination={pagination}
+                loading={loading}
+                onPageChange={(nextPage) => {
+                  setPage(nextPage);
+                  setSelectedIds([]);
+                }}
+              />
+            </div>
           </main>
         </div>
       </div>
