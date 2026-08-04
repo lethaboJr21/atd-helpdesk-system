@@ -903,23 +903,21 @@ export default function Dashboard() {
                 onCreateTicket={openTicketCreation}
                 onOpenAssets={() => navigate("/assets")}
               />
+
+              <AssetSummary
+                assetStats={assetStats}
+                onOpenAssets={() => navigate("/assets")}
+                loading={loading && assetStats === null}
+                error={sectionErrors.assets}
+              />
             </div>
           </div>
 
-          <div className="grid items-start gap-4 xl:grid-cols-3">
-            <AssetSummary
-              assetStats={assetStats}
-              onOpenAssets={() => navigate("/assets")}
-              loading={loading && assetStats === null}
-              error={sectionErrors.assets}
-            />
-
-            <KnowledgePanel
-              articles={knowledgeArticles}
-              loading={loading && knowledgeArticles === null}
-              error={sectionErrors.knowledge}
-            />
-          </div>
+          <KnowledgePanel
+            articles={knowledgeArticles}
+            loading={loading && knowledgeArticles === null}
+            error={sectionErrors.knowledge}
+          />
         </section>
       </main>
 
@@ -1391,7 +1389,7 @@ function TicketQueue({
         </div>
       </div>
 
-      <div className="max-h-[28rem] divide-y divide-slate-100 overflow-y-auto">
+      <div className="max-h-[40rem] divide-y divide-slate-100 overflow-y-auto">
         {loading && tickets.length === 0 ? (
           Array.from({ length: 5 }, (_, index) => (
             <div
@@ -1737,7 +1735,7 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
 
 function KnowledgePanel({ articles, loading, error }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-lg font-bold text-slate-950">
         Knowledge Suggestions
       </h2>
@@ -1752,7 +1750,7 @@ function KnowledgePanel({ articles, loading, error }) {
         />
       )}
 
-      <div className="mt-3 grid gap-2 sm:grid-cols-3 md:grid-cols-3">
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
         {loading && !articles ? (
           <>
             <PanelSkeleton className="h-20" />
@@ -1760,7 +1758,7 @@ function KnowledgePanel({ articles, loading, error }) {
             <PanelSkeleton className="h-20" />
           </>
         ) : error && !articles ? (
-          <SectionError message={error} className="sm:col-span-3" />
+          <SectionError message={error} className="md:col-span-3" />
         ) : articles?.length === 0 ? (
           <p className="text-sm text-slate-500">
             No knowledge suggestions found.
