@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
+import OperationsShell from "../components/OperationsShell";
 import { groupsApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
@@ -185,7 +186,7 @@ export default function TicketWorkspace() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { user, employeeView } = useAuth();
+  const { user, employeeView, logout } = useAuth();
   const operationsUser = OPERATIONS_ROLES.has(user?.role);
   const employeeExperience =
     user?.role === "user" ||
@@ -407,44 +408,30 @@ export default function TicketWorkspace() {
     );
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
+
+  const pageTitle = employeeExperience ? "My Tickets" : "Ticket Workspace";
+  const pageSubtitle = employeeExperience
+    ? "Track support requests created for your account."
+    : "Review, triage, assign and manage all authorised tickets.";
+
   return (
-    <div className="min-h-screen bg-slate-100 p-5 text-slate-900 xl:p-8">
-      <header className="mx-auto flex max-w-[1650px] flex-wrap items-start justify-between gap-4">
-        <div>
-          <button
-            type="button"
-            onClick={() =>
-              navigate(
-                employeeExperience
-                  ? user?.role === "user"
-                    ? "/"
-                    : "/employee"
-                  : "/"
-              )
-            }
-            className="mb-3 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            Back to Dashboard
-          </button>
-          <p className="text-sm text-slate-500">
-            Helpdesk /{" "}
-            {employeeExperience ? "My Tickets" : "Ticket Workspace"}
-          </p>
-          <h1 className="mt-1 text-3xl font-bold text-slate-950">
-            {employeeExperience ? "My Tickets" : "Ticket Workspace"}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            {employeeExperience
-              ? "Track support requests created for your account."
-              : "Review, triage, assign and manage all authorised tickets."}
-          </p>
-        </div>
-        <div className="flex gap-2">
+    <OperationsShell
+      breadcrumb={`Helpdesk / ${pageTitle}`}
+      title={pageTitle}
+      subtitle={pageSubtitle}
+      contentOverflow="hidden"
+      contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden px-3 py-3 lg:px-4 lg:py-3 xl:px-6 xl:py-4"
+      actions={
+        <>
           <button
             type="button"
             onClick={fetchTickets}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50 xl:px-4 xl:py-2.5"
           >
             <RefreshCw
               className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"}
@@ -453,76 +440,88 @@ export default function TicketWorkspace() {
           </button>
           <button
             type="button"
+            onClick={handleLogout}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50 xl:px-4 xl:py-2.5"
+          >
+            Logout
+          </button>
+          <button
+            type="button"
             onClick={() => navigate("/tickets/new?type=incident")}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 xl:px-4 xl:py-2.5"
           >
             <Plus className="h-4 w-4" />
             New Ticket
           </button>
-        </div>
-      </header>
-
-      <main className="mx-auto mt-6 max-w-[1650px]">
-        {error && (
-          <div
-            className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700"
-            role="alert"
-          >
-            {error}
-          </div>
-        )}
-        {success && (
-          <div
-            className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-700"
-            role="status"
-          >
-            {success}
-          </div>
-        )}
-
-        <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
-          <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-4 py-3">
-              <div className="relative min-w-[260px]">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search tickets"
-                  className="w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-                />
-              </div>
+        </>
+      }
+    >
+      {(error || success) && (
+        <div className="mb-3 shrink-0 space-y-2">
+          {error ? (
+            <div
+              className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"
+              role="alert"
+            >
+              {error}
             </div>
+          ) : null}
+          {success ? (
+            <div
+              className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700"
+              role="status"
+            >
+              {success}
+            </div>
+          ) : null}
+        </div>
+      )}
 
-            <div className="scrollbar-thin flex gap-2 overflow-x-auto border-b border-slate-200 px-4 py-3 [scrollbar-width:thin]">
-              {STATUS_TABS.map((status) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => changeFilter(status)}
+      {/* Laptop: stacked list then preview. Monitor (xl+): side-by-side triage. */}
+      <div className="grid min-h-0 flex-1 gap-3 lg:gap-4 xl:grid-cols-[minmax(0,1fr)_min(380px,32%)]">
+        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:min-h-0">
+          <div className="shrink-0 border-b border-slate-200 px-3 py-2.5 xl:px-4 xl:py-3">
+            <div className="relative min-w-[200px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search tickets"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 xl:py-2.5"
+              />
+            </div>
+          </div>
+
+          <div className="scrollbar-thin flex shrink-0 gap-2 overflow-x-auto border-b border-slate-200 px-3 py-2.5 [scrollbar-width:thin] xl:px-4 xl:py-3">
+            {STATUS_TABS.map((status) => (
+              <button
+                key={status}
+                type="button"
+                onClick={() => changeFilter(status)}
+                className={classNames(
+                  "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold xl:px-3.5",
+                  statusFilter === status
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                )}
+              >
+                {status}
+                <span
                   className={classNames(
-                    "whitespace-nowrap rounded-full px-3.5 py-1.5 text-sm font-bold",
+                    "ml-2 rounded-full px-2 py-0.5 text-xs",
                     statusFilter === status
-                      ? "bg-blue-600 text-white"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      ? "bg-white/20 text-white"
+                      : "bg-white text-slate-500"
                   )}
                 >
-                  {status}
-                  <span
-                    className={classNames(
-                      "ml-2 rounded-full px-2 py-0.5 text-xs",
-                      statusFilter === status
-                        ? "bg-white/20 text-white"
-                        : "bg-white text-slate-500"
-                    )}
-                  >
-                    {statusCount(status)}
-                  </span>
-                </button>
-              ))}
-            </div>
+                  {statusCount(status)}
+                </span>
+              </button>
+            ))}
+          </div>
 
-            {!employeeExperience ? (
+          {!employeeExperience ? (
+            <div className="shrink-0">
               <PaginationBar
                 pagination={pagination}
                 loading={loading}
@@ -531,278 +530,289 @@ export default function TicketWorkspace() {
                   setSelectedTicket(null);
                 }}
               />
-            ) : null}
-
-            <div className="max-h-[65vh] divide-y divide-slate-100 overflow-y-auto">
-              {loading ? (
-                Array.from({ length: 8 }, (_, index) => (
-                  <TicketRowSkeleton key={index} />
-                ))
-              ) : tickets.length === 0 ? (
-                <div className="p-10 text-center">
-                  <Ticket className="mx-auto h-10 w-10 text-slate-400" />
-                  <p className="mt-3 font-bold text-slate-950">
-                    No tickets found
-                  </p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Try another status filter or clear the search.
-                  </p>
-                </div>
-              ) : (
-                tickets.map((item) => {
-                  const selected =
-                    String(selectedTicket?.id) === String(item.id);
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() =>
-                        setSelectedTicket((current) =>
-                          String(current?.id) === String(item.id)
-                            ? null
-                            : item
-                        )
-                      }
-                      onDoubleClick={() => navigate(`/tickets/${item.id}`)}
-                      className={classNames(
-                        "grid w-full gap-3 border-l-4 px-4 py-2.5 text-left transition md:grid-cols-[1fr_140px_120px_70px] md:items-center",
-                        selected
-                          ? "border-blue-600 bg-blue-50/70"
-                          : "border-transparent hover:bg-slate-50"
-                      )}
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-bold text-blue-700">
-                            {item.ticket_ref || `TICKET-${item.id}`}
-                          </span>
-                          <span
-                            className={classNames(
-                              "whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-bold",
-                              priorityClass(item.priority)
-                            )}
-                          >
-                            {item.priority || "Medium"}
-                          </span>
-                          <span
-                            className={classNames(
-                              "whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold",
-                              statusClass(item.status)
-                            )}
-                          >
-                            {item.status || "Open"}
-                          </span>
-                        </div>
-                        <p className="mt-1 truncate font-semibold text-slate-950">
-                          {item.title}
-                        </p>
-                        <p className="mt-0.5 truncate text-sm text-slate-500">
-                          {employeeExperience
-                            ? item.workspace
-                            : item.requester_name ||
-                              item.requester_email ||
-                              "Unknown requester"}
-                          {!employeeExperience
-                            ? ` · ${item.assigned_group_name || item.workspace || "No group"}`
-                            : null}
-                        </p>
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-800">
-                          {item.assigned_to_name || "Unassigned"}
-                        </p>
-                        <p className="text-xs text-slate-500">Assigned agent</p>
-                      </div>
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-slate-800">
-                          {item.workspace || "IT"}
-                        </p>
-                        <p className="text-xs text-slate-500">Workspace</p>
-                      </div>
-
-                      <span className="text-xs font-bold text-slate-500">
-                        {formatAge(item)}
-                      </span>
-                    </button>
-                  );
-                })
-              )}
             </div>
+          ) : null}
 
-            {!employeeExperience ? (
-              <PaginationBar
-                pagination={pagination}
-                loading={loading}
-                onPageChange={(nextPage) => {
-                  setPage(nextPage);
-                  setSelectedTicket(null);
-                }}
-              />
-            ) : null}
-          </section>
-
-          <aside className="xl:sticky xl:top-6 xl:self-start">
-            {!selectedTicket ? (
-              <div className="rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
-                <Ticket className="mx-auto h-8 w-8 text-slate-400" />
-                <p className="mt-3 font-semibold text-slate-950">
-                  Select a ticket to view its details
-                </p>
+          <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
+            {loading ? (
+              Array.from({ length: 8 }, (_, index) => (
+                <TicketRowSkeleton key={index} />
+              ))
+            ) : tickets.length === 0 ? (
+              <div className="p-10 text-center">
+                <Ticket className="mx-auto h-10 w-10 text-slate-400" />
+                <p className="mt-3 font-bold text-slate-950">No tickets found</p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Click a row to preview it here. Double-click to open the full
-                  case.
+                  Try another status filter or clear the search.
                 </p>
               </div>
             ) : (
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-blue-700">
-                      {selectedTicket.ticket_ref}
-                    </p>
-                    <h2 className="mt-1 text-lg font-bold text-slate-950">
-                      {selectedTicket.title}
-                    </h2>
-                  </div>
-                  <span
+              tickets.map((item) => {
+                const selected =
+                  String(selectedTicket?.id) === String(item.id);
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() =>
+                      setSelectedTicket((current) =>
+                        String(current?.id) === String(item.id) ? null : item
+                      )
+                    }
+                    onDoubleClick={() => navigate(`/tickets/${item.id}`)}
                     className={classNames(
-                      "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold",
-                      statusClass(selectedTicket.status)
+                      "grid w-full gap-2 border-l-4 px-3 py-2 text-left transition md:grid-cols-[1fr_120px_64px] md:items-center xl:grid-cols-[1fr_140px_120px_70px] xl:gap-3 xl:px-4 xl:py-2.5",
+                      selected
+                        ? "border-blue-600 bg-blue-50/70"
+                        : "border-transparent hover:bg-slate-50"
                     )}
                   >
-                    {selectedTicket.status}
-                  </span>
-                </div>
-
-                <p className="mt-3 line-clamp-6 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm leading-5 text-slate-600">
-                  {selectedTicket.description || "No description"}
-                </p>
-
-                <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Info label="Priority" value={selectedTicket.priority} />
-                  <Info label="Workspace" value={selectedTicket.workspace} />
-                  <Info
-                    label="Group"
-                    value={selectedTicket.assigned_group_name || "No group"}
-                  />
-                  <Info
-                    label="Assigned To"
-                    value={selectedTicket.assigned_to_name || "Unassigned"}
-                  />
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => navigate(`/tickets/${selectedTicket.id}`)}
-                  className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Open Full Ticket
-                </button>
-
-                {canOperate && (
-                  <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
-                    {(groupsError || !resolvedGroupId) && (
-                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                        {groupsError ||
-                          "Choose a support group before assigning an agent."}
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-bold text-blue-700">
+                          {item.ticket_ref || `TICKET-${item.id}`}
+                        </span>
+                        <span
+                          className={classNames(
+                            "whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-bold",
+                            priorityClass(item.priority)
+                          )}
+                        >
+                          {item.priority || "Medium"}
+                        </span>
+                        <span
+                          className={classNames(
+                            "whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold",
+                            statusClass(item.status)
+                          )}
+                        >
+                          {item.status || "Open"}
+                        </span>
                       </div>
-                    )}
+                      <p className="mt-1 truncate font-semibold text-slate-950">
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 truncate text-sm text-slate-500">
+                        {employeeExperience
+                          ? item.workspace
+                          : item.requester_name ||
+                            item.requester_email ||
+                            "Unknown requester"}
+                        {!employeeExperience
+                          ? ` · ${item.assigned_group_name || item.workspace || "No group"}`
+                          : null}
+                      </p>
+                    </div>
 
-                    <select
-                      value={resolvedGroupId || ""}
-                      onChange={(event) =>
-                        changeSupportGroup(event.target.value || null)
-                      }
-                      disabled={actionLoading || Boolean(groupsError)}
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
-                    >
-                      <option value="">Select support group</option>
-                      {groups.map((group) => (
-                        <option key={group.id} value={group.id}>
-                          {group.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="hidden min-w-0 md:block">
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {item.assigned_to_name || "Unassigned"}
+                      </p>
+                      <p className="text-xs text-slate-500">Assigned agent</p>
+                    </div>
 
-                    <select
-                      value={selectedTicket.assigned_to_user_id || ""}
-                      onChange={(event) =>
-                        assignTicket(event.target.value || null)
-                      }
-                      disabled={
-                        actionLoading || !resolvedGroupId || Boolean(groupsError)
-                      }
-                      className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
-                    >
-                      <option value="">Unassigned</option>
-                      {assigneeOptions.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name || member.email}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="hidden min-w-0 xl:block">
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {item.workspace || "IT"}
+                      </p>
+                      <p className="text-xs text-slate-500">Workspace</p>
+                    </div>
 
+                    <span className="text-xs font-bold text-slate-500 md:text-right">
+                      {formatAge(item)}
+                    </span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {!employeeExperience ? (
+            <div className="shrink-0">
+              <PaginationBar
+                pagination={pagination}
+                loading={loading}
+                onPageChange={(nextPage) => {
+                  setPage(nextPage);
+                  setSelectedTicket(null);
+                }}
+              />
+            </div>
+          ) : null}
+        </section>
+
+        <aside
+          className={classNames(
+            "min-h-0 overflow-y-auto",
+            // On laptop, only show the preview pane when a ticket is selected
+            // so the list keeps vertical room. Monitors always show the pane.
+            selectedTicket
+              ? "max-h-[42vh] xl:max-h-none"
+              : "hidden xl:block"
+          )}
+        >
+          {!selectedTicket ? (
+            <div className="flex h-full min-h-[180px] flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+              <Ticket className="h-8 w-8 text-slate-400" />
+              <p className="mt-3 font-semibold text-slate-950">
+                Select a ticket to view its details
+              </p>
+              <p className="mt-1 text-sm text-slate-500">
+                Click a row to preview it here. Double-click to open the full
+                case.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-blue-700">
+                    {selectedTicket.ticket_ref}
+                  </p>
+                  <h2 className="mt-1 text-lg font-bold text-slate-950">
+                    {selectedTicket.title}
+                  </h2>
+                </div>
+                <span
+                  className={classNames(
+                    "shrink-0 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold",
+                    statusClass(selectedTicket.status)
+                  )}
+                >
+                  {selectedTicket.status}
+                </span>
+              </div>
+
+              <p className="mt-3 line-clamp-4 whitespace-pre-wrap rounded-xl bg-slate-50 p-3 text-sm leading-5 text-slate-600 xl:line-clamp-6">
+                {selectedTicket.description || "No description"}
+              </p>
+
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Info label="Priority" value={selectedTicket.priority} />
+                <Info label="Workspace" value={selectedTicket.workspace} />
+                <Info
+                  label="Group"
+                  value={selectedTicket.assigned_group_name || "No group"}
+                />
+                <Info
+                  label="Assigned To"
+                  value={selectedTicket.assigned_to_name || "Unassigned"}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => navigate(`/tickets/${selectedTicket.id}`)}
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Open Full Ticket
+              </button>
+
+              {canOperate && (
+                <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                  {(groupsError || !resolvedGroupId) && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                      {groupsError ||
+                        "Choose a support group before assigning an agent."}
+                    </div>
+                  )}
+
+                  <select
+                    value={resolvedGroupId || ""}
+                    onChange={(event) =>
+                      changeSupportGroup(event.target.value || null)
+                    }
+                    disabled={actionLoading || Boolean(groupsError)}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
+                  >
+                    <option value="">Select support group</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedTicket.assigned_to_user_id || ""}
+                    onChange={(event) =>
+                      assignTicket(event.target.value || null)
+                    }
+                    disabled={
+                      actionLoading ||
+                      !resolvedGroupId ||
+                      Boolean(groupsError)
+                    }
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
+                  >
+                    <option value="">Unassigned</option>
+                    {assigneeOptions.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name || member.email}
+                      </option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => assignTicket(user.id, resolvedGroupId)}
+                    disabled={
+                      actionLoading ||
+                      !canAssignToSelf ||
+                      Boolean(groupsError)
+                    }
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Assign to Me
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={() => assignTicket(user.id, resolvedGroupId)}
-                      disabled={
-                        actionLoading || !canAssignToSelf || Boolean(groupsError)
+                      disabled={actionLoading}
+                      onClick={() =>
+                        runAction(
+                          () => ticketsApi.resolve(selectedTicket.id),
+                          "Ticket resolved."
+                        )
                       }
-                      className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                     >
-                      <UserCheck className="h-4 w-4" />
-                      Assign to Me
+                      <CheckCircle2 className="h-4 w-4" />
+                      Resolve
                     </button>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={() =>
-                          runAction(
-                            () => ticketsApi.resolve(selectedTicket.id),
-                            "Ticket resolved."
-                          )
-                        }
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
-                      >
-                        <CheckCircle2 className="h-4 w-4" />
-                        Resolve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actionLoading}
-                        onClick={() =>
-                          runAction(
-                            () => ticketsApi.close(selectedTicket.id),
-                            "Ticket closed."
-                          )
-                        }
-                        className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
-                      >
-                        <XCircle className="h-4 w-4" />
-                        Close
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      disabled={actionLoading}
+                      onClick={() =>
+                        runAction(
+                          () => ticketsApi.close(selectedTicket.id),
+                          "Ticket closed."
+                        )
+                      }
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Close
+                    </button>
                   </div>
-                )}
+                </div>
+              )}
 
-                {selectedTicket.priority === "Critical" && (
-                  <div className="mt-4 flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    Critical ticket requiring priority attention.
-                  </div>
-                )}
-              </div>
-            )}
-          </aside>
-        </div>
-      </main>
-    </div>
+              {selectedTicket.priority === "Critical" && (
+                <div className="mt-4 flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Critical ticket requiring priority attention.
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
+      </div>
+    </OperationsShell>
   );
 }
 
