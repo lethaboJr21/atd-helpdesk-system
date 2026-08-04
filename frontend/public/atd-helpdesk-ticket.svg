@@ -12,7 +12,15 @@
     fill="#0a3f73"
   />
   <path
-    d="M159 268 365 199 279 319 239 284Z"
     fill="#ffffff"
+    fill-rule="evenodd"
+    d="M145 332 229 168H322L354 332H294L286 281H219L194 332ZM243 230 227 263H282L276 230Z"
+  />
+  <path
+    d="M132 279 350 215 225 315Z"
+    fill="#20a8f0"
+    stroke="#ffffff"
+    stroke-linejoin="round"
+    stroke-width="8"
   />
 </svg>

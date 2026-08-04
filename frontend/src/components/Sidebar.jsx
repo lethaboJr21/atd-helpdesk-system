@@ -208,7 +208,7 @@ export default function Sidebar({
           )}
         >
           <img
-            src="/helpdesk/atd-helpdesk-ticket.svg?v=1"
+            src="/helpdesk/atd-helpdesk-ticket.svg?v=2"
             alt="ATD Helpdesk"
             className="h-11 w-11 rounded-xl bg-white object-contain"
           />
