@@ -202,25 +202,51 @@ router.get("/", allowRoles("manager", "admin", "superadmin"), async (request, re
       queryParameters.push(`%${search}%`);
       parameterIndex += 1;
     }
-    const safeLimit = Math.min(Math.max(parsePositiveInteger(limit, DEFAULT_PAGE_SIZE), 1), MAX_PAGE_SIZE);
-    const safeOffset = parsePositiveInteger(offset, 0);
-    const whereClause = whereConditions.length ? `WHERE ${whereConditions.join(" AND ")}` : "";
-    const result = await pool.query(
-      `SELECT ${USER_SELECT},
-         CASE WHEN archived_at IS NOT NULL THEN 'archived'
-          WHEN account_type <> 'person' THEN 'non_person'
-          WHEN approved=FALSE AND role='pending' THEN 'pending'
-          WHEN microsoft_account_enabled=FALSE THEN 'microsoft_disabled'
-          WHEN deactivated_at IS NOT NULL THEN 'deactivated'
-          WHEN approved=TRUE AND last_login_at IS NULL THEN 'never_signed_in'
-          WHEN approved=TRUE THEN 'active'
-          ELSE 'other' END AS account_state
-       FROM users ${whereClause}
-       ORDER BY name ASC, email ASC
-       LIMIT $${parameterIndex} OFFSET $${parameterIndex + 1}`,
-      [...queryParameters, safeLimit, safeOffset]
+    const requestedPage = parsePositiveInteger(request.query.page, 0);
+    const requestedPerPage = parsePositiveInteger(request.query.per_page, 0);
+    const safeLimit = Math.min(
+      Math.max(
+        requestedPerPage || parsePositiveInteger(limit, DEFAULT_PAGE_SIZE),
+        1
+      ),
+      MAX_PAGE_SIZE
     );
-    return response.json(result.rows);
+    const safeOffset = requestedPage > 0
+      ? (requestedPage - 1) * safeLimit
+      : parsePositiveInteger(offset, 0);
+    const page = Math.floor(safeOffset / safeLimit) + 1;
+    const whereClause = whereConditions.length ? `WHERE ${whereConditions.join(" AND ")}` : "";
+    const [countResult, result] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::integer AS total FROM users ${whereClause}`,
+        queryParameters
+      ),
+      pool.query(
+        `SELECT ${USER_SELECT},
+           CASE WHEN archived_at IS NOT NULL THEN 'archived'
+            WHEN account_type <> 'person' THEN 'non_person'
+            WHEN approved=FALSE AND role='pending' THEN 'pending'
+            WHEN microsoft_account_enabled=FALSE THEN 'microsoft_disabled'
+            WHEN deactivated_at IS NOT NULL THEN 'deactivated'
+            WHEN approved=TRUE AND last_login_at IS NULL THEN 'never_signed_in'
+            WHEN approved=TRUE THEN 'active'
+            ELSE 'other' END AS account_state
+         FROM users ${whereClause}
+         ORDER BY name ASC, email ASC
+         LIMIT $${parameterIndex} OFFSET $${parameterIndex + 1}`,
+        [...queryParameters, safeLimit, safeOffset]
+      ),
+    ]);
+    const total = countResult.rows[0].total;
+    return response.json({
+      users: result.rows,
+      pagination: {
+        page,
+        perPage: safeLimit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / safeLimit)),
+      },
+    });
   } catch (error) {
     console.error("Fetch users failed:", error);
     return response.status(error.status || 500).json({ error: error.status ? error.message : "Failed to fetch users" });
