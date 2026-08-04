@@ -21,11 +21,11 @@ import { adminControlsApi, azureApi, userApi } from "../services/api";
 
 const VIEWS = [
   { id: "pending", label: "Pending Signups", icon: UserCheck, countKey: "pending" },
-  { id: "active", label: "Active Users", icon: CheckCircle2, countKey: "active" },
-  { id: "deactivated", label: "Inactive / Deactivated", icon: UserX, countKey: "deactivated" },
+  { id: "active", label: "Active Users", icon: CheckCircle2, countKey: "active", hint: "Microsoft-enabled people, same as Freshservice" },
+  { id: "deactivated", label: "Deactivated", icon: UserX, countKey: "deactivated", hint: "Admin-deactivated or Microsoft account disabled" },
   { id: "archived", label: "Archived Accounts", icon: Archive, countKey: "archived" },
   { id: "external", label: "External Emails", icon: ExternalLink, countKey: "external" },
-  { id: "non-person", label: "Non-Person Accounts", icon: ShieldCheck, countKey: "non_person" },
+  { id: "non-person", label: "Non-Person Accounts", icon: ShieldCheck, countKey: "non_person", hint: "Shared mailboxes and service accounts" },
 ];
 
 const ROLE_LABELS = {
@@ -87,7 +87,8 @@ export default function AdminUsers() {
       const [usersResult, metaResult] = await Promise.all([
         userApi.getUsers({
           accountView: view,
-          includeExternal: ["pending", "external"].includes(view),
+          // Archived and pending can include non-company addresses (e.g. test signups).
+          includeExternal: ["pending", "external", "archived"].includes(view),
           includeArchived: view === "archived",
           search: search || undefined,
           limit: 1000,
@@ -300,6 +301,7 @@ export default function AdminUsers() {
                 <Icon className="h-5 w-5 text-blue-700" />
                 <p className="mt-3 text-xs font-bold uppercase text-slate-500">{item.label}</p>
                 <p className="mt-1 text-3xl font-bold text-slate-950">{meta.summary?.[item.countKey] || 0}</p>
+                {item.hint ? <p className="mt-1 text-[11px] font-medium leading-snug text-slate-400">{item.hint}</p> : null}
               </button>
             );
           })}

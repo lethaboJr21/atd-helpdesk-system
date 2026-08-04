@@ -14,16 +14,25 @@ const STATUS_MAP = new Map([["open","Open"],["assigned","Assigned"],["pending","
 const PRIORITY_MAP = new Map([["low","Low"],["medium","Medium"],["high","High"],["critical","Critical"]]);
 const TYPE_PREFIX = { incident:"INC", request:"REQ", service_request:"REQ", asset_request:"REQ", change:"CHG" };
 
+// Imported Freshservice tickets can reference people and teams that never had an
+// ATD Helpdesk record, so fall back to the name captured on the ticket itself.
 const TICKET_SELECT = `
- SELECT t.*, requester.name requester_name, requester.email requester_email,
+ SELECT t.*,
+ COALESCE(requester.name,t.external_requester_name) requester_name,
+ COALESCE(requester.email,t.external_requester_email) requester_email,
  creator.name created_by_name, creator.email created_by_email,
- assignee.name assigned_to_name, assignee.email assigned_to_email,
- g.name assigned_group_name
+ COALESCE(assignee.name,t.external_assignee_name) assigned_to_name,
+ assignee.email assigned_to_email,
+ COALESCE(g.name,t.external_group_name) assigned_group_name
  FROM tickets t
  LEFT JOIN users requester ON requester.id=t.requester_id
  LEFT JOIN users creator ON creator.id=t.created_by_user_id
  LEFT JOIN users assignee ON assignee.id=t.assigned_to_user_id
  LEFT JOIN support_groups g ON g.id=t.assigned_group_id`;
+
+// Two years of imported history shares the table with live work, so anything
+// still open must sort ahead of resolved and closed tickets.
+const ACTIVE_FIRST = `CASE WHEN t.status IN ('Resolved','Closed') THEN 1 ELSE 0 END`;
 
 function text(value, max=10000){ return String(value ?? "").trim().slice(0,max); }
 function id(value){ if(value===undefined)return undefined; if(value===null||value==="")return null; const n=Number(value); return Number.isInteger(n)&&n>0?n:null; }
@@ -45,9 +54,111 @@ async function validateAssignment(database,groupId,assigneeId){
 }
 async function notify(ticket){ try{ await createTicketAssignmentNotifications({ticket,assignedGroupId:ticket.assigned_group_id,assignedToUserId:ticket.assigned_to_user_id}); }catch(error){console.error("Ticket notification failed:",error.message);} try{ const result=await pool.query(`SELECT DISTINCT u.email FROM users u WHERE u.approved=TRUE AND u.status='active' AND u.archived_at IS NULL AND COALESCE(u.account_type,'person')='person' AND (u.id=$1 OR EXISTS(SELECT 1 FROM support_group_members gm WHERE gm.user_id=u.id AND gm.group_id=$2))`,[ticket.assigned_to_user_id,ticket.assigned_group_id]); await sendTicketAssignmentEmail({recipients:result.rows.map(r=>r.email).filter(Boolean),ticket,groupName:ticket.assigned_group_name}); }catch(error){console.error("Ticket email failed:",error.message);} }
 
-router.get("/employee-view",async(req,res)=>{ try{const result=await pool.query(`${TICKET_SELECT} WHERE t.requester_id=$1 ORDER BY CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){console.error(error);return res.status(500).json({error:"Failed to fetch your tickets."});}});
-router.get("/my-tickets",async(req,res)=>{const condition=req.user.role==='user'?`t.requester_id=$1`:`(t.requester_id=$1 OR t.assigned_to_user_id=$1 OR t.assigned_group_id IN(SELECT group_id FROM support_group_members WHERE user_id=$1))`;try{const result=await pool.query(`${TICKET_SELECT} WHERE ${condition} ORDER BY CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){return res.status(500).json({error:"Failed to fetch your tickets."});}});
-router.get("/",async(req,res)=>{ const values=[];const conditions=[];const add=(sql,value)=>{values.push(value);conditions.push(sql.replace("?",`$${values.length}`));}; if(req.query.status&&String(req.query.status).toLowerCase()!=="all"){const normalized=status(req.query.status);if(!normalized)return res.status(400).json({error:"Invalid status filter."});add("t.status=?",normalized);} if(req.query.search){values.push(`%${text(req.query.search,200)}%`);const i=values.length;conditions.push(`(t.ticket_ref ILIKE $${i} OR t.title ILIKE $${i} OR t.description ILIKE $${i} OR requester.name ILIKE $${i} OR assignee.name ILIKE $${i} OR g.name ILIKE $${i})`);} if(req.user.role==='user')add("t.requester_id=?",req.user.id);else if(['agent','operator'].includes(req.user.role)){values.push(req.user.id);const i=values.length;conditions.push(`(t.assigned_to_user_id=$${i} OR t.assigned_to_user_id IS NULL OR t.assigned_group_id IN(SELECT group_id FROM support_group_members WHERE user_id=$${i}))`);} const where=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";values.push(500,0);try{const result=await pool.query(`${TICKET_SELECT} ${where} ORDER BY CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,t.created_at DESC LIMIT $${values.length-1} OFFSET $${values.length}`,values);return res.json(result.rows.map(decorate));}catch(error){console.error("Fetch tickets failed:",error);return res.status(500).json({error:"Failed to fetch tickets."});}});
+router.get("/employee-view",async(req,res)=>{ try{const result=await pool.query(`${TICKET_SELECT} WHERE t.requester_id=$1 ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){console.error(error);return res.status(500).json({error:"Failed to fetch your tickets."});}});
+router.get("/my-tickets",async(req,res)=>{const condition=req.user.role==='user'?`t.requester_id=$1`:`(t.requester_id=$1 OR t.assigned_to_user_id=$1 OR t.assigned_group_id IN(SELECT group_id FROM support_group_members WHERE user_id=$1))`;try{const result=await pool.query(`${TICKET_SELECT} WHERE ${condition} ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){return res.status(500).json({error:"Failed to fetch your tickets."});}});
+
+// Freshservice-style inbox query: filter + paginate on the server, return real
+// queue counts for the full authorised set (not just the current page).
+router.get("/",async(req,res)=>{
+  const values=[];
+  const conditions=[];
+  const add=(sql,value)=>{values.push(value);conditions.push(sql.replace(/\?/g,`$${values.length}`));};
+
+  if(req.user.role==="user")add("t.requester_id=?",req.user.id);
+  else if(["agent","operator"].includes(req.user.role)){
+    values.push(req.user.id);
+    const i=values.length;
+    conditions.push(`(t.assigned_to_user_id=$${i} OR t.assigned_to_user_id IS NULL OR t.assigned_group_id IN(SELECT group_id FROM support_group_members WHERE user_id=$${i}))`);
+  }
+
+  if(req.query.search){
+    values.push(`%${text(req.query.search,200)}%`);
+    const i=values.length;
+    conditions.push(`(t.ticket_ref ILIKE $${i} OR t.external_id ILIKE $${i} OR t.title ILIKE $${i} OR t.description ILIKE $${i} OR t.category ILIKE $${i} OR requester.name ILIKE $${i} OR t.external_requester_name ILIKE $${i} OR t.external_requester_email ILIKE $${i} OR assignee.name ILIKE $${i} OR t.external_assignee_name ILIKE $${i} OR g.name ILIKE $${i} OR t.external_group_name ILIKE $${i})`);
+  }
+
+  if(String(req.query.view||"").toLowerCase()==="mine"){
+    add("t.assigned_to_user_id=?",req.user.id);
+  }
+
+  const baseWhere=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";
+  const baseValues=[...values];
+
+  const statusRaw=String(req.query.status||"all").trim();
+  const statusKey=statusRaw.toLowerCase();
+  const listValues=[...values];
+  const listConditions=[...conditions];
+  if(statusKey&&statusKey!=="all"){
+    if(statusKey==="unresolved"){
+      listConditions.push(`t.status NOT IN ('Resolved','Closed')`);
+    }else{
+      const normalized=status(statusRaw);
+      if(!normalized)return res.status(400).json({error:"Invalid status filter."});
+      listValues.push(normalized);
+      listConditions.push(`t.status=$${listValues.length}`);
+    }
+  }
+  const listWhere=listConditions.length?`WHERE ${listConditions.join(" AND ")}`:"";
+
+  const requestedLimit=Number(req.query.per_page||req.query.limit);
+  const perPage=Number.isFinite(requestedLimit)?Math.min(Math.max(Math.trunc(requestedLimit),1),200):50;
+  const page=Math.max(Math.trunc(Number(req.query.page)||1),1);
+  const offset=(page-1)*perPage;
+  const orderBy=`${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,t.created_at DESC`;
+
+  try{
+    const [countResult,rows,countsResult]=await Promise.all([
+      pool.query(`SELECT COUNT(*)::int AS total FROM tickets t LEFT JOIN users requester ON requester.id=t.requester_id LEFT JOIN users assignee ON assignee.id=t.assigned_to_user_id LEFT JOIN support_groups g ON g.id=t.assigned_group_id ${listWhere}`,listValues),
+      pool.query(`${TICKET_SELECT} ${listWhere} ORDER BY ${orderBy} LIMIT $${listValues.length+1} OFFSET $${listValues.length+2}`,[...listValues,perPage,offset]),
+      pool.query(
+        `SELECT
+           COUNT(*)::int AS all_count,
+           COUNT(*) FILTER (WHERE t.status NOT IN ('Resolved','Closed'))::int AS unresolved,
+           COUNT(*) FILTER (WHERE t.status='Open')::int AS open,
+           COUNT(*) FILTER (WHERE t.status='Assigned')::int AS assigned,
+           COUNT(*) FILTER (WHERE t.status='Pending')::int AS pending,
+           COUNT(*) FILTER (WHERE t.status='Investigating')::int AS investigating,
+           COUNT(*) FILTER (WHERE t.status='Waiting Approval')::int AS waiting_approval,
+           COUNT(*) FILTER (WHERE t.status='Resolved')::int AS resolved,
+           COUNT(*) FILTER (WHERE t.status='Closed')::int AS closed,
+           COUNT(*) FILTER (WHERE t.status='Escalated')::int AS escalated
+         FROM tickets t
+         LEFT JOIN users requester ON requester.id=t.requester_id
+         LEFT JOIN users assignee ON assignee.id=t.assigned_to_user_id
+         LEFT JOIN support_groups g ON g.id=t.assigned_group_id
+         ${baseWhere}`,
+        baseValues
+      ),
+    ]);
+
+    const total=countResult.rows[0].total;
+    const c=countsResult.rows[0];
+    return res.json({
+      tickets:rows.rows.map(decorate),
+      pagination:{
+        page,
+        perPage,
+        total,
+        totalPages:Math.max(1,Math.ceil(total/perPage)),
+      },
+      counts:{
+        All:c.all_count,
+        Unresolved:c.unresolved,
+        Open:c.open,
+        Assigned:c.assigned,
+        Pending:c.pending,
+        Investigating:c.investigating,
+        "Waiting Approval":c.waiting_approval,
+        Resolved:c.resolved,
+        Closed:c.closed,
+        Escalated:c.escalated,
+      },
+    });
+  }catch(error){
+    console.error("Fetch tickets failed:",error);
+    return res.status(500).json({error:"Failed to fetch tickets."});
+  }
+});
 router.get("/:id",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});return res.json(decorate(ticket));}catch(error){return res.status(500).json({error:"Failed to fetch the ticket."});}});
 
 router.post("/",async(req,res)=>{

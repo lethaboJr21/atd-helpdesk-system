@@ -63,6 +63,12 @@ export const adminControlsApi = {
 
   updateUserEmailPreferences: (userId, data) =>
     api.put(`/admin-controls/${userId}/email-preferences`, data),
+
+  getAudit: (params) =>
+    api.get("/admin-controls/audit", { params }),
+
+  getHealth: () =>
+    api.get("/admin-controls/health"),
 };
 
 export const settingsApi = {
@@ -92,6 +98,19 @@ export const assetsApi = {
 };
 
 export const knowledgeApi = { getAll: (params) => api.get("/knowledge", { params }) };
+
+export const archiveApi = {
+  getSummary: () => api.get("/archive/summary"),
+  getFilters: () => api.get("/archive/filters"),
+  searchTickets: (params) => api.get("/archive/tickets", { params }),
+  getMyTickets: (params) => api.get("/archive/my-tickets", { params }),
+  getTicket: (fsId) => api.get(`/archive/tickets/${fsId}`),
+  downloadAttachment: (fsId) =>
+    api.get(`/archive/attachments/${fsId}/download`, { responseType: "blob" }),
+  getKnowledge: (params) => api.get("/archive/knowledge", { params }),
+  getAssets: (params) => api.get("/archive/assets", { params }),
+  getSyncRuns: () => api.get("/archive/sync-runs"),
+};
 
 export const authApi = {
   login: (credentials) =>
@@ -136,7 +155,8 @@ export const azureApi = {
 export const statsApi = {
   getDashboard: () => api.get("/stats/dashboard"),
   getSLATrend: () => api.get("/stats/sla-trend"),
-  getVolumeData: () => api.get("/stats/volume"),
+  getVolumeData: (params) => api.get("/stats/volume", { params }),
+  getServiceMix: () => api.get("/stats/service-mix"),
   getCategoryData: () => api.get("/stats/categories"),
   getAssetHealth: () => api.get("/stats/assets"),
 };

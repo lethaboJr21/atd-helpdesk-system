@@ -49,12 +49,35 @@ function isCompanyUser(user, allowedDomain) {
 
 function inferAccountType(user) {
   const email = getPrimaryEmail(user);
+  const local = (email.split("@")[0] || "").toLowerCase();
   const name = String(user.displayName || "").toLowerCase();
-  const combined = `${email} ${name}`;
+  // Whole tokens only — substring matches like "bot" inside "Botipe" / "Sebothoma"
+  // previously marked real employees as service accounts.
+  const tokens = `${local.replace(/[._+-]+/g, " ")} ${name}`
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
 
   if (user.userType === "Guest") return "external";
-  if (/shared|department|reception|accounts|info@|support@|sales@/.test(combined)) return "shared";
-  if (/service|svc|automation|bot|system|noreply|no-reply/.test(combined)) return "service";
+
+  if (
+    /^(info|support|sales|accounts|reception|helpdesk|itsupport)([.+_-]|$)/i.test(local) ||
+    tokens.some((token) => ["shared", "mailbox", "reception", "helpdesk", "itsupport"].includes(token))
+  ) {
+    return "shared";
+  }
+
+  if (
+    /^(noreply|no-reply|svc|service|automation|system\d*)([.+_-]|$)/i.test(local) ||
+    /\.adm$/i.test(local) ||
+    tokens.some((token) =>
+      ["service", "svc", "automation", "bot", "noreply", "adm", "admin", "system"].includes(token) ||
+      /^system\d+$/.test(token)
+    )
+  ) {
+    return "service";
+  }
+
   return "person";
 }
 

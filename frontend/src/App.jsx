@@ -9,6 +9,9 @@ import {
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./hooks/useAuth";
 
+import AdminAuditPage from "./pages/AdminAuditPage";
+import AdminHealthPage from "./pages/AdminHealthPage";
+import AdminMicrosoftDirectory from "./pages/AdminMicrosoftDirectory";
 import AdminSettings from "./pages/AdminSettings";
 import AdminUsers from "./pages/AdminUsers";
 import AssetsPage from "./pages/AssetsPage";
@@ -19,6 +22,7 @@ import LoginPage from "./pages/LoginPage";
 import OperationsHubEmbed from "./pages/OperationsHubEmbed";
 import ProductionDashboard from "./pages/ProductionDashboard";
 import SignupPage from "./pages/SignupPage.jsx";
+import TicketArchivePage from "./pages/TicketArchivePage";
 import TicketCreatePage from "./pages/TicketCreatePage";
 import TicketDetailPage from "./pages/TicketDetailPage";
 import TicketWorkspace from "./pages/TicketWorkspace";
@@ -61,7 +65,7 @@ function hasPortalAccess(user) {
     !user?.archived_at &&
     !user?.deactivated_at &&
     user?.microsoft_account_enabled !== false &&
-    user?.account_type !== "non-person"
+    (!user?.account_type || user.account_type === "person")
   );
 }
 
@@ -290,6 +294,17 @@ function AppRoutes({ moduleBase }) {
       />
 
       <Route
+        path="/archive"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <TicketArchivePage />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
         path="/operations-hub"
         element={
           <PrivateRoute>
@@ -317,6 +332,17 @@ function AppRoutes({ moduleBase }) {
           <PrivateRoute>
             <AdminRoute>
               <AdminUsers />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin/microsoft"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminMicrosoftDirectory />
             </AdminRoute>
           </PrivateRoute>
         }
@@ -365,6 +391,28 @@ function AppRoutes({ moduleBase }) {
         }
       />
 
+
+      <Route
+        path="/admin/audit"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminAuditPage />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/admin/health"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <AdminHealthPage />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
 
       <Route
         path="*"

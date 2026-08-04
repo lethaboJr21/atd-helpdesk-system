@@ -1,4 +1,4 @@
-﻿require("dotenv").config();
+require("dotenv").config();
 
 const path = require("path");
 const http = require("http");
@@ -24,6 +24,7 @@ const userRoutes = require("./routes/users");
 const settingsRoutes = require("./routes/settings");
 const adminControlsRoutes = require("./routes/adminControls");
 const assetRoutes = require("./routes/assets");
+const archiveRoutes = require("./routes/archive");
 const productionSyncRoutes = require("./routes/productionSync");
 const productionEventRoutes = require("./routes/productionEvents");
 const workspaceRoutes = require("./routes/workspaces"); // BATCH1_WORKSPACE_ROUTE_REQUIRE
@@ -107,7 +108,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/admin-controls", adminControlsRoutes);
 app.use("/api/assets", assetRoutes);
-app.use("/api/workspaces", workspaceRoutes); // BATCH1_WORKSPACE_ROUTE_USE
+app.use("/api/workspaces", workspaceRoutes);
+app.use("/api/archive", archiveRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/production/sync", productionSyncRoutes);
 app.use("/api/production/events", productionEventRoutes);

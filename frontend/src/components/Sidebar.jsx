@@ -1,12 +1,12 @@
 import {
   AlertTriangle,
+  Archive,
   BriefcaseBusiness,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
   Factory,
   HardDrive,
-  Headphones,
   Home,
   LayoutDashboard,
   Settings,
@@ -126,6 +126,11 @@ export default function Sidebar({
         path: "/admin/employee-access",
       },
       {
+        icon: Archive,
+        label: "Freshservice Import",
+        path: "/archive",
+      },
+      {
         icon: Settings,
         label: "Admin Settings",
         path: "/admin",
@@ -210,9 +215,11 @@ export default function Sidebar({
               : "gap-3 px-6"
           )}
         >
-          <div className="rounded-2xl bg-blue-500 p-3">
-            <Headphones className="h-7 w-7" />
-          </div>
+          <img
+            src={`/helpdesk/atd-logo-mark.png`}
+            alt="ATD"
+            className="h-11 w-11 rounded-2xl bg-white object-contain p-1.5"
+          />
 
           {!collapsed && (
             <div>

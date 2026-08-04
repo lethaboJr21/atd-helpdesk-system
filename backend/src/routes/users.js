@@ -108,10 +108,23 @@ function addAccountViewConditions({ view, whereConditions, queryParameters, para
       whereConditions.push("archived_at IS NULL", "approved = FALSE", "role = 'pending'");
       break;
     case "active":
-      whereConditions.push("archived_at IS NULL", "approved = TRUE", "status = 'active'", "last_login_at IS NOT NULL", "account_type = 'person'");
+      // Freshservice-style: directory-enabled people are Active whether or not
+      // they have signed into this portal yet (Neo, Sydney, ERP, etc.).
+      whereConditions.push(
+        "archived_at IS NULL",
+        "approved = TRUE",
+        "account_type = 'person'",
+        "deactivated_at IS NULL",
+        "COALESCE(microsoft_account_enabled, TRUE) = TRUE"
+      );
       break;
     case "deactivated":
-      whereConditions.push("archived_at IS NULL", "approved = TRUE", "account_type = 'person'", "(status='inactive' OR last_login_at IS NULL OR microsoft_account_enabled=FALSE OR deactivated_at IS NOT NULL)");
+      whereConditions.push(
+        "archived_at IS NULL",
+        "approved = TRUE",
+        "account_type = 'person'",
+        "(deactivated_at IS NOT NULL OR microsoft_account_enabled = FALSE)"
+      );
       break;
     case "archived": whereConditions.push("archived_at IS NOT NULL"); break;
     case "external":
@@ -197,10 +210,11 @@ router.get("/", allowRoles("manager", "admin", "superadmin"), async (request, re
          CASE WHEN archived_at IS NOT NULL THEN 'archived'
           WHEN account_type <> 'person' THEN 'non_person'
           WHEN approved=FALSE AND role='pending' THEN 'pending'
-          WHEN approved=TRUE AND status='active' AND last_login_at IS NOT NULL THEN 'active'
           WHEN microsoft_account_enabled=FALSE THEN 'microsoft_disabled'
+          WHEN deactivated_at IS NOT NULL THEN 'deactivated'
           WHEN approved=TRUE AND last_login_at IS NULL THEN 'never_signed_in'
-          WHEN approved=TRUE AND status='inactive' THEN 'deactivated' ELSE 'other' END AS account_state
+          WHEN approved=TRUE THEN 'active'
+          ELSE 'other' END AS account_state
        FROM users ${whereClause}
        ORDER BY name ASC, email ASC
        LIMIT $${parameterIndex} OFFSET $${parameterIndex + 1}`,
@@ -216,13 +230,14 @@ router.get("/", allowRoles("manager", "admin", "superadmin"), async (request, re
 router.get("/meta", allowRoles("manager", "admin", "superadmin"), async (request, response) => {
   try {
     const [summaryResult, departmentsResult] = await Promise.all([
+      // Counts must match the list filters for each view (domain + archived rules).
       pool.query(`SELECT COUNT(*)::integer AS total,
-        COUNT(*) FILTER (WHERE approved=TRUE AND status='active' AND last_login_at IS NOT NULL AND archived_at IS NULL AND account_type='person')::integer AS active,
+        COUNT(*) FILTER (WHERE approved=TRUE AND archived_at IS NULL AND account_type='person' AND deactivated_at IS NULL AND COALESCE(microsoft_account_enabled, TRUE)=TRUE AND LOWER(email) LIKE $1)::integer AS active,
         COUNT(*) FILTER (WHERE approved=FALSE AND role='pending' AND archived_at IS NULL)::integer AS pending,
-        COUNT(*) FILTER (WHERE approved=TRUE AND archived_at IS NULL AND account_type='person' AND (status='inactive' OR last_login_at IS NULL OR microsoft_account_enabled=FALSE OR deactivated_at IS NOT NULL))::integer AS deactivated,
+        COUNT(*) FILTER (WHERE approved=TRUE AND archived_at IS NULL AND account_type='person' AND LOWER(email) LIKE $1 AND (deactivated_at IS NOT NULL OR microsoft_account_enabled=FALSE))::integer AS deactivated,
         COUNT(*) FILTER (WHERE archived_at IS NOT NULL)::integer AS archived,
-        COUNT(*) FILTER (WHERE LOWER(email) NOT LIKE $1)::integer AS external,
-        COUNT(*) FILTER (WHERE account_type <> 'person')::integer AS non_person
+        COUNT(*) FILTER (WHERE LOWER(email) NOT LIKE $1 AND archived_at IS NULL)::integer AS external,
+        COUNT(*) FILTER (WHERE account_type <> 'person' AND archived_at IS NULL AND LOWER(email) LIKE $1)::integer AS non_person
         FROM users`, [`%@${COMPANY_DOMAIN}`]),
       pool.query("SELECT DISTINCT department FROM users WHERE COALESCE(TRIM(department),'') <> '' ORDER BY department"),
     ]);

@@ -1,7 +1,19 @@
-﻿import React, { useEffect, useState } from "react";
-import { Navigate, useNavigate, Link } from "react-router-dom";
+﻿import { useEffect, useState } from "react";
+import { Link, Navigate, useNavigate } from "react-router-dom";
+import { AlertCircle } from "lucide-react";
+
 import { useAuth } from "../hooks/useAuth";
-import { Headphones, AlertCircle } from "lucide-react";
+
+function MicrosoftLogo({ className = "h-5 w-5" }) {
+  return (
+    <svg className={className} viewBox="0 0 21 21" aria-hidden="true">
+      <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+      <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+      <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+      <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+    </svg>
+  );
+}
 
 export default function LoginPage() {
   const { login, completeSso, loginWithMicrosoft, isAuthenticated, loading } = useAuth();
@@ -12,44 +24,39 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-
-// Handle Microsoft SSO callback
   useEffect(() => {
-  const params = new URLSearchParams(window.location.search);
-  const token = params.get("token");
-  const ssoError = params.get("ssoError");
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
+    const ssoError = params.get("ssoError");
 
-  if (ssoError) {
-    setError(decodeURIComponent(ssoError));
-    window.history.replaceState({}, document.title, window.location.pathname);
-    return;
-  }
-
-  if (!token) return;
-
-  setSubmitting(true);
-  setError("");
-
-  completeSso(token)
-    .then(() => {
+    if (ssoError) {
+      setError(decodeURIComponent(ssoError));
       window.history.replaceState({}, document.title, window.location.pathname);
-      navigate("/", { replace: true });
-    })
-    .catch((err) => {
-      console.error("Microsoft SSO completion failed:", err);
+      return;
+    }
 
-      localStorage.removeItem("token");
+    if (!token) return;
 
-      setError(
-        "Microsoft sign-in completed, but the portal session could not be created."
-      );
+    setSubmitting(true);
+    setError("");
 
-      window.history.replaceState({}, document.title, window.location.pathname);
-    })
-    .finally(() => {
-      setSubmitting(false);
-    });
-}, [completeSso, navigate]);
+    completeSso(token)
+      .then(() => {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        navigate("/", { replace: true });
+      })
+      .catch((err) => {
+        console.error("Microsoft SSO completion failed:", err);
+        localStorage.removeItem("token");
+        setError(
+          "Microsoft sign-in completed, but the portal session could not be created."
+        );
+        window.history.replaceState({}, document.title, window.location.pathname);
+      })
+      .finally(() => {
+        setSubmitting(false);
+      });
+  }, [completeSso, navigate]);
 
   if (!loading && isAuthenticated) {
     return <Navigate to="/" replace />;
@@ -70,8 +77,8 @@ export default function LoginPage() {
         err?.message ||
         "Login failed.";
 
-      if (msg.toLowerCase().includes("pending")) {
-        setError("â³ Your account is still awaiting admin approval.");
+      if (String(msg).toLowerCase().includes("pending")) {
+        setError("Your account is still awaiting admin approval.");
       } else {
         setError(msg);
       }
@@ -80,16 +87,15 @@ export default function LoginPage() {
     }
   };
 
-
-
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
         <div className="mb-8 flex flex-col items-center">
-          <div className="mb-4 rounded-2xl bg-blue-600 p-4">
-            <Headphones className="h-8 w-8 text-white" />
-          </div>
+          <img
+            src="/helpdesk/atd-logo.png?v=5"
+            alt="ATD Alliance"
+            className="mb-4 h-14 w-auto object-contain"
+          />
           <h1 className="text-2xl font-bold text-slate-950">
             ATD Alliance Portal
           </h1>
@@ -104,18 +110,17 @@ export default function LoginPage() {
             <span>{error}</span>
           </div>
         )}
+
         <button
           type="button"
           onClick={loginWithMicrosoft}
           disabled={submitting}
           className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
         >
-          <span className="inline-flex h-5 w-5 items-center justify-center rounded bg-blue-600 text-xs font-black text-white">
-            M
-          </span>
+          <MicrosoftLogo />
           Sign in with Microsoft 365
         </button>
-              
+
         <div className="mb-4 flex items-center gap-3">
           <div className="h-px flex-1 bg-slate-200" />
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
@@ -123,6 +128,7 @@ export default function LoginPage() {
           </span>
           <div className="h-px flex-1 bg-slate-200" />
         </div>
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="mb-1 block text-sm font-semibold text-slate-700">
@@ -148,7 +154,7 @@ export default function LoginPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
-              placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+              placeholder="Enter password"
             />
           </div>
 
@@ -161,17 +167,15 @@ export default function LoginPage() {
           </button>
         </form>
 
-        
         <p className="mt-6 text-center text-sm text-slate-500">
-          Don't have an account?{" "}
+          Don&apos;t have an account?{" "}
           <Link to="/signup" className="font-semibold text-blue-600 hover:text-blue-700">
             Sign Up
           </Link>
         </p>
 
-
         <p className="mt-6 text-center text-xs text-slate-400">
-          Â© {new Date().getFullYear()} ATD Alliance Â· portal.atdalliance.co.za
+          © {new Date().getFullYear()} ATD Alliance · portal.atdalliance.co.za
         </p>
       </div>
     </div>

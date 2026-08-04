@@ -29,6 +29,9 @@ Thumbs.db
 backend/backups/
 *.sql
 
+# Archived Freshservice attachment payloads
+backend/storage/
+
 # Keep reviewed application migrations in Git
 !backend/src/db/migrations/
 !backend/src/db/migrations/*.sql
