@@ -1,7 +1,25 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="4" fill="#ffffff"/>
-  <text x="16" y="21.5" text-anchor="middle"
-        font-family="Arial Black, Arial, Helvetica, sans-serif"
-        font-size="10.5" font-weight="800" font-style="italic"
-        fill="#152349">ATD</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#ffffff"/>
+  <path
+    d="M102 132H410Q440 132 440 162V213
+       C416 213 397 232 397 256
+       C397 280 416 299 440 299V350
+       Q440 380 410 380H102Q72 380 72 350V299
+       C96 299 115 280 115 256
+       C115 232 96 213 72 213V162
+       Q72 132 102 132Z"
+    fill="#0a3f73"
+  />
+  <path
+    fill="#ffffff"
+    fill-rule="evenodd"
+    d="M145 332 229 168H322L354 332H294L286 281H219L194 332ZM243 230 227 263H282L276 230Z"
+  />
+  <path
+    d="M132 279 350 215 225 315Z"
+    fill="#20a8f0"
+    stroke="#ffffff"
+    stroke-linejoin="round"
+    stroke-width="8"
+  />
 </svg>
