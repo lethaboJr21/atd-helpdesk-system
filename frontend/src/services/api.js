@@ -35,6 +35,7 @@ export const ticketsApi = {
   getMine: () => api.get("/tickets/my-tickets"),
   getEmployeeView: () =>api.get("/tickets/employee-view"),
   getById: (id) => api.get(`/tickets/${id}`),
+  getHistory: (id) => api.get(`/tickets/${id}/history`),
   create: (data) => api.post("/tickets", data),
   update: (id, data) => api.put(`/tickets/${id}`, data),
   updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),
@@ -127,6 +128,13 @@ export const authApi = {
 
 export const userApi = {
   getUsers: (params) => api.get("/users", { params }),
+  unwrapUsers: (payload) => {
+    if (Array.isArray(payload)) return { users: payload, pagination: null };
+    return {
+      users: Array.isArray(payload?.users) ? payload.users : [],
+      pagination: payload?.pagination || null,
+    };
+  },
   getMeta: () => api.get("/users/meta"),
   getById: (id) => api.get(`/users/${id}`),
   getEmployeePreview: (id) => api.get(`/users/${id}/employee-preview`),

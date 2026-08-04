@@ -88,19 +88,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
-        <div className="mb-8 flex flex-col items-center">
+    <div className="flex min-h-[100svh] items-center justify-center bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 px-4 py-4 sm:py-8">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl sm:p-8">
+        <div className="mb-6 flex flex-col items-center text-center">
           <img
-            src="/helpdesk/atd-logo.png?v=5"
-            alt="ATD Alliance"
-            className="mb-4 h-14 w-auto object-contain"
+            src="/helpdesk/atd-helpdesk-logo.png?v=7"
+            alt="ATD Helpdesk"
+            className="h-auto w-full max-w-[260px] object-contain"
           />
-          <h1 className="text-2xl font-bold text-slate-950">
-            ATD Alliance Portal
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">
-            IT Helpdesk Management System
+          <h1 className="sr-only">ATD Helpdesk</h1>
+          <p className="mt-3 text-sm text-slate-500">
+            Sign in to access your support workspace
           </p>
         </div>
 
@@ -139,6 +137,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
               placeholder="you@atdalliance.co.za"
             />
@@ -153,6 +152,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="current-password"
               className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
               placeholder="Enter password"
             />

@@ -17,7 +17,7 @@ import {
   Wrench,
 } from "lucide-react";
 
-import Sidebar from "../components/Sidebar";
+import OperationsShell from "../components/OperationsShell";
 import { useAuth } from "../hooks/useAuth";
 import {
   assetsApi,
@@ -64,7 +64,6 @@ export default function EmployeeDashboard() {
   const [notifications, setNotifications] = useState([]);
   const [sectionErrors, setSectionErrors] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const operationsPreview = user?.role !== "user" && employeeView;
 
@@ -168,71 +167,46 @@ export default function EmployeeDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900">
-      <Sidebar
-        navigate={navigate}
-        collapsed={sidebarCollapsed}
-        onToggle={() => setSidebarCollapsed((value) => !value)}
-      />
-
-      <main
-        className={classNames(
-          "transition-[padding] duration-300",
-          sidebarCollapsed ? "lg:pl-20" : "lg:pl-72"
-        )}
-      >
-        <header className="border-b border-slate-200 bg-white px-5 py-5 xl:px-8">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-semibold text-blue-700">
-                Employee Self-Service
-              </p>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-                Welcome, {user?.name || user?.email}
-              </h1>
-              <p className="mt-1 text-sm text-slate-500">
-                Report issues, request services and track support from one place.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {operationsPreview && (
-                <button
-                  type="button"
-                  onClick={returnToOperations}
-                  className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-bold text-blue-700"
-                >
-                  Return to Operations View
-                </button>
+    <OperationsShell
+      breadcrumb="Employee Self-Service"
+      title={`Welcome, ${user?.name || user?.email || "there"}`}
+      subtitle="Report issues, request services and track support from one place."
+      actions={
+        <>
+          {operationsPreview && (
+            <button
+              type="button"
+              onClick={returnToOperations}
+              className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-bold text-blue-700 xl:px-4 xl:py-2.5"
+            >
+              Return to Operations View
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={loadDashboard}
+            disabled={loading}
+            className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm disabled:opacity-60 xl:px-4 xl:py-2.5"
+          >
+            <RefreshCw
+              className={classNames(
+                "mr-2 h-4 w-4",
+                loading && "animate-spin"
               )}
-
-              <button
-                type="button"
-                onClick={loadDashboard}
-                disabled={loading}
-                className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm disabled:opacity-60"
-              >
-                <RefreshCw
-                  className={classNames(
-                    "mr-2 h-4 w-4",
-                    loading && "animate-spin"
-                  )}
-                />
-                Refresh
-              </button>
-
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <section className="space-y-6 p-5 xl:p-8">
+            />
+            Refresh
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm xl:px-4 xl:py-2.5"
+          >
+            Logout
+          </button>
+        </>
+      }
+    >
+        <section className="space-y-4 lg:space-y-6">
           {sectionErrors.length > 0 && (
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="font-bold text-amber-900">
@@ -248,7 +222,7 @@ export default function EmployeeDashboard() {
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 xl:gap-4">
             <ActionCard
               icon={AlertCircle}
               title="Report an Incident"
@@ -381,8 +355,7 @@ export default function EmployeeDashboard() {
             </DashboardPanel>
           </div>
         </section>
-      </main>
-    </div>
+    </OperationsShell>
   );
 }
 

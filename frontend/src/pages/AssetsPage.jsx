@@ -16,6 +16,7 @@ import {
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import OperationsShell from "../components/OperationsShell";
 import { useAuth } from "../hooks/useAuth";
 import { assetsApi } from "../services/api";
 
@@ -104,7 +105,7 @@ function StatusBadge({ status }) {
 export default function AssetsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, employeeView } = useAuth();
+  const { user, employeeView, logout } = useAuth();
   const operationsRole = OPERATIONS_ROLES.has(user?.role);
   const employeeExperience =
     user?.role === "user" ||
@@ -246,43 +247,45 @@ export default function AssetsPage() {
     untraced: assets.filter((a) => a.status === "untraced").length,
   };
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
+    <OperationsShell
+      breadcrumb="Helpdesk / Assets and CMDB"
+      title="Asset Register"
+      subtitle="Operational view of AMS-managed devices across the organisation."
+      actions={
+        <>
           <button
-            onClick={() => navigate("/")}
-            className="mb-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold shadow-sm hover:bg-slate-50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </button>
-          <p className="text-sm text-slate-500">Helpdesk / Assets and CMDB</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">
-            Asset Register
-          </h1>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button
+            type="button"
             onClick={fetchAssets}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm hover:bg-slate-50 disabled:opacity-60 xl:px-4 xl:py-2.5"
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate("/login", { replace: true });
+            }}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm hover:bg-slate-50 xl:px-4 xl:py-2.5"
+          >
+            Logout
           </button>
           <a
             href="https://portal.atdalliance.co.za/ams/"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 xl:px-4 xl:py-2.5"
           >
             <ExternalLink className="h-4 w-4" />
             Open AMS
           </a>
-        </div>
-      </header>
+        </>
+      }
+    >
       {error && <Alert text={error} />}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5 xl:gap-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:mb-6 xl:grid-cols-5 xl:gap-4">
         {Object.entries({
           "Total Assets": stats.total,
           "In Use": stats.inUse,
@@ -292,17 +295,17 @@ export default function AssetsPage() {
         }).map(([label, value]) => (
           <div
             key={label}
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 xl:p-5"
           >
             <p className="text-sm font-semibold text-slate-500">{label}</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950">
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-950 xl:text-3xl">
               {value}
             </p>
           </div>
         ))}
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center xl:p-5">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -400,7 +403,7 @@ export default function AssetsPage() {
           operational
         />
       )}
-    </div>
+    </OperationsShell>
   );
 }
 function EmployeeAssets({
@@ -415,79 +418,70 @@ function EmployeeAssets({
   support,
 }) {
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <button
-              onClick={() =>
-                navigate(user?.role === "user" ? "/" : "/employee")
-              }
-              className="mb-4 inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Employee Dashboard
-            </button>
-            <p className="text-sm font-semibold text-blue-700">
-              Employee Self-Service
+    <OperationsShell
+      breadcrumb="Employee Self-Service"
+      title="Your Assets"
+      subtitle={`Devices currently assigned to ${employee?.name || user?.name || "your account"}.`}
+      actions={
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(user?.role === "user" ? "/" : "/employee")
+            }
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 xl:px-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={() => support("asset_request")}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 xl:px-4"
+          >
+            <PackagePlus className="h-4 w-4" />
+            Request an Asset
+          </button>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={loading}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-60 xl:px-4"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            Refresh
+          </button>
+        </>
+      }
+    >
+      {error ? <Alert text={error} /> : null}
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 xl:gap-5">
+        {loading ? (
+          <div className="col-span-full rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
+            Loading your assets...
+          </div>
+        ) : assets.length === 0 ? (
+          <div className="col-span-full rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+            <HardDrive className="mx-auto h-10 w-10 text-slate-400" />
+            <p className="mt-3 font-semibold text-slate-700">
+              No assets assigned
             </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-              Your Assets
-            </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Devices currently assigned to{" "}
-              {employee?.name || user?.name || "your account"}.
+              Request an asset if you need a device for work.
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => support("asset_request")}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
-            >
-              <PackagePlus className="h-4 w-4" />
-              Request an Asset
-            </button>
-            <button
-              onClick={refresh}
-              disabled={loading}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-60"
-            >
-              <RefreshCw
-                className={cn("h-4 w-4", loading && "animate-spin")}
-              />
-              Refresh
-            </button>
-          </div>
-        </header>
-        {error && <Alert text={error} />}
-        <section className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {loading ? (
-            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-              Loading your assets...
-            </div>
-          ) : assets.length === 0 ? (
-            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-              <HardDrive className="mx-auto h-10 w-10 text-slate-400" />
-              <p className="mt-3 font-semibold text-slate-700">
-                No assets assigned
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Request an asset if you need a device for work.
-              </p>
-            </div>
-          ) : (
-            assets.map((asset) => (
-              <Card
-                key={asset.id}
-                asset={asset}
-                open={open}
-                support={support}
-              />
-            ))
-          )}
-        </section>
-      </div>
-    </div>
+        ) : (
+          assets.map((asset) => (
+            <Card
+              key={asset.id}
+              asset={asset}
+              open={open}
+              support={support}
+            />
+          ))
+        )}
+      </section>
+    </OperationsShell>
   );
 }
 function Card({ asset, open, support }) {

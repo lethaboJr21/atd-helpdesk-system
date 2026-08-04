@@ -18,19 +18,24 @@ router.get('/dashboard', async (req, res) => {
         COUNT(*) FILTER (WHERE due_at IS NOT NULL)::int AS with_due,
         COUNT(*) FILTER (
           WHERE due_at IS NOT NULL
-            AND COALESCE(closed_at, NOW()) <= due_at
+            AND COALESCE(resolved_at, closed_at, NOW()) <= due_at
         )::int AS within_sla,
         ROUND(
-          AVG(EXTRACT(EPOCH FROM (closed_at - created_at)))
-          FILTER (WHERE closed_at IS NOT NULL AND status IN ('Resolved','Closed'))
-        )::bigint AS avg_close_secs
+          AVG(EXTRACT(EPOCH FROM (
+            COALESCE(resolved_at, closed_at) - created_at
+          )))
+          FILTER (
+            WHERE COALESCE(resolved_at, closed_at) IS NOT NULL
+              AND status IN ('Resolved','Closed')
+          )
+        )::bigint AS avg_resolution_secs
       FROM tickets
     `)
 
     const row = rows[0]
     const withDue = row.with_due || 0
     const withinSla = row.within_sla || 0
-    const avgSecs = Number(row.avg_close_secs) || 0
+    const avgSecs = Number(row.avg_resolution_secs) || 0
     let averageResolution = 'N/A'
     if (avgSecs > 0) {
       const days = Math.floor(avgSecs / 86400)
@@ -47,6 +52,14 @@ router.get('/dashboard', async (req, res) => {
       critical: row.critical_at_risk,
       slaCompliance: withDue ? `${Math.round((withinSla / withDue) * 100)}%` : 'N/A',
       averageResolution,
+      scope: 'all_helpdesk',
+      scopeLabel: 'All Helpdesk tickets',
+      definitions: {
+        open: "Tickets whose status is not Resolved or Closed.",
+        slaCompliance: "Due-dated tickets completed on time or not yet overdue.",
+        critical: "Open tickets with Critical priority or an overdue due date.",
+        averageResolution: "Average time from ticket creation to resolution or closure.",
+      },
       // legacy keys kept for older clients
       open_incidents: row.open_tickets,
       pending_requests: row.open_tickets,
@@ -86,7 +99,12 @@ router.get('/volume', async (req, res) => {
         GROUP BY 1
       )
       SELECT
+        days.day::text AS date,
         to_char(days.day, 'Dy') AS day,
+        CASE
+          WHEN $1::int <= 7 THEN to_char(days.day, 'Dy')
+          ELSE to_char(days.day, 'DD Mon')
+        END AS label,
         COALESCE(counted.incidents, 0) AS incidents,
         COALESCE(counted.requests, 0) AS requests,
         COALESCE(counted.changes, 0) AS changes

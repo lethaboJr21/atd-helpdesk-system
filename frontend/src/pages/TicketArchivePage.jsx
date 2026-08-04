@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
+import OperationsShell from "../components/OperationsShell";
 import { useAuth } from "../hooks/useAuth";
 import { archiveApi } from "../services/api";
 
@@ -424,7 +425,7 @@ function TicketDrawer({ fsId, onClose }) {
 
 export default function TicketArchivePage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const operational = OPERATIONS_ROLES.has(user?.role);
 
   const [summary, setSummary] = useState(null);
@@ -534,56 +535,44 @@ export default function TicketArchivePage() {
   const coverage = summary?.coverage;
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="min-w-0">
+    <OperationsShell
+      breadcrumb="Helpdesk / Data Migration"
+      title="Freshservice Import"
+      subtitle="Raw mirror of the Freshservice tenant used to confirm coverage before cancellation."
+      actions={
+        <>
+          {operational ? (
             <button
               type="button"
-              onClick={() => navigate(operational ? "/" : "/employee")}
-              className="mb-4 inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50"
+              onClick={loadTickets}
+              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 xl:px-4"
             >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Dashboard
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+              Refresh
             </button>
-            <p className="flex items-center gap-2 text-sm font-semibold text-blue-700">
-              <Archive className="h-4 w-4" />
-              Data Migration
-            </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-              Freshservice Import
-            </h1>
-            <p className="mt-1 max-w-2xl text-sm text-slate-500">
-              Raw mirror of the Freshservice tenant, used to confirm nothing is
-              missing before the subscription is cancelled. The tickets themselves
-              live in the{" "}
-              <button
-                type="button"
-                onClick={() => navigate("/tickets")}
-                className="font-semibold text-blue-700 underline hover:text-blue-800"
-              >
-                Ticket Workspace
-              </button>{" "}
-              alongside everything else.
-            </p>
-          </div>
-
-          {operational ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                onClick={loadTickets}
-                className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50"
-              >
-                <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
-                Refresh
-              </button>
-            </div>
           ) : null}
-        </header>
-
+          <button
+            type="button"
+            onClick={() => navigate("/tickets")}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 xl:px-4"
+          >
+            Ticket Workspace
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate("/login", { replace: true });
+            }}
+            className="inline-flex h-10 items-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 xl:px-4"
+          >
+            Logout
+          </button>
+        </>
+      }
+    >
         {operational && totals ? (
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:gap-4">
             <StatCard
               label="Archived tickets"
               value={Number(totals.tickets).toLocaleString("en-ZA")}
@@ -889,11 +878,10 @@ export default function TicketArchivePage() {
             </div>
           ) : null}
         </div>
-      </div>
 
       {selectedFsId ? (
         <TicketDrawer fsId={selectedFsId} onClose={() => setSelectedFsId(null)} />
       ) : null}
-    </div>
+    </OperationsShell>
   );
 }

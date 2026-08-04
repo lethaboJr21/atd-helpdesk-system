@@ -210,22 +210,18 @@ export default function Sidebar({
         <div
           className={classNames(
             "flex items-center border-b border-white/10 py-6",
-            collapsed
-              ? "justify-center px-3"
-              : "gap-3 px-6"
+            collapsed ? "justify-center px-3" : "gap-3 px-6"
           )}
         >
           <img
-            src={`/helpdesk/atd-logo-mark.png`}
-            alt="ATD"
-            className="h-11 w-11 rounded-2xl bg-white object-contain p-1.5"
+            src="/helpdesk/atd-helpdesk-ticket.svg?v=2"
+            alt="ATD Helpdesk"
+            className="h-11 w-11 rounded-xl bg-white object-contain"
           />
 
           {!collapsed && (
             <div>
-              <p className="font-bold">
-                ATD Alliance Helpdesk
-              </p>
+              <p className="font-bold">ATD Helpdesk</p>
               <p className="mt-1 text-xs text-slate-400">
                 {employeeExperience
                   ? "Employee Self-Service"

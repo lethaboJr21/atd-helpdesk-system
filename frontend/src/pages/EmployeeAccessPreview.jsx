@@ -72,10 +72,13 @@ export default function EmployeeAccessPreview() {
         });
 
         if (!cancelled) {
+          const payload = response.data;
           setSearchResults(
-            Array.isArray(response.data)
-              ? response.data
-              : []
+            Array.isArray(payload)
+              ? payload
+              : Array.isArray(payload?.users)
+                ? payload.users
+                : []
           );
         }
       } catch (requestError) {

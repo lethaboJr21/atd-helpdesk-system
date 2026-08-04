@@ -1,7 +1,10 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Archive,
+  ArrowLeft,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Mail,
   RefreshCw,
@@ -11,13 +14,13 @@ import {
   UserCog,
   UserX,
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import UserAccessDialog from "../components/UserAccessDialog";
 import UserActionMenu from "../components/UserActionMenu";
 import UserEditDialog from "../components/UserEditDialog";
 import { useAuth } from "../hooks/useAuth";
-import { adminControlsApi, azureApi, userApi } from "../services/api";
+import { azureApi, userApi } from "../services/api";
 
 const VIEWS = [
   { id: "pending", label: "Pending Signups", icon: UserCheck, countKey: "pending" },
@@ -37,6 +40,8 @@ const ROLE_LABELS = {
   superadmin: "Superadministrator",
   pending: "Pending",
 };
+
+const PAGE_SIZE = 25;
 
 function getErrorMessage(error) {
   return error?.response?.data?.error || error?.response?.data?.message || error?.message || "The action failed.";
@@ -60,16 +65,84 @@ function selectableRoles(currentUserRole, targetAccount) {
   return common;
 }
 
+function pageWindow(current, total) {
+  if (total <= 7) return Array.from({ length: total }, (_, index) => index + 1);
+  const pages = new Set([1, total, current, current - 1, current + 1]);
+  if (current <= 3) [2, 3, 4].forEach((value) => pages.add(value));
+  if (current >= total - 2) [total - 1, total - 2, total - 3].forEach((value) => pages.add(value));
+  return [...pages].filter((value) => value >= 1 && value <= total).sort((a, b) => a - b);
+}
+
+function PaginationBar({ pagination, loading, onPageChange }) {
+  if (!pagination || pagination.total <= 0) return null;
+  const pages = pageWindow(pagination.page, pagination.totalPages);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="text-sm text-slate-600">
+        Page <span className="font-bold text-slate-950">{pagination.page}</span> of{" "}
+        <span className="font-bold text-slate-950">{pagination.totalPages}</span>
+        {" · "}
+        <span className="font-bold text-slate-950">{pagination.total.toLocaleString("en-ZA")}</span> accounts
+        {" · "}
+        {pagination.perPage} per page
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          disabled={pagination.page <= 1 || loading}
+          onClick={() => onPageChange(pagination.page - 1)}
+          className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"
+        >
+          <ChevronLeft className="h-4 w-4" /> Previous
+        </button>
+        {pages.map((pageNumber, index) => {
+          const previous = pages[index - 1];
+          const showGap = previous && pageNumber - previous > 1;
+          return (
+            <span key={pageNumber} className="inline-flex items-center gap-1.5">
+              {showGap ? <span className="px-1 text-slate-400">…</span> : null}
+              <button
+                type="button"
+                disabled={loading}
+                onClick={() => onPageChange(pageNumber)}
+                className={
+                  pageNumber === pagination.page
+                    ? "min-w-9 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white"
+                    : "min-w-9 rounded-xl border bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                }
+              >
+                {pageNumber}
+              </button>
+            </span>
+          );
+        })}
+        <button
+          type="button"
+          disabled={pagination.page >= pagination.totalPages || loading}
+          onClick={() => onPageChange(pagination.page + 1)}
+          className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"
+        >
+          Next <ChevronRight className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminUsers() {
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
   const view = VIEWS.some((item) => item.id === requestedView) ? requestedView : "active";
 
   const [users, setUsers] = useState([]);
+  const [pagination, setPagination] = useState(null);
+  const [page, setPage] = useState(1);
   const [meta, setMeta] = useState({ summary: {}, roles: [], departments: [] });
   const [selectedIds, setSelectedIds] = useState([]);
   const [search, setSearch] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -77,9 +150,19 @@ export default function AdminUsers() {
   const [editingUser, setEditingUser] = useState(null);
   const [accessUser, setAccessUser] = useState(null);
   const searchTimerRef = useRef(null);
+  const tableScrollRef = useRef(null);
 
   const isSuperadmin = currentUser?.role === "superadmin";
   const isAdmin = ["admin", "superadmin"].includes(currentUser?.role);
+
+  useEffect(() => {
+    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = window.setTimeout(() => {
+      setAppliedSearch(search.trim());
+      setPage(1);
+    }, 250);
+    return () => window.clearTimeout(searchTimerRef.current);
+  }, [search]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,33 +173,41 @@ export default function AdminUsers() {
           // Archived and pending can include non-company addresses (e.g. test signups).
           includeExternal: ["pending", "external", "archived"].includes(view),
           includeArchived: view === "archived",
-          search: search || undefined,
-          limit: 1000,
+          search: appliedSearch || undefined,
+          page,
+          per_page: PAGE_SIZE,
         }),
         userApi.getMeta(),
       ]);
-      setUsers(Array.isArray(usersResult.data) ? usersResult.data : []);
+      const { users: nextUsers, pagination: nextPagination } = userApi.unwrapUsers(usersResult.data);
+      setUsers(nextUsers);
+      setPagination(nextPagination);
       setMeta(metaResult.data || { summary: {}, roles: [], departments: [] });
-      setSelectedIds((current) => current.filter((id) => usersResult.data.some((item) => Number(item.id) === Number(id))));
+      setSelectedIds((current) =>
+        current.filter((id) => nextUsers.some((item) => Number(item.id) === Number(id)))
+      );
+      if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0;
     } catch (error) {
       setMessage({ type: "error", text: getErrorMessage(error) });
     } finally {
       setLoading(false);
     }
-  }, [search, view]);
+  }, [appliedSearch, page, view]);
 
   useEffect(() => {
-    if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = window.setTimeout(load, 250);
-    return () => window.clearTimeout(searchTimerRef.current);
+    load();
   }, [load]);
 
   useEffect(() => {
     setSelectedIds([]);
+    setPage(1);
   }, [view]);
 
+  const changeView = (nextView) => {
+    setSearchParams({ view: nextView });
+  };
+
   const allSelected = users.length > 0 && users.every((item) => selectedIds.includes(Number(item.id)));
-  const selectedUsers = useMemo(() => users.filter((item) => selectedIds.includes(Number(item.id))), [selectedIds, users]);
 
   const toggleAll = () => {
     setSelectedIds(allSelected ? [] : users.map((item) => Number(item.id)));
@@ -269,50 +360,65 @@ export default function AdminUsers() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-5 xl:p-8">
-      <div className="mx-auto max-w-[1700px]">
-        <header className="flex flex-wrap items-center justify-between gap-4">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 p-4 xl:p-5">
+      <div className="mx-auto flex h-full w-full max-w-[1700px] min-h-0 flex-col">
+        <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div>
+            <button
+              type="button"
+              onClick={() => navigate("/admin")}
+              className="mb-2 inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Admin Settings
+            </button>
             <p className="text-sm font-semibold text-blue-700">Administration</p>
-            <h1 className="mt-1 text-3xl font-bold text-slate-950">User Administration</h1>
-            <p className="mt-1 text-sm text-slate-500">Manage accounts, roles, access layouts and communication preferences.</p>
+            <h1 className="mt-0.5 text-2xl font-bold text-slate-950 xl:text-3xl">User Administration</h1>
+            <p className="mt-0.5 text-sm text-slate-500">Manage accounts, roles, access layouts and communication preferences.</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={load} disabled={loading} className="rounded-xl border bg-white px-4 py-3 text-sm font-bold disabled:opacity-60">
+            <button type="button" onClick={load} disabled={loading} className="rounded-xl border bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-60">
               <RefreshCw className={`mr-2 inline h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh
             </button>
-            <button type="button" onClick={syncMicrosoft} disabled={syncing} className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-60">
+            <button type="button" onClick={syncMicrosoft} disabled={syncing} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
               <RefreshCw className={`mr-2 inline h-4 w-4 ${syncing ? "animate-spin" : ""}`} />Sync Microsoft 365
             </button>
           </div>
         </header>
 
         {message && (
-          <div className={`mt-4 rounded-xl border p-3 text-sm font-semibold ${message.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+          <div className={`mt-3 shrink-0 rounded-xl border p-3 text-sm font-semibold ${message.type === "error" ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
             {message.text}
           </div>
         )}
 
-        <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-6">
+        <section className="mt-3 grid shrink-0 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           {VIEWS.map((item) => {
             const Icon = item.icon;
             return (
-              <button key={item.id} type="button" onClick={() => setSearchParams({ view: item.id })} className={`rounded-2xl border p-4 text-left shadow-sm ${view === item.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}>
-                <Icon className="h-5 w-5 text-blue-700" />
-                <p className="mt-3 text-xs font-bold uppercase text-slate-500">{item.label}</p>
-                <p className="mt-1 text-3xl font-bold text-slate-950">{meta.summary?.[item.countKey] || 0}</p>
-                {item.hint ? <p className="mt-1 text-[11px] font-medium leading-snug text-slate-400">{item.hint}</p> : null}
+              <button
+                key={item.id}
+                type="button"
+                title={item.hint || item.label}
+                onClick={() => changeView(item.id)}
+                className={`rounded-xl border px-3 py-3 text-left shadow-sm ${view === item.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Icon className="h-4 w-4 text-blue-700" />
+                  <p className="text-2xl font-bold text-slate-950">{meta.summary?.[item.countKey] || 0}</p>
+                </div>
+                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{item.label}</p>
               </button>
             );
           })}
         </section>
 
-        <div className="mt-6 grid gap-5 lg:grid-cols-[270px_1fr]">
-          <aside className="rounded-2xl border bg-white p-3 shadow-sm">
+        <div className="mt-3 grid min-h-0 flex-1 gap-4 lg:grid-cols-[250px_1fr]">
+          <aside className="min-h-0 overflow-y-auto rounded-2xl border bg-white p-2 shadow-sm">
             {VIEWS.map((item) => {
               const Icon = item.icon;
               return (
-                <button key={item.id} type="button" onClick={() => setSearchParams({ view: item.id })} className={`mb-2 flex w-full items-center justify-between rounded-xl px-3 py-3 text-left text-sm font-bold ${view === item.id ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
+                <button key={item.id} type="button" onClick={() => changeView(item.id)} className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-bold ${view === item.id ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
                   <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{item.label}</span>
                   <span className={`rounded-full px-2 py-0.5 text-xs ${view === item.id ? "bg-white/20" : "bg-slate-100"}`}>{meta.summary?.[item.countKey] || 0}</span>
                 </button>
@@ -320,9 +426,9 @@ export default function AdminUsers() {
             })}
           </aside>
 
-          <main className="overflow-hidden rounded-2xl border bg-white shadow-sm">
-            <div className="flex flex-wrap items-center gap-3 border-b p-4">
-              <div className="relative min-w-[280px] flex-1">
+          <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-white shadow-sm">
+            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-white p-3">
+              <div className="relative min-w-[240px] flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, department or employee number" className="w-full rounded-xl border py-2.5 pl-10 pr-3 text-sm" />
               </div>
@@ -337,12 +443,17 @@ export default function AdminUsers() {
               )}
             </div>
 
-            <div className="overflow-x-auto">
+            <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1180px] text-left">
-                <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
                   <tr>
-                    <th className="w-12 p-4"><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all users" /></th>
-                    <th className="p-4">Account</th><th className="p-4">Department</th><th className="p-4">Role</th><th className="p-4">State</th><th className="p-4">Last Login</th><th className="p-4 text-right">Actions</th>
+                    <th className="w-12 bg-slate-50 p-4"><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all users on this page" /></th>
+                    <th className="bg-slate-50 p-4">Account</th>
+                    <th className="bg-slate-50 p-4">Department</th>
+                    <th className="bg-slate-50 p-4">Role</th>
+                    <th className="bg-slate-50 p-4">State</th>
+                    <th className="bg-slate-50 p-4">Last Login</th>
+                    <th className="bg-slate-50 p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -363,6 +474,17 @@ export default function AdminUsers() {
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            <div className="shrink-0">
+              <PaginationBar
+                pagination={pagination}
+                loading={loading}
+                onPageChange={(nextPage) => {
+                  setPage(nextPage);
+                  setSelectedIds([]);
+                }}
+              />
             </div>
           </main>
         </div>
