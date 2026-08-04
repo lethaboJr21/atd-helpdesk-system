@@ -875,17 +875,25 @@ export default function Dashboard() {
           </div>
 
           <div className="grid items-start gap-4 xl:grid-cols-3">
-            <TicketQueue
-              tickets={filteredTickets.slice(0, 12)}
-              selectedTicketId={selectedTicket?.id}
-              workspaceFilter={workspaceFilter}
-              workspaces={workspaces}
-              onSelectTicket={setSelectedTicket}
-              onWorkspaceChange={setWorkspaceFilter}
-              onOpenWorkspace={() => navigate("/tickets")}
-              loading={ticketLoading}
-              error={sectionErrors.tickets}
-            />
+            <div className="space-y-4 xl:col-span-2">
+              <TicketQueue
+                tickets={filteredTickets.slice(0, 12)}
+                selectedTicketId={selectedTicket?.id}
+                workspaceFilter={workspaceFilter}
+                workspaces={workspaces}
+                onSelectTicket={setSelectedTicket}
+                onWorkspaceChange={setWorkspaceFilter}
+                onOpenWorkspace={() => navigate("/tickets")}
+                loading={ticketLoading}
+                error={sectionErrors.tickets}
+              />
+
+              <KnowledgePanel
+                articles={knowledgeArticles}
+                loading={loading && knowledgeArticles === null}
+                error={sectionErrors.knowledge}
+              />
+            </div>
 
             <div className="space-y-4">
               <TicketPreview
@@ -912,12 +920,6 @@ export default function Dashboard() {
               />
             </div>
           </div>
-
-          <KnowledgePanel
-            articles={knowledgeArticles}
-            loading={loading && knowledgeArticles === null}
-            error={sectionErrors.knowledge}
-          />
         </section>
       </main>
 
@@ -1364,7 +1366,7 @@ function TicketQueue({
   error,
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:col-span-2">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 px-4 py-3">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
