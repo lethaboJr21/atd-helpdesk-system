@@ -728,7 +728,7 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <section className="space-y-4 px-4 py-4 xl:px-6">
+        <section className="space-y-2 px-4 py-3 xl:px-5">
           {error && (
             <div
               className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800"
@@ -749,7 +749,7 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-4">
             {sectionErrors.kpis && kpiStats && (
               <SectionError
                 message={`${sectionErrors.kpis} Showing the last loaded totals.`}
@@ -807,7 +807,7 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="grid gap-4 xl:grid-cols-3">
+          <div className="grid gap-2 xl:grid-cols-3">
             <ChartPanel
               title="Ticket Volume"
               description="Incidents, service requests and changes by created date."
@@ -874,8 +874,8 @@ export default function Dashboard() {
             />
           </div>
 
-          <div className="grid items-start gap-4 xl:grid-cols-3">
-            <div className="space-y-4 xl:col-span-2">
+          <div className="grid items-start gap-2 xl:grid-cols-3">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:col-span-2">
               <TicketQueue
                 tickets={filteredTickets.slice(0, 12)}
                 selectedTicketId={selectedTicket?.id}
@@ -886,16 +886,18 @@ export default function Dashboard() {
                 onOpenWorkspace={() => navigate("/tickets")}
                 loading={ticketLoading}
                 error={sectionErrors.tickets}
+                embedded
               />
 
               <KnowledgePanel
                 articles={knowledgeArticles}
                 loading={loading && knowledgeArticles === null}
                 error={sectionErrors.knowledge}
+                embedded
               />
             </div>
 
-            <div className="space-y-4">
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
               <TicketPreview
                 ticket={selectedTicket}
                 onOpenCase={() => {
@@ -905,11 +907,13 @@ export default function Dashboard() {
                 }}
                 onAssign={openAssignmentModal}
                 onEscalate={() => setShowEscalationModal(true)}
+                embedded
               />
 
               <QuickActions
                 onCreateTicket={openTicketCreation}
                 onOpenAssets={() => navigate("/assets")}
+                embedded
               />
 
               <AssetSummary
@@ -917,6 +921,7 @@ export default function Dashboard() {
                 onOpenAssets={() => navigate("/assets")}
                 loading={loading && assetStats === null}
                 error={sectionErrors.assets}
+                embedded
               />
             </div>
           </div>
@@ -1364,9 +1369,15 @@ function TicketQueue({
   onOpenWorkspace,
   loading,
   error,
+  embedded = false,
 }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+    <div
+      className={classNames(
+        !embedded &&
+          "overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+      )}
+    >
       <div className="border-b border-slate-200 px-4 py-3">
         <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <div>
@@ -1514,17 +1525,31 @@ function TicketPreview({
   onOpenCase,
   onAssign,
   onEscalate,
+  embedded = false,
 }) {
   if (!ticket) {
     return (
-      <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-500 shadow-sm">
+      <div
+        className={classNames(
+          "p-4 text-sm text-slate-500",
+          !embedded &&
+            "rounded-xl border border-slate-200 bg-white shadow-sm",
+          embedded && "border-b border-slate-200"
+        )}
+      >
         Select a ticket to view details.
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div
+      className={classNames(
+        "p-4",
+        !embedded && "rounded-xl border border-slate-200 bg-white shadow-sm",
+        embedded && "border-b border-slate-200"
+      )}
+    >
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-slate-950">Ticket Preview</h2>
 
@@ -1592,7 +1617,7 @@ function TicketPreview({
   );
 }
 
-function QuickActions({ onCreateTicket, onOpenAssets }) {
+function QuickActions({ onCreateTicket, onOpenAssets, embedded = false }) {
   const actions = [
     {
       label: "Log Incident",
@@ -1617,7 +1642,13 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
   ];
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div
+      className={classNames(
+        "p-4",
+        !embedded && "rounded-xl border border-slate-200 bg-white shadow-sm",
+        embedded && "border-b border-slate-200"
+      )}
+    >
       <h2 className="text-lg font-bold text-slate-950">Quick Actions</h2>
       <p className="text-sm text-slate-500">
         Fast workflows for the support team.
@@ -1646,9 +1677,20 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
   );
 }
 
-function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
+function AssetSummary({
+  assetStats,
+  onOpenAssets,
+  loading,
+  error,
+  embedded = false,
+}) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div
+      className={classNames(
+        "p-4",
+        !embedded && "rounded-xl border border-slate-200 bg-white shadow-sm"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-bold text-slate-950">Asset Inventory</h2>
@@ -1735,9 +1777,15 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
   );
 }
 
-function KnowledgePanel({ articles, loading, error }) {
+function KnowledgePanel({ articles, loading, error, embedded = false }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div
+      className={classNames(
+        "p-4",
+        !embedded && "rounded-xl border border-slate-200 bg-white shadow-sm",
+        embedded && "border-t border-slate-200"
+      )}
+    >
       <h2 className="text-lg font-bold text-slate-950">
         Knowledge Suggestions
       </h2>
