@@ -876,7 +876,7 @@ export default function Dashboard() {
 
           <div className="grid items-start gap-4 xl:grid-cols-3">
             <TicketQueue
-              tickets={filteredTickets.slice(0, 8)}
+              tickets={filteredTickets.slice(0, 12)}
               selectedTicketId={selectedTicket?.id}
               workspaceFilter={workspaceFilter}
               workspaces={workspaces}
@@ -1391,7 +1391,7 @@ function TicketQueue({
         </div>
       </div>
 
-      <div className="divide-y divide-slate-100">
+      <div className="max-h-[28rem] divide-y divide-slate-100 overflow-y-auto">
         {loading && tickets.length === 0 ? (
           Array.from({ length: 5 }, (_, index) => (
             <div
@@ -1649,14 +1649,29 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
 function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h2 className="text-lg font-bold text-slate-950">Asset Inventory</h2>
-      <p className="text-sm text-slate-500">
-        Live from the Asset Management System.
-      </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold text-slate-950">Asset Inventory</h2>
+          <p className="text-sm text-slate-500">
+            Live from the Asset Management System.
+          </p>
+        </div>
 
-      <div className="mt-3 space-y-2">
+        {assetStats && (
+          <div className="text-right">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Total
+            </p>
+            <p className="text-2xl font-bold leading-none text-slate-950">
+              {formatCount(assetStats.total || 0)}
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3">
         {loading && !assetStats ? (
-          <PanelSkeleton className="h-56" />
+          <PanelSkeleton className="h-40" />
         ) : error && !assetStats ? (
           <SectionError message={error} />
         ) : !assetStats ? (
@@ -1669,48 +1684,47 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
               />
             )}
 
-            <div className="rounded-lg border border-slate-100 p-2.5">
-              <p className="text-sm text-slate-500">Total Assets</p>
-              <p className="mt-1 text-3xl font-bold leading-none text-slate-950">
-                {formatCount(assetStats.total || 0)}
-              </p>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                ["In Use", "assigned", "bg-emerald-500"],
+                ["In Storage", "storage", "bg-slate-400"],
+                ["Damaged", "damaged", "bg-red-500"],
+                ["Untraced", "untraced", "bg-amber-500"],
+              ].map(([label, key, barClass]) => {
+                const count = assetStats.by_status?.[key] || 0;
+                const percentage = assetStats.total
+                  ? Math.round((count / assetStats.total) * 100)
+                  : 0;
+
+                return (
+                  <div
+                    key={key}
+                    className="rounded-lg border border-slate-100 p-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-slate-950">
+                        {label}
+                      </p>
+                      <span className="text-sm font-bold text-slate-950">
+                        {count}
+                      </span>
+                    </div>
+
+                    <div className="mt-2 h-1.5 rounded-full bg-slate-100">
+                      <div
+                        className={classNames("h-1.5 rounded-full", barClass)}
+                        style={{ width: `${percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-
-            {[
-              ["In Use", "assigned", "bg-emerald-500"],
-              ["In Storage", "storage", "bg-slate-400"],
-              ["Damaged", "damaged", "bg-red-500"],
-              ["Untraced", "untraced", "bg-amber-500"],
-            ].map(([label, key, barClass]) => {
-              const count = assetStats.by_status?.[key] || 0;
-              const percentage = assetStats.total
-                ? Math.round((count / assetStats.total) * 100)
-                : 0;
-
-              return (
-                <div
-                  key={key}
-                  className="rounded-lg border border-slate-100 p-2.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="font-semibold text-slate-950">{label}</p>
-                    <span className="font-bold text-slate-950">{count}</span>
-                  </div>
-
-                  <div className="mt-2 h-2 rounded-full bg-slate-100">
-                    <div
-                      className={classNames("h-2 rounded-full", barClass)}
-                      style={{ width: `${percentage}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
 
             <button
               type="button"
               onClick={onOpenAssets}
-              className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
+              className="mt-3 w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
             >
               View all assets →
             </button>
@@ -1723,7 +1737,7 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
 
 function KnowledgePanel({ articles, loading, error }) {
   return (
-    <div className="self-start rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm xl:col-span-2">
       <h2 className="text-lg font-bold text-slate-950">
         Knowledge Suggestions
       </h2>
@@ -1738,14 +1752,15 @@ function KnowledgePanel({ articles, loading, error }) {
         />
       )}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-2">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3 md:grid-cols-3">
         {loading && !articles ? (
           <>
             <PanelSkeleton className="h-20" />
             <PanelSkeleton className="h-20" />
+            <PanelSkeleton className="h-20" />
           </>
         ) : error && !articles ? (
-          <SectionError message={error} className="md:col-span-2" />
+          <SectionError message={error} className="sm:col-span-3" />
         ) : articles?.length === 0 ? (
           <p className="text-sm text-slate-500">
             No knowledge suggestions found.
@@ -1754,16 +1769,14 @@ function KnowledgePanel({ articles, loading, error }) {
           articles?.map((article, index) => (
             <div
               key={article.id || article.title}
-              className="flex w-full items-start gap-3 rounded-lg border border-slate-100 p-3 text-left"
+              className="flex w-full items-start gap-2.5 rounded-lg border border-slate-100 p-3 text-left"
             >
               <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
                 {index + 1}
               </div>
 
-              <div>
-                <p className="font-semibold text-slate-950">
-                  {article.title}
-                </p>
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-950">{article.title}</p>
                 <p className="mt-0.5 text-sm text-slate-500">
                   Reference title available to the support team.
                 </p>
