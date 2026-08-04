@@ -364,6 +364,14 @@ export default function AdminUsers() {
       <div className="mx-auto flex h-full w-full max-w-[1700px] min-h-0 flex-col">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div>
+            <button
+              type="button"
+              onClick={() => navigate("/admin")}
+              className="mb-2 inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Admin Settings
+            </button>
             <p className="text-sm font-semibold text-blue-700">Administration</p>
             <h1 className="mt-0.5 text-2xl font-bold text-slate-950 xl:text-3xl">User Administration</h1>
             <p className="mt-0.5 text-sm text-slate-500">Manage accounts, roles, access layouts and communication preferences.</p>
