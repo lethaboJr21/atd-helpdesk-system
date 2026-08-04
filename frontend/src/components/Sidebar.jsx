@@ -210,15 +210,15 @@ export default function Sidebar({
           )}
         >
           <img
-            src={`/helpdesk/atd-logo-mark.png`}
-            alt="ATD"
-            className="h-11 w-11 rounded-2xl bg-white object-contain p-1.5"
+            src={`/helpdesk/atd-helpdesk-icon.png?v=6`}
+            alt="ATD Helpdesk"
+            className="h-11 w-11 rounded-2xl bg-white object-contain p-0.5"
           />
 
           {!collapsed && (
             <div>
               <p className="font-bold">
-                ATD Alliance Helpdesk
+                ATD Helpdesk
               </p>
               <p className="mt-1 text-xs text-slate-400">
                 {employeeExperience

@@ -92,12 +92,12 @@ export default function LoginPage() {
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-2xl">
         <div className="mb-8 flex flex-col items-center">
           <img
-            src="/helpdesk/atd-logo.png?v=5"
-            alt="ATD Alliance"
-            className="mb-4 h-14 w-auto object-contain"
+            src="/helpdesk/atd-helpdesk-logo.png?v=6"
+            alt="ATD Helpdesk"
+            className="mb-4 h-20 w-auto object-contain"
           />
           <h1 className="text-2xl font-bold text-slate-950">
-            ATD Alliance Portal
+            ATD Helpdesk
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             IT Helpdesk Management System
