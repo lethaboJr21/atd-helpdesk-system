@@ -6,23 +6,20 @@ import {
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  Activity,
   AlertTriangle,
   Bell,
-  CheckCircle2,
   ChevronDown,
   Clock,
   Factory,
   Gauge,
   HardDrive,
+  Info,
   LifeBuoy,
   Plus,
   RefreshCw,
   Search,
   Settings,
-  ShieldAlert,
   Ticket,
-  TrendingUp,
   Wrench,
   X,
 } from "lucide-react";
@@ -31,6 +28,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  Legend,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -41,16 +39,34 @@ import {
 
 import Sidebar from "../components/Sidebar";
 import { useAuth } from "../hooks/useAuth";
-import api, {
+import {
   assetsApi,
+  groupsApi,
   knowledgeApi,
   notificationApi,
-  ticketsApi,
   statsApi,
+  ticketsApi,
 } from "../services/api";
 
 const DASHBOARD_TICKET_LIMIT = 100;
-const NOTIFICATION_MODULE = "admin";
+const NOTIFICATION_MODULES = ["admin", "helpdesk"];
+const SEARCH_DEBOUNCE_MS = 300;
+const ADMIN_ROLES = new Set(["manager", "admin", "superadmin"]);
+
+function mergeNotifications(lists) {
+  const byId = new Map();
+
+  for (const list of lists) {
+    for (const notification of list) {
+      if (!notification?.id) continue;
+      byId.set(notification.id, notification);
+    }
+  }
+
+  return Array.from(byId.values()).sort((left, right) => {
+    return new Date(right.created_at || 0) - new Date(left.created_at || 0);
+  });
+}
 
 const CREATE_TICKET_OPTIONS = [
   {
@@ -83,10 +99,6 @@ function classNames(...items) {
   return items.filter(Boolean).join(" ");
 }
 
-function normalize(value) {
-  return String(value || "").trim().toLowerCase();
-}
-
 function formatDuration(milliseconds) {
   if (!milliseconds || milliseconds <= 0) {
     return "0m";
@@ -107,6 +119,13 @@ function formatDuration(milliseconds) {
   return `${Math.floor(hours / 24)}d ${hours % 24}h`;
 }
 
+function formatCount(value) {
+  const number = Number(value);
+  return Number.isFinite(number)
+    ? number.toLocaleString("en-ZA")
+    : "N/A";
+}
+
 function getTicketAge(ticketItem) {
   if (!ticketItem.created_at) {
     return "—";
@@ -117,20 +136,6 @@ function getTicketAge(ticketItem) {
   );
 }
 
-function getTicketType(ticketItem) {
-  const reference = String(ticketItem.ticket_ref || "").toUpperCase();
-
-  if (reference.startsWith("REQ")) {
-    return "requests";
-  }
-
-  if (reference.startsWith("CHG")) {
-    return "changes";
-  }
-
-  return "incidents";
-}
-
 function getSlaPercent(ticketItem) {
   if (!ticketItem.due_at || !ticketItem.created_at) {
     return 100;
@@ -138,8 +143,9 @@ function getSlaPercent(ticketItem) {
 
   const createdAt = new Date(ticketItem.created_at).getTime();
   const dueAt = new Date(ticketItem.due_at).getTime();
-  const comparisonTime = ticketItem.closed_at
-    ? new Date(ticketItem.closed_at).getTime()
+  const completionTime = ticketItem.resolved_at || ticketItem.closed_at;
+  const comparisonTime = completionTime
+    ? new Date(completionTime).getTime()
     : Date.now();
 
   const totalDuration = dueAt - createdAt;
@@ -196,6 +202,7 @@ function getErrorMessage(error, fallbackMessage) {
 export default function Dashboard() {
   const navigate = useNavigate();
   const { logout, user } = useAuth();
+  const adminUser = ADMIN_ROLES.has(user?.role);
 
   const [tickets, setTickets] = useState([]);
   const [kpiStats, setKpiStats] = useState(null);
@@ -203,17 +210,20 @@ export default function Dashboard() {
   const [serviceMixStats, setServiceMixStats] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [assetStats, setAssetStats] = useState(null);
-  const [knowledgeArticles, setKnowledgeArticles] = useState([]);
-  const [assignableUsers, setAssignableUsers] = useState([]);
+  const [knowledgeArticles, setKnowledgeArticles] = useState(null);
+  const [groups, setGroups] = useState([]);
 
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [workspaceFilter, setWorkspaceFilter] = useState("All");
   const [rangeDays, setRangeDays] = useState(7);
 
   const [loading, setLoading] = useState(true);
+  const [ticketLoading, setTicketLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState("");
+  const [sectionErrors, setSectionErrors] = useState({});
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -229,80 +239,60 @@ export default function Dashboard() {
     setError("");
 
     const results = await Promise.allSettled([
-      ticketsApi.getAll({ limit: DASHBOARD_TICKET_LIMIT }),
       statsApi.getDashboard(),
       statsApi.getVolumeData({ days: rangeDays }),
       statsApi.getServiceMix(),
-      notificationApi.getAll({ module: NOTIFICATION_MODULE }),
+      ...NOTIFICATION_MODULES.map((module) => notificationApi.getAll({ module })),
       assetsApi.getStats(),
       knowledgeApi.getAll(),
-      api.get("/auth/users"),
+      groupsApi.getAll(),
     ]);
 
     const [
-      ticketResult,
       statsResult,
       volumeResult,
       serviceMixResult,
-      notificationResult,
+      adminNotificationResult,
+      helpdeskNotificationResult,
       assetResult,
       knowledgeResult,
-      userResult,
+      groupResult,
     ] = results;
+
+    const failedSections = {};
 
     if (statsResult.status === "fulfilled" && statsResult.value?.data) {
       setKpiStats(statsResult.value.data);
     } else {
-      setKpiStats(null);
+      failedSections.kpis = "KPI totals could not be refreshed.";
     }
 
     if (volumeResult.status === "fulfilled" && Array.isArray(volumeResult.value?.data)) {
       setVolumeStats(volumeResult.value.data);
     } else {
-      setVolumeStats(null);
+      failedSections.volume = "Ticket volume could not be refreshed.";
     }
 
     if (serviceMixResult.status === "fulfilled" && Array.isArray(serviceMixResult.value?.data)) {
       setServiceMixStats(serviceMixResult.value.data);
     } else {
-      setServiceMixStats(null);
+      failedSections.serviceMix = "Service mix could not be refreshed.";
     }
 
-    if (ticketResult.status === "fulfilled") {
-      const payload = ticketResult.value.data;
-      const ticketData = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload?.tickets)
-          ? payload.tickets
-          : [];
+    const notificationLists = [adminNotificationResult, helpdeskNotificationResult]
+      .filter((result) => result.status === "fulfilled")
+      .map((result) => (Array.isArray(result.value.data) ? result.value.data : []));
 
-      setTickets(ticketData);
-
-      setSelectedTicket((currentTicket) => {
-        if (!currentTicket) {
-          return ticketData[0] || null;
-        }
-
-        return (
-          ticketData.find((ticketItem) => {
-            return ticketItem.id === currentTicket.id;
-          }) ||
-          ticketData[0] ||
-          null
-        );
-      });
-    }
-
-    if (notificationResult.status === "fulfilled") {
-      setNotifications(
-        Array.isArray(notificationResult.value.data)
-          ? notificationResult.value.data
-          : []
-      );
+    if (notificationLists.length > 0) {
+      setNotifications(mergeNotifications(notificationLists));
+    } else {
+      failedSections.notifications = "Alerts could not be refreshed.";
     }
 
     if (assetResult.status === "fulfilled") {
       setAssetStats(assetResult.value.data || null);
+    } else {
+      failedSections.assets = "Asset inventory could not be refreshed.";
     }
 
     if (knowledgeResult.status === "fulfilled") {
@@ -311,44 +301,95 @@ export default function Dashboard() {
           ? knowledgeResult.value.data
           : []
       );
+    } else {
+      failedSections.knowledge = "Knowledge suggestions could not be refreshed.";
     }
 
-    if (userResult.status === "fulfilled") {
-      const userData = Array.isArray(userResult.value.data)
-        ? userResult.value.data
-        : [];
-
-      setAssignableUsers(
-        userData.filter((userItem) => {
-          return [
-            "agent",
-            "operator",
-            "manager",
-            "admin",
-            "superadmin",
-          ].includes(userItem.role);
-        })
+    if (groupResult.status === "fulfilled") {
+      setGroups(
+        Array.isArray(groupResult.value.data)
+          ? groupResult.value.data
+          : []
       );
+    } else {
+      failedSections.groups = "Assignment options could not be refreshed.";
     }
 
-    const rejectedCount = results.filter((result) => {
-      return result.status === "rejected";
-    }).length;
-
-    if (rejectedCount > 0) {
-      setError(
-        `${rejectedCount} dashboard section${
-          rejectedCount === 1 ? "" : "s"
-        } could not be loaded.`
-      );
-    }
+    setSectionErrors((currentErrors) => {
+      const nextErrors = { ...currentErrors };
+      [
+        "kpis",
+        "volume",
+        "serviceMix",
+        "notifications",
+        "assets",
+        "knowledge",
+        "groups",
+      ].forEach((key) => delete nextErrors[key]);
+      return { ...nextErrors, ...failedSections };
+    });
 
     setLoading(false);
   }, [rangeDays]);
 
+  const fetchTicketQueue = useCallback(async () => {
+    setTicketLoading(true);
+
+    try {
+      const response = await ticketsApi.getAll({
+        limit: DASHBOARD_TICKET_LIMIT,
+        status: "Unresolved",
+        search: debouncedQuery || undefined,
+      });
+      const payload = response.data;
+      const ticketData = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.tickets)
+          ? payload.tickets
+          : [];
+
+      setTickets(ticketData);
+      setSectionErrors((currentErrors) => {
+        const nextErrors = { ...currentErrors };
+        delete nextErrors.tickets;
+        return nextErrors;
+      });
+    } catch (requestError) {
+      setTickets([]);
+      setSectionErrors((currentErrors) => ({
+        ...currentErrors,
+        tickets: getErrorMessage(
+          requestError,
+          "The priority ticket queue could not be loaded."
+        ),
+      }));
+    } finally {
+      setTicketLoading(false);
+    }
+  }, [debouncedQuery]);
+
+  const refreshDashboard = useCallback(async () => {
+    await Promise.all([
+      fetchDashboardData(),
+      fetchTicketQueue(),
+    ]);
+  }, [fetchDashboardData, fetchTicketQueue]);
+
   useEffect(() => {
     fetchDashboardData();
   }, [fetchDashboardData]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(query.trim());
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
+    fetchTicketQueue();
+  }, [fetchTicketQueue]);
 
   const unreadCount = useMemo(() => {
     return notifications.filter((notification) => {
@@ -357,171 +398,25 @@ export default function Dashboard() {
   }, [notifications]);
 
   const filteredTickets = useMemo(() => {
-    const normalizedQuery = normalize(query);
-
     return tickets.filter((ticketItem) => {
-      const searchableText = [
-        ticketItem.ticket_ref,
-        ticketItem.title,
-        ticketItem.description,
-        ticketItem.requester_name,
-        ticketItem.assigned_to_name,
-        ticketItem.assigned_group_name,
-        ticketItem.workspace,
-        ticketItem.priority,
-        ticketItem.status,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-      const matchesSearch =
-        !normalizedQuery || searchableText.includes(normalizedQuery);
-
-      const matchesWorkspace =
-        workspaceFilter === "All" ||
-        ticketItem.workspace === workspaceFilter;
-
-      return matchesSearch && matchesWorkspace;
-    });
-  }, [query, tickets, workspaceFilter]);
-
-  const statistics = useMemo(() => {
-    const openTickets = tickets.filter((ticketItem) => {
-      return !["closed", "resolved"].includes(
-        normalize(ticketItem.status)
-      );
-    });
-
-    const criticalTickets = tickets.filter((ticketItem) => {
       return (
-        normalize(ticketItem.priority) === "critical" ||
-        getSlaPercent(ticketItem) < 30
+        workspaceFilter === "All" ||
+        ticketItem.workspace === workspaceFilter
       );
     });
-
-    const ticketsWithDueDates = tickets.filter((ticketItem) => {
-      return Boolean(ticketItem.due_at);
-    });
-
-    const ticketsWithinSla = ticketsWithDueDates.filter((ticketItem) => {
-      const dueAt = new Date(ticketItem.due_at).getTime();
-      const endTime = ticketItem.closed_at
-        ? new Date(ticketItem.closed_at).getTime()
-        : Date.now();
-
-      return endTime <= dueAt;
-    });
-
-    const slaCompliance = ticketsWithDueDates.length
-      ? `${Math.round(
-          (ticketsWithinSla.length / ticketsWithDueDates.length) * 100
-        )}%`
-      : "N/A";
-
-    const resolutionDurations = tickets
-      .filter((ticketItem) => {
-        return ticketItem.closed_at && ticketItem.created_at;
-      })
-      .map((ticketItem) => {
-        return (
-          new Date(ticketItem.closed_at).getTime() -
-          new Date(ticketItem.created_at).getTime()
-        );
-      });
-
-    const averageResolution = resolutionDurations.length
-      ? formatDuration(
-          resolutionDurations.reduce((total, duration) => {
-            return total + duration;
-          }, 0) / resolutionDurations.length
-        )
-      : "N/A";
-
-    return {
-      open: openTickets.length,
-      total: tickets.length,
-      critical: criticalTickets.length,
-      slaCompliance,
-      averageResolution,
-    };
-  }, [tickets]);
-
-  const dashboardKpis = kpiStats
-    ? {
-        open: kpiStats.open ?? statistics.open,
-        total: kpiStats.total ?? statistics.total,
-        critical: kpiStats.critical ?? statistics.critical,
-        slaCompliance: kpiStats.slaCompliance ?? statistics.slaCompliance,
-        averageResolution:
-          kpiStats.averageResolution ?? statistics.averageResolution,
-      }
-    : statistics;
+  }, [tickets, workspaceFilter]);
 
   const volumeData = useMemo(() => {
-    if (Array.isArray(volumeStats) && volumeStats.length > 0) {
-      return volumeStats.map((row) => ({
-        day: row.day,
-        incidents: Number(row.incidents) || 0,
-        requests: Number(row.requests) || 0,
-        changes: Number(row.changes) || 0,
-      }));
-    }
-
-    const now = new Date();
-    const cutoff = new Date(now);
-    const dailyMap = {};
-
-    cutoff.setDate(cutoff.getDate() - (rangeDays - 1));
-    cutoff.setHours(0, 0, 0, 0);
-
-    for (let dayOffset = rangeDays - 1; dayOffset >= 0; dayOffset -= 1) {
-      const date = new Date(now);
-      date.setDate(now.getDate() - dayOffset);
-
-      const key = date.toLocaleDateString("en-US", {
-        weekday: "short",
-      });
-
-      dailyMap[key] = {
-        day: key,
-        incidents: 0,
-        requests: 0,
-        changes: 0,
-      };
-    }
-
-    for (const ticketItem of tickets) {
-      if (!ticketItem.created_at) {
-        continue;
-      }
-
-      const createdAt = new Date(ticketItem.created_at);
-
-      if (createdAt < cutoff) {
-        continue;
-      }
-
-      const key = createdAt.toLocaleDateString("en-US", {
-        weekday: "short",
-      });
-
-      const type = getTicketType(ticketItem);
-
-      if (!dailyMap[key]) {
-        dailyMap[key] = {
-          day: key,
-          incidents: 0,
-          requests: 0,
-          changes: 0,
-        };
-      }
-
-      dailyMap[key][type] += 1;
-    }
-
-    return Object.values(dailyMap);
-  }, [rangeDays, tickets, volumeStats]);
+    return Array.isArray(volumeStats)
+      ? volumeStats.map((row) => ({
+          day: row.label || row.day,
+          date: row.date,
+          incidents: Number(row.incidents) || 0,
+          requests: Number(row.requests) || 0,
+          changes: Number(row.changes) || 0,
+        }))
+      : [];
+  }, [volumeStats]);
 
   const serviceMixData = useMemo(() => {
     const colors = [
@@ -532,32 +427,14 @@ export default function Dashboard() {
       "#0891b2",
     ];
 
-    if (Array.isArray(serviceMixStats) && serviceMixStats.length > 0) {
-      return serviceMixStats.map((item, index) => ({
-        name: item.name,
-        value: Number(item.value) || 0,
-        color: item.color || colors[index % colors.length],
-      }));
-    }
-
-    const groupedTickets = tickets.reduce((groups, ticketItem) => {
-      const groupName =
-        ticketItem.assigned_group_name ||
-        ticketItem.workspace ||
-        "Unassigned / Other";
-
-      groups[groupName] = (groups[groupName] || 0) + 1;
-      return groups;
-    }, {});
-
-    return Object.entries(groupedTickets).map(
-      ([name, value], index) => ({
-        name,
-        value,
-        color: colors[index % colors.length],
-      })
-    );
-  }, [serviceMixStats, tickets]);
+    return Array.isArray(serviceMixStats)
+      ? serviceMixStats.map((item, index) => ({
+          name: item.name,
+          value: Number(item.value) || 0,
+          color: item.color || colors[index % colors.length],
+        }))
+      : [];
+  }, [serviceMixStats]);
 
   const workspaces = useMemo(() => {
     const uniqueWorkspaces = new Set(
@@ -568,6 +445,36 @@ export default function Dashboard() {
 
     return ["All", ...Array.from(uniqueWorkspaces)];
   }, [tickets]);
+
+  useEffect(() => {
+    if (!workspaces.includes(workspaceFilter)) {
+      setWorkspaceFilter("All");
+    }
+  }, [workspaceFilter, workspaces]);
+
+  const selectedGroup = useMemo(() => {
+    return groups.find((group) => {
+      return String(group.id) === String(selectedTicket?.assigned_group_id);
+    }) || null;
+  }, [groups, selectedTicket?.assigned_group_id]);
+
+  const assignableUsers = useMemo(() => {
+    return Array.isArray(selectedGroup?.members)
+      ? selectedGroup.members
+      : [];
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    setSelectedTicket((currentTicket) => {
+      if (filteredTickets.length === 0) {
+        return null;
+      }
+
+      return filteredTickets.find((ticketItem) => {
+        return ticketItem.id === currentTicket?.id;
+      }) || filteredTickets[0];
+    });
+  }, [filteredTickets]);
 
   const handleLogout = async () => {
     await logout();
@@ -583,7 +490,9 @@ export default function Dashboard() {
     }
 
     try {
-      await notificationApi.markAllRead(NOTIFICATION_MODULE);
+      await Promise.all(
+        NOTIFICATION_MODULES.map((module) => notificationApi.markAllRead(module))
+      );
 
       setNotifications((currentNotifications) => {
         return currentNotifications.map((notification) => ({
@@ -604,7 +513,7 @@ export default function Dashboard() {
 
   const handleClearNotifications = async () => {
     const confirmed = window.confirm(
-      "Clear all Helpdesk administration notifications?"
+      "Clear all Helpdesk and administration alerts?"
     );
 
     if (!confirmed) {
@@ -612,7 +521,9 @@ export default function Dashboard() {
     }
 
     try {
-      await notificationApi.clearAll(NOTIFICATION_MODULE);
+      await Promise.all(
+        NOTIFICATION_MODULES.map((module) => notificationApi.clearAll(module))
+      );
       setNotifications([]);
     } catch (requestError) {
       setError(
@@ -650,17 +561,8 @@ export default function Dashboard() {
       return;
     }
 
-    const confirmed = window.confirm(
-      pendingAssigneeId
-        ? "Confirm assignment of this ticket to the selected agent?"
-        : "Confirm removal of the current direct agent assignment?"
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setActionLoading(true);
+    setError("");
 
     try {
       await ticketsApi.assign(
@@ -670,7 +572,7 @@ export default function Dashboard() {
       );
 
       setShowAssignmentModal(false);
-      await fetchDashboardData();
+      await refreshDashboard();
     } catch (requestError) {
       setError(
         getErrorMessage(requestError, "Ticket assignment failed.")
@@ -685,22 +587,13 @@ export default function Dashboard() {
       return;
     }
 
-    const confirmed = window.confirm(
-      `Escalate ${
-        selectedTicket.ticket_ref || `TICKET-${selectedTicket.id}`
-      }?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-
     setActionLoading(true);
+    setError("");
 
     try {
       await ticketsApi.updateStatus(selectedTicket.id, "Escalated");
       setShowEscalationModal(false);
-      await fetchDashboardData();
+      await refreshDashboard();
     } catch (requestError) {
       setError(
         getErrorMessage(requestError, "Ticket escalation failed.")
@@ -729,9 +622,12 @@ export default function Dashboard() {
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
           <div className="flex flex-col gap-4 px-5 py-4 xl:flex-row xl:items-center xl:justify-between xl:px-8">
             <div>
-              <div className="flex items-center gap-2 text-sm text-slate-500">
+              <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                 <Factory className="h-4 w-4" />
-                ATD IT Department / Infrastructure + ERP Support
+                <span>ATD IT Department / Infrastructure + ERP Support</span>
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
+                  {kpiStats?.scopeLabel || "All Helpdesk tickets"}
+                </span>
               </div>
 
               <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 md:text-3xl">
@@ -746,9 +642,13 @@ export default function Dashboard() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search ticket, requester or group..."
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  placeholder="Search all tickets, requesters or groups..."
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 />
+
+                {ticketLoading && (
+                  <RefreshCw className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
+                )}
               </div>
 
               <NotificationMenu
@@ -766,14 +666,14 @@ export default function Dashboard() {
 
               <button
                 type="button"
-                onClick={fetchDashboardData}
-                disabled={loading}
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50 disabled:opacity-60"
+                onClick={refreshDashboard}
+                disabled={loading || ticketLoading}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50 disabled:opacity-60"
               >
                 <RefreshCw
                   className={classNames(
                     "h-4 w-4",
-                    loading && "animate-spin"
+                    (loading || ticketLoading) && "animate-spin"
                   )}
                 />
                 Refresh
@@ -782,21 +682,23 @@ export default function Dashboard() {
               <button
                 type="button"
                 onClick={handleLogout}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
+                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
               >
                 Logout
               </button>
 
-              <Link
-                to="/admin/users"
-                className="rounded-2xl bg-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-lg hover:bg-purple-700"
-              >
-                Manage Users
-              </Link>
+              {adminUser && (
+                <Link
+                  to="/admin/users"
+                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
+                >
+                  Manage Users
+                </Link>
+              )}
 
               <Link
                 to="/production"
-                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
               >
                 <Factory className="h-4 w-4" />
                 Production
@@ -808,7 +710,7 @@ export default function Dashboard() {
                   onClick={() => {
                     setShowCreateMenu((currentValue) => !currentValue);
                   }}
-                  className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
                 >
                   <Plus className="h-4 w-4" />
                   New Ticket
@@ -829,49 +731,80 @@ export default function Dashboard() {
         <section className="space-y-6 px-5 py-6 xl:px-8">
           {error && (
             <div
-              className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800"
+              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800"
               role="alert"
             >
               {error}
             </div>
           )}
 
+          {(sectionErrors.notifications || sectionErrors.groups) && (
+            <div
+              className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800"
+              role="alert"
+            >
+              {[sectionErrors.notifications, sectionErrors.groups]
+                .filter(Boolean)
+                .join(" ")}
+            </div>
+          )}
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              title="Open Tickets"
-              value={dashboardKpis.open}
-              supportingValue={`${dashboardKpis.total} total`}
-              supportingText="tickets in system"
-              icon={Ticket}
-              accent="bg-blue-100 text-blue-700"
-            />
+            {sectionErrors.kpis && kpiStats && (
+              <SectionError
+                message={`${sectionErrors.kpis} Showing the last loaded totals.`}
+                className="md:col-span-2 xl:col-span-4"
+              />
+            )}
 
-            <StatCard
-              title="SLA Compliance"
-              value={dashboardKpis.slaCompliance}
-              supportingValue="Live"
-              supportingText="based on due dates"
-              icon={Gauge}
-              accent="bg-emerald-100 text-emerald-700"
-            />
+            {loading && !kpiStats ? (
+              Array.from({ length: 4 }, (_, index) => (
+                <StatCardSkeleton key={index} />
+              ))
+            ) : sectionErrors.kpis && !kpiStats ? (
+              <SectionError
+                message={sectionErrors.kpis}
+                className="md:col-span-2 xl:col-span-4"
+              />
+            ) : (
+              <>
+                <StatCard
+                  title="Open Tickets"
+                  value={formatCount(kpiStats?.open)}
+                  supportingText={`${formatCount(kpiStats?.total)} total tickets in the system`}
+                  definition={kpiStats?.definitions?.open}
+                  icon={Ticket}
+                  accent="bg-blue-100 text-blue-700"
+                />
 
-            <StatCard
-              title="Critical / At Risk"
-              value={dashboardKpis.critical}
-              supportingValue="Review"
-              supportingText="tickets needing attention"
-              icon={AlertTriangle}
-              accent="bg-red-100 text-red-700"
-            />
+                <StatCard
+                  title="SLA Compliance"
+                  value={kpiStats?.slaCompliance || "N/A"}
+                  supportingText="Due-dated tickets currently within SLA"
+                  definition={kpiStats?.definitions?.slaCompliance}
+                  icon={Gauge}
+                  accent="bg-emerald-100 text-emerald-700"
+                />
 
-            <StatCard
-              title="Average Resolution"
-              value={dashboardKpis.averageResolution}
-              supportingValue="Closed"
-              supportingText="average duration"
-              icon={Clock}
-              accent="bg-purple-100 text-purple-700"
-            />
+                <StatCard
+                  title="Critical / At Risk"
+                  value={formatCount(kpiStats?.critical)}
+                  supportingText="Open tickets that are critical or overdue"
+                  definition={kpiStats?.definitions?.critical}
+                  icon={AlertTriangle}
+                  accent="bg-red-100 text-red-700"
+                />
+
+                <StatCard
+                  title="Average Resolution"
+                  value={kpiStats?.averageResolution || "N/A"}
+                  supportingText="Creation to resolution or closure"
+                  definition={kpiStats?.definitions?.averageResolution}
+                  icon={Clock}
+                  accent="bg-purple-100 text-purple-700"
+                />
+              </>
+            )}
           </div>
 
           <div className="grid gap-6 xl:grid-cols-3">
@@ -879,6 +812,9 @@ export default function Dashboard() {
               title="Ticket Volume"
               description="Incidents, service requests and changes by created date."
               className="xl:col-span-2"
+              loading={loading && volumeStats === null}
+              error={sectionErrors.volume}
+              hasData={volumeStats !== null}
               toolbar={
                 <RangeSelector
                   rangeDays={rangeDays}
@@ -896,29 +832,46 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={volumeData}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" />
+                  <XAxis
+                    dataKey="day"
+                    interval={rangeDays <= 7 ? 0 : rangeDays <= 14 ? 1 : 4}
+                  />
                   <YAxis />
                   <Tooltip />
+                  <Legend
+                    verticalAlign="top"
+                    align="right"
+                    iconType="circle"
+                    height={34}
+                  />
                   <Bar
                     dataKey="incidents"
+                    name="Incidents"
                     fill="#2563eb"
-                    radius={[8, 8, 0, 0]}
+                    radius={[5, 5, 0, 0]}
                   />
                   <Bar
                     dataKey="requests"
+                    name="Requests"
                     fill="#7c3aed"
-                    radius={[8, 8, 0, 0]}
+                    radius={[5, 5, 0, 0]}
                   />
                   <Bar
                     dataKey="changes"
+                    name="Changes"
                     fill="#f97316"
-                    radius={[8, 8, 0, 0]}
+                    radius={[5, 5, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
             </ChartPanel>
 
-            <ServiceMixPanel data={serviceMixData} />
+            <ServiceMixPanel
+              data={serviceMixData}
+              loading={loading && serviceMixStats === null}
+              error={sectionErrors.serviceMix}
+              hasData={serviceMixStats !== null}
+            />
           </div>
 
           <div className="grid gap-6 xl:grid-cols-3">
@@ -929,6 +882,9 @@ export default function Dashboard() {
               workspaces={workspaces}
               onSelectTicket={setSelectedTicket}
               onWorkspaceChange={setWorkspaceFilter}
+              onOpenWorkspace={() => navigate("/tickets")}
+              loading={ticketLoading}
+              error={sectionErrors.tickets}
             />
 
             <div className="space-y-6">
@@ -950,15 +906,18 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="grid gap-6 xl:grid-cols-3">
+          <div className="grid items-start gap-6 xl:grid-cols-3">
             <AssetSummary
               assetStats={assetStats}
               onOpenAssets={() => navigate("/assets")}
+              loading={loading && assetStats === null}
+              error={sectionErrors.assets}
             />
 
             <KnowledgePanel
               articles={knowledgeArticles}
-              onOpenArticle={() => navigate("/tickets/new?type=incident")}
+              loading={loading && knowledgeArticles === null}
+              error={sectionErrors.knowledge}
             />
           </div>
         </section>
@@ -969,12 +928,28 @@ export default function Dashboard() {
           title="Assign Ticket"
           description={`Choose an agent for ${
             selectedTicket.ticket_ref || `TICKET-${selectedTicket.id}`
-          }. The change will only be saved after confirmation.`}
+          }. Only active members of its support group are listed.`}
           confirmLabel="Confirm Assignment"
           confirming={actionLoading}
+          confirmDisabled={!selectedGroup || Boolean(sectionErrors.groups)}
           onCancel={() => setShowAssignmentModal(false)}
           onConfirm={confirmAssignment}
         >
+          <div className="mb-4 rounded-lg bg-slate-50 p-3 text-sm">
+            <span className="font-semibold text-slate-700">Support group: </span>
+            <span className="text-slate-600">
+              {selectedGroup?.name ||
+                selectedTicket.assigned_group_name ||
+                "No support group"}
+            </span>
+          </div>
+
+          {!selectedGroup && (
+            <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              Assign a support group on the full ticket page before choosing an agent.
+            </div>
+          )}
+
           <label className="block">
             <span className="mb-1 block text-sm font-bold text-slate-700">
               Assigned Agent
@@ -982,10 +957,11 @@ export default function Dashboard() {
 
             <select
               value={pendingAssigneeId}
+              disabled={!selectedGroup || Boolean(sectionErrors.groups)}
               onChange={(event) => {
                 setPendingAssigneeId(event.target.value);
               }}
-              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-100"
             >
               <option value="">Unassigned</option>
 
@@ -1019,31 +995,77 @@ export default function Dashboard() {
 function StatCard({
   title,
   value,
-  supportingValue,
   supportingText,
+  definition,
   icon: Icon,
   accent,
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-medium text-slate-500">{title}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium text-slate-500">{title}</p>
+            {definition && (
+              <span title={definition} aria-label={definition}>
+                <Info className="h-3.5 w-3.5 text-slate-400" />
+              </span>
+            )}
+          </div>
           <p className="mt-2 text-3xl font-bold text-slate-950">{value}</p>
         </div>
 
-        <div className={classNames("rounded-2xl p-3", accent)}>
-          <Icon className="h-6 w-6" />
+        <div className={classNames("rounded-lg p-2.5", accent)}>
+          <Icon className="h-5 w-5" />
         </div>
       </div>
 
-      <div className="mt-4 flex items-center gap-2 text-sm">
-        <TrendingUp className="h-4 w-4 text-emerald-600" />
-        <span className="font-semibold text-emerald-600">
-          {supportingValue}
-        </span>
-        <span className="text-slate-500">{supportingText}</span>
+      <p className="mt-3 text-sm leading-5 text-slate-500">
+        {supportingText}
+      </p>
+    </div>
+  );
+}
+
+function StatCardSkeleton() {
+  return (
+    <div className="animate-pulse rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1">
+          <div className="h-4 w-28 rounded bg-slate-200" />
+          <div className="mt-3 h-8 w-20 rounded bg-slate-200" />
+        </div>
+        <div className="h-10 w-10 rounded-lg bg-slate-200" />
       </div>
+      <div className="mt-4 h-4 w-4/5 rounded bg-slate-100" />
+    </div>
+  );
+}
+
+function PanelSkeleton({ className }) {
+  return (
+    <div
+      className={classNames(
+        "animate-pulse rounded-lg bg-slate-50 p-4",
+        className
+      )}
+    >
+      <div className="h-full min-h-32 rounded bg-slate-100" />
+    </div>
+  );
+}
+
+function SectionError({ message, className }) {
+  return (
+    <div
+      className={classNames(
+        "flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800",
+        className
+      )}
+      role="alert"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{message}</span>
     </div>
   );
 }
@@ -1061,7 +1083,7 @@ function NotificationMenu({
       <button
         type="button"
         onClick={onToggle}
-        className="relative inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50"
+        className="relative inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
       >
         <Bell className="h-4 w-4" />
         Alerts
@@ -1074,7 +1096,7 @@ function NotificationMenu({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(92vw,26rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+        <div className="absolute right-0 z-50 mt-2 w-[min(92vw,26rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="font-bold text-slate-950">Notifications</h3>
 
@@ -1130,7 +1152,7 @@ function NotificationMenu({
 
 function CreateTicketMenu({ onSelect, onClose }) {
   return (
-    <div className="absolute right-0 z-50 mt-2 w-[min(92vw,28rem)] rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl">
+    <div className="absolute right-0 z-50 mt-2 w-[min(92vw,28rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
       <div className="flex items-center justify-between px-2 pb-2">
         <div>
           <p className="font-bold text-slate-950">Create New Ticket</p>
@@ -1224,11 +1246,14 @@ function ChartPanel({
   children,
   toolbar,
   className,
+  loading,
+  error,
+  hasData,
 }) {
   return (
     <div
       className={classNames(
-        "rounded-2xl border border-slate-200 bg-white p-5 shadow-sm",
+        "rounded-xl border border-slate-200 bg-white p-5 shadow-sm",
         className
       )}
     >
@@ -1241,62 +1266,90 @@ function ChartPanel({
         {toolbar}
       </div>
 
-      <div className="h-72">{children}</div>
+      {error && hasData && (
+        <SectionError
+          message={`${error} Showing the last loaded data.`}
+          className="mb-4"
+        />
+      )}
+
+      {loading && !hasData ? (
+        <PanelSkeleton className="h-72" />
+      ) : error && !hasData ? (
+        <SectionError message={error} className="min-h-72" />
+      ) : (
+        <div className="h-72">{children}</div>
+      )}
     </div>
   );
 }
 
-function ServiceMixPanel({ data }) {
+function ServiceMixPanel({ data, loading, error, hasData }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold text-slate-950">Service Mix</h2>
       <p className="text-sm text-slate-500">
         Workload by support group or workspace.
       </p>
 
-      <div className="mt-4 h-56">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie
-              data={data}
-              dataKey="value"
-              innerRadius={55}
-              outerRadius={85}
-              paddingAngle={4}
-            >
-              {data.map((entry) => (
-                <Cell key={entry.name} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip />
-          </PieChart>
-        </ResponsiveContainer>
-      </div>
+      {error && hasData && (
+        <SectionError
+          message={`${error} Showing the last loaded data.`}
+          className="mt-4"
+        />
+      )}
 
-      <div className="space-y-2">
-        {data.length === 0 ? (
-          <p className="text-sm text-slate-500">No ticket data yet</p>
-        ) : (
-          data.map((item) => (
-            <div
-              key={item.name}
-              className="flex items-center justify-between text-sm"
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: item.color }}
-                />
-                <span className="text-slate-600">{item.name}</span>
+      {loading && !hasData ? (
+        <PanelSkeleton className="mt-4 h-72" />
+      ) : error && !hasData ? (
+        <SectionError message={error} className="mt-4 min-h-72" />
+      ) : data.length === 0 ? (
+        <p className="mt-6 rounded-lg bg-slate-50 p-4 text-sm text-slate-500">
+          No open ticket data is available.
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  dataKey="value"
+                  innerRadius={55}
+                  outerRadius={85}
+                  paddingAngle={4}
+                >
+                  {data.map((entry) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className="space-y-2">
+            {data.map((item) => (
+              <div
+                key={item.name}
+                className="flex items-center justify-between text-sm"
+              >
+                <div className="flex items-center gap-2">
+                  <span
+                    className="h-3 w-3 rounded-full"
+                    style={{ backgroundColor: item.color }}
+                  />
+                  <span className="text-slate-600">{item.name}</span>
+                </div>
+
+                <span className="font-semibold text-slate-950">
+                  {item.value}
+                </span>
               </div>
-
-              <span className="font-semibold text-slate-950">
-                {item.value}
-              </span>
-            </div>
-          ))
-        )}
-      </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1308,25 +1361,28 @@ function TicketQueue({
   workspaces,
   onSelectTicket,
   onWorkspaceChange,
+  onOpenWorkspace,
+  loading,
+  error,
 }) {
   return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm xl:col-span-2">
-      <div className="border-b border-slate-200 p-5">
+    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:col-span-2">
+      <div className="border-b border-slate-200 p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-950">
               Priority Ticket Queue
             </h2>
             <p className="text-sm text-slate-500">
-              Select a ticket to review it. Editing is available only in the
-              ticket preview or full ticket page.
+              Search covers the full authorised queue. Select a ticket to review it.
+              {loading && tickets.length > 0 && " Updating results…"}
             </p>
           </div>
 
           <select
             value={workspaceFilter}
             onChange={(event) => onWorkspaceChange(event.target.value)}
-            className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
           >
             {workspaces.map((workspace) => (
               <option key={workspace}>{workspace}</option>
@@ -1336,7 +1392,24 @@ function TicketQueue({
       </div>
 
       <div className="divide-y divide-slate-100">
-        {tickets.length === 0 ? (
+        {loading && tickets.length === 0 ? (
+          Array.from({ length: 5 }, (_, index) => (
+            <div
+              key={index}
+              className="grid animate-pulse gap-4 p-4 lg:grid-cols-[1fr_160px_110px]"
+            >
+              <div>
+                <div className="h-4 w-32 rounded bg-slate-200" />
+                <div className="mt-3 h-4 w-3/4 rounded bg-slate-100" />
+                <div className="mt-2 h-3 w-1/2 rounded bg-slate-100" />
+              </div>
+              <div className="h-4 w-24 rounded bg-slate-100" />
+              <div className="h-3 w-full rounded bg-slate-100" />
+            </div>
+          ))
+        ) : error ? (
+          <SectionError message={error} className="m-4" />
+        ) : tickets.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-500">
             No tickets found.
           </div>
@@ -1350,7 +1423,7 @@ function TicketQueue({
                 type="button"
                 onClick={() => onSelectTicket(ticketItem)}
                 className={classNames(
-                  "grid w-full gap-4 p-5 text-left transition hover:bg-slate-50 lg:grid-cols-[1fr_160px_110px] lg:items-center",
+                  "grid w-full gap-4 p-4 text-left transition hover:bg-slate-50 lg:grid-cols-[1fr_160px_110px] lg:items-center",
                   selectedTicketId === ticketItem.id && "bg-blue-50/70"
                 )}
               >
@@ -1422,6 +1495,16 @@ function TicketQueue({
           })
         )}
       </div>
+
+      <div className="border-t border-slate-200 p-4">
+        <button
+          type="button"
+          onClick={onOpenWorkspace}
+          className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
+        >
+          View all in Ticket Workspace →
+        </button>
+      </div>
     </div>
   );
 }
@@ -1434,14 +1517,14 @@ function TicketPreview({
 }) {
   if (!ticket) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
         Select a ticket to view details.
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-slate-950">Ticket Preview</h2>
 
@@ -1534,7 +1617,7 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
   ];
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold text-slate-950">Quick Actions</h2>
       <p className="text-sm text-slate-500">
         Fast workflows for the support team.
@@ -1549,7 +1632,7 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
               key={action.label}
               type="button"
               onClick={action.onClick}
-              className="rounded-2xl border border-slate-200 p-4 text-left transition hover:border-blue-300 hover:bg-blue-50"
+              className="rounded-lg border border-slate-200 p-3 text-left transition hover:border-blue-300 hover:bg-blue-50"
             >
               <Icon className="h-5 w-5 text-blue-700" />
               <p className="mt-3 text-sm font-bold text-slate-950">
@@ -1563,23 +1646,33 @@ function QuickActions({ onCreateTicket, onOpenAssets }) {
   );
 }
 
-function AssetSummary({ assetStats, onOpenAssets }) {
+function AssetSummary({ assetStats, onOpenAssets, loading, error }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold text-slate-950">Asset Inventory</h2>
       <p className="text-sm text-slate-500">
         Live from the Asset Management System.
       </p>
 
       <div className="mt-4 space-y-3">
-        {!assetStats ? (
+        {loading && !assetStats ? (
+          <PanelSkeleton className="h-72" />
+        ) : error && !assetStats ? (
+          <SectionError message={error} />
+        ) : !assetStats ? (
           <p className="text-sm text-slate-500">Asset data unavailable.</p>
         ) : (
           <>
-            <div className="rounded-2xl border border-slate-100 p-4">
+            {error && (
+              <SectionError
+                message={`${error} Showing the last loaded data.`}
+              />
+            )}
+
+            <div className="rounded-lg border border-slate-100 p-3">
               <p className="text-sm text-slate-500">Total Assets</p>
               <p className="mt-1 text-3xl font-bold text-slate-950">
-                {assetStats.total || 0}
+                {formatCount(assetStats.total || 0)}
               </p>
             </div>
 
@@ -1597,7 +1690,7 @@ function AssetSummary({ assetStats, onOpenAssets }) {
               return (
                 <div
                   key={key}
-                  className="rounded-2xl border border-slate-100 p-4"
+                  className="rounded-lg border border-slate-100 p-3"
                 >
                   <div className="flex items-center justify-between">
                     <p className="font-semibold text-slate-950">{label}</p>
@@ -1617,7 +1710,7 @@ function AssetSummary({ assetStats, onOpenAssets }) {
             <button
               type="button"
               onClick={onOpenAssets}
-              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
+              className="w-full rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
             >
               View all assets →
             </button>
@@ -1628,28 +1721,40 @@ function AssetSummary({ assetStats, onOpenAssets }) {
   );
 }
 
-function KnowledgePanel({ articles, onOpenArticle }) {
+function KnowledgePanel({ articles, loading, error }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
+    <div className="self-start rounded-xl border border-slate-200 bg-white p-5 shadow-sm xl:col-span-2">
       <h2 className="text-lg font-bold text-slate-950">
         Knowledge Suggestions
       </h2>
       <p className="text-sm text-slate-500">
-        Articles from the knowledge API.
+        Available reference titles from the knowledge base.
       </p>
 
+      {error && articles !== null && (
+        <SectionError
+          message={`${error} Showing the last loaded titles.`}
+          className="mt-4"
+        />
+      )}
+
       <div className="mt-4 grid gap-3 md:grid-cols-2">
-        {articles.length === 0 ? (
+        {loading && !articles ? (
+          <>
+            <PanelSkeleton className="h-24" />
+            <PanelSkeleton className="h-24" />
+          </>
+        ) : error && !articles ? (
+          <SectionError message={error} className="md:col-span-2" />
+        ) : articles?.length === 0 ? (
           <p className="text-sm text-slate-500">
             No knowledge suggestions found.
           </p>
         ) : (
-          articles.map((article, index) => (
-            <button
+          articles?.map((article, index) => (
+            <div
               key={article.id || article.title}
-              type="button"
-              onClick={() => onOpenArticle(article)}
-              className="flex w-full items-start gap-3 rounded-2xl border border-slate-100 p-4 text-left hover:bg-slate-50"
+              className="flex w-full items-start gap-3 rounded-lg border border-slate-100 p-4 text-left"
             >
               <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
                 {index + 1}
@@ -1660,10 +1765,10 @@ function KnowledgePanel({ articles, onOpenArticle }) {
                   {article.title}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  Review before creating or updating a ticket.
+                  Reference title available to the support team.
                 </p>
               </div>
-            </button>
+            </div>
           ))
         )}
       </div>
@@ -1676,6 +1781,7 @@ function ConfirmationModal({
   description,
   confirmLabel,
   confirming,
+  confirmDisabled = false,
   danger = false,
   onCancel,
   onConfirm,
@@ -1684,7 +1790,7 @@ function ConfirmationModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm">
       <div
-        className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl"
+        className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="confirmation-title"
@@ -1728,9 +1834,9 @@ function ConfirmationModal({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={confirming}
+            disabled={confirming || confirmDisabled}
             className={classNames(
-              "rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60",
+              "rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60",
               danger
                 ? "bg-red-600 hover:bg-red-700"
                 : "bg-blue-600 hover:bg-blue-700"
@@ -1746,7 +1852,7 @@ function ConfirmationModal({
 
 function InfoBox({ label, value }) {
   return (
-    <div className="rounded-2xl bg-slate-50 p-3">
+    <div className="rounded-lg bg-slate-50 p-3">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
         {label}
       </p>

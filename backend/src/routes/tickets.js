@@ -222,7 +222,10 @@ router.put("/:id",allowRoles("agent","operator","manager","admin","superadmin"),
     const nextWorkspace=text(req.body.workspace??existing.workspace,100);
     const nextDueAt=req.body.dueAt===undefined?existing.due_at:req.body.dueAt||null;
     await pool.query(
-      `UPDATE tickets SET title=$1,description=$2,priority=$3,status=$4,workspace=$5,assigned_group_id=$6,assigned_to_user_id=$7,due_at=$8,closed_at=CASE WHEN $4='Closed' THEN COALESCE(closed_at,NOW()) WHEN $4='Resolved' THEN closed_at ELSE NULL END,updated_at=NOW() WHERE id=$9`,
+      `UPDATE tickets SET title=$1,description=$2,priority=$3,status=$4,workspace=$5,assigned_group_id=$6,assigned_to_user_id=$7,due_at=$8,
+       resolved_at=CASE WHEN $4 IN ('Resolved','Closed') THEN COALESCE(resolved_at,NOW()) ELSE NULL END,
+       closed_at=CASE WHEN $4='Closed' THEN COALESCE(closed_at,NOW()) ELSE NULL END,
+       updated_at=NOW() WHERE id=$9`,
       [nextTitle,nextDescription,nextPriority,nextStatus,nextWorkspace,groupId,assigneeId,nextDueAt,req.params.id]
     );
     const ticket=await getTicket(req.params.id);
@@ -253,7 +256,7 @@ router.post("/:id/assign",allowRoles("agent","operator","manager","admin","super
     const assigneeId=id(req.body.assignedToUserId);
     if(!groupId&&!assigneeId)return res.status(400).json({error:"Select a support group or eligible agent."});
     await validateAssignment(pool,groupId,assigneeId);
-    await pool.query(`UPDATE tickets SET assigned_group_id=$1,assigned_to_user_id=$2,status='Assigned',updated_at=NOW() WHERE id=$3`,[groupId,assigneeId,req.params.id]);
+    await pool.query(`UPDATE tickets SET assigned_group_id=$1,assigned_to_user_id=$2,status='Assigned',resolved_at=NULL,closed_at=NULL,updated_at=NOW() WHERE id=$3`,[groupId,assigneeId,req.params.id]);
     const ticket=await getTicket(req.params.id);
     await logAssignmentChange(pool,req.params.id,req.user.id,existing,ticket);
     await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status);
@@ -270,7 +273,10 @@ router.patch("/:id/status",allowRoles("agent","operator","manager","admin","supe
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
     await pool.query(
-      `UPDATE tickets SET status=$1,closed_at=CASE WHEN $1='Closed' THEN COALESCE(closed_at,NOW()) WHEN $1='Resolved' THEN closed_at ELSE NULL END,updated_at=NOW() WHERE id=$2`,
+      `UPDATE tickets SET status=$1,
+       resolved_at=CASE WHEN $1 IN ('Resolved','Closed') THEN COALESCE(resolved_at,NOW()) ELSE NULL END,
+       closed_at=CASE WHEN $1='Closed' THEN COALESCE(closed_at,NOW()) ELSE NULL END,
+       updated_at=NOW() WHERE id=$2`,
       [next,req.params.id]
     );
     const ticket=await getTicket(req.params.id);
@@ -284,7 +290,7 @@ router.patch("/:id/resolve",allowRoles("agent","operator","manager","admin","sup
   try{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
-    await pool.query(`UPDATE tickets SET status='Resolved',updated_at=NOW() WHERE id=$1`,[req.params.id]);
+    await pool.query(`UPDATE tickets SET status='Resolved',resolved_at=COALESCE(resolved_at,NOW()),closed_at=NULL,updated_at=NOW() WHERE id=$1`,[req.params.id]);
     const ticket=await getTicket(req.params.id);
     await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status,"resolve");
     return res.json(decorate(ticket));
@@ -296,7 +302,7 @@ router.patch("/:id/close",allowRoles("agent","operator","manager","admin","super
   try{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
-    await pool.query(`UPDATE tickets SET status='Closed',closed_at=NOW(),updated_at=NOW() WHERE id=$1`,[req.params.id]);
+    await pool.query(`UPDATE tickets SET status='Closed',resolved_at=COALESCE(resolved_at,NOW()),closed_at=NOW(),updated_at=NOW() WHERE id=$1`,[req.params.id]);
     const ticket=await getTicket(req.params.id);
     await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status,"closed");
     return res.json(decorate(ticket));
