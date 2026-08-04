@@ -1752,7 +1752,7 @@ function KnowledgePanel({ articles, loading, error }) {
         />
       )}
 
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
         {loading && !articles ? (
           <>
             <PanelSkeleton className="h-20" />
