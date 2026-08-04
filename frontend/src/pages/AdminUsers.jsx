@@ -1,6 +1,7 @@
 ﻿import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Archive,
+  ArrowLeft,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -13,7 +14,7 @@ import {
   UserCog,
   UserX,
 } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import UserAccessDialog from "../components/UserAccessDialog";
 import UserActionMenu from "../components/UserActionMenu";
@@ -129,6 +130,7 @@ function PaginationBar({ pagination, loading, onPageChange }) {
 }
 
 export default function AdminUsers() {
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedView = searchParams.get("view");
