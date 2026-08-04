@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">ATD Helpdesk ticket</title>
+  <rect width="512" height="512" rx="96" fill="#ffffff"/>
+  <path
+    d="M102 132H410Q440 132 440 162V213
+       C416 213 397 232 397 256
+       C397 280 416 299 440 299V350
+       Q440 380 410 380H102Q72 380 72 350V299
+       C96 299 115 280 115 256
+       C115 232 96 213 72 213V162
+       Q72 132 102 132Z"
+    fill="#0a3f73"
+  />
+  <path
+    d="M159 268 365 199 279 319 239 284Z"
+    fill="#ffffff"
+  />
+</svg>
