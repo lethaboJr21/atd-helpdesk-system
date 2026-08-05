@@ -7,6 +7,7 @@ import {
 } from "react-router-dom";
 
 import { AuthProvider } from "./context/AuthContext";
+import { ToastProvider } from "./components/notifications/ToastProvider";
 import { useAuth } from "./hooks/useAuth";
 
 import AdminAuditPage from "./pages/AdminAuditPage";
@@ -427,6 +428,7 @@ export default function App() {
 
   return (
     <AuthProvider>
+      <ToastProvider>
       <BrowserRouter
         basename={moduleBase}
         future={{
@@ -436,6 +438,7 @@ export default function App() {
       >
         <AppRoutes moduleBase={moduleBase} />
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   );
 }
