@@ -1,4 +1,4 @@
-﻿import axios from "axios";
+import axios from "axios";
 
 function getModuleBase() {
   return window.location.pathname.toLowerCase().startsWith("/production")
@@ -199,16 +199,20 @@ export const productionEventsApi = {
 };
 
 
-export const workspacesApi = { // BATCH1_WORKSPACES_API
+export const workspacesApi = {
   getAll: (params) => api.get("/workspaces", { params }),
   getById: (id) => api.get(`/workspaces/${id}`),
   getDashboard: (id) => api.get(`/workspaces/${id}/dashboard`),
+  getReadiness: (id) => api.get(`/workspaces/${id}/readiness`),
   create: (data) => api.post("/workspaces", data),
   update: (id, data) => api.put(`/workspaces/${id}`, data),
-  activate: (id) => api.post(`/workspaces/${id}/activate`, {}),
-  deactivate: (id) => api.post(`/workspaces/${id}/deactivate`, {}),
-  archive: (id) => api.post(`/workspaces/${id}/archive`, {}),
-  restore: (id) => api.post(`/workspaces/${id}/restore`, {}),
+  changeStatus: (id, data) => api.patch(`/workspaces/${id}/status`, data),
+  getMembers: (id) => api.get(`/workspaces/${id}/members`),
+  getMemberCandidates: (id, params) => api.get(`/workspaces/${id}/member-candidates`, { params }),
+  addMember: (id, data) => api.post(`/workspaces/${id}/members`, data),
+  updateMember: (id, memberId, data) => api.patch(`/workspaces/${id}/members/${memberId}`, data),
+  removeMember: (id, memberId, reason) => api.delete(`/workspaces/${id}/members/${memberId}`, { data: { reason } }),
+  getActivity: (id) => api.get(`/workspaces/${id}/activity`),
 };
 export default api;
 
