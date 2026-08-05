@@ -249,6 +249,67 @@ function extractAssets(data) {
   return [];
 }
 
+/**
+ * Gmail / non-AMS demo accounts cannot be provisioned in AMS without
+ * polluting production asset data. Serve local mock assets for allowlisted
+ * emails only when AMS has nothing (or is unreachable).
+ */
+const DEMO_EMPLOYEE_ASSETS = {
+  "ngwenyaresego@gmail.com": {
+    employee: {
+      name: "Resego Ngwenya",
+      email: "ngwenyaresego@gmail.com",
+      department: "IT (Demo)",
+    },
+    assets: [
+      {
+        id: 910001,
+        name: "Dell Latitude 5540",
+        type: "Laptop",
+        status: "Assigned",
+        asset_tag: "ATD-DEMO-LTP-001",
+        serial_number: "DEMO-LAT-5540-001",
+        location: "Head Office",
+        assigned_to: "Resego Ngwenya",
+      },
+      {
+        id: 910002,
+        name: "Dell 27\" Monitor",
+        type: "Monitor",
+        status: "Assigned",
+        asset_tag: "ATD-DEMO-MON-014",
+        serial_number: "DEMO-MON-27-014",
+        location: "Head Office",
+        assigned_to: "Resego Ngwenya",
+      },
+      {
+        id: 910003,
+        name: "Logitech MX Keys",
+        type: "Peripheral",
+        status: "Assigned",
+        asset_tag: "ATD-DEMO-KB-008",
+        serial_number: "DEMO-KB-MX-008",
+        location: "Head Office",
+        assigned_to: "Resego Ngwenya",
+      },
+      {
+        id: 910004,
+        name: "Corporate Mobile (demo)",
+        type: "Mobile",
+        status: "Assigned",
+        asset_tag: "ATD-DEMO-MOB-003",
+        serial_number: "DEMO-MOB-003",
+        location: "Head Office",
+        assigned_to: "Resego Ngwenya",
+      },
+    ],
+  },
+};
+
+function getDemoEmployeeAssets(email) {
+  return DEMO_EMPLOYEE_ASSETS[normalizeEmail(email)] || null;
+}
+
 async function getEmployeeAssets({
   email,
   name,
@@ -270,22 +331,43 @@ async function getEmployeeAssets({
     throw identityError;
   }
 
-  const data = await amsGet({
-    action: "employee_assets",
-    email:
-      normalizedEmail || undefined,
-    name: normalizedName,
-  });
+  const demo = getDemoEmployeeAssets(normalizedEmail);
 
-  assertAmsSuccess(
-    data,
-    "AMS could not retrieve employee assets."
-  );
+  try {
+    const data = await amsGet({
+      action: "employee_assets",
+      email:
+        normalizedEmail || undefined,
+      name: normalizedName,
+    });
 
-  return {
-    employee: data.employee || null,
-    assets: extractAssets(data),
-  };
+    assertAmsSuccess(
+      data,
+      "AMS could not retrieve employee assets."
+    );
+
+    const assets = extractAssets(data);
+    if (assets.length > 0) {
+      return {
+        employee: data.employee || null,
+        assets,
+      };
+    }
+
+    if (demo) {
+      return demo;
+    }
+
+    return {
+      employee: data.employee || null,
+      assets,
+    };
+  } catch (error) {
+    if (demo) {
+      return demo;
+    }
+    throw error;
+  }
 }
 
 function assetMatchesId(asset, assetId) {

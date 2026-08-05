@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import Sidebar from "./Sidebar";
+import useSidebarCollapsed from "../hooks/useSidebarCollapsed";
 
 function classNames(...items) {
   return items.filter(Boolean).join(" ");
@@ -23,21 +23,21 @@ export default function OperationsShell({
   contentOverflow = "auto",
 }) {
   const navigate = useNavigate();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, toggleSidebarCollapsed] = useSidebarCollapsed();
 
   return (
-    <div className="fixed inset-0 flex overflow-hidden bg-slate-100 text-slate-900">
+    <div className="fixed inset-0 flex overflow-hidden bg-[#e8eef5] text-slate-900 font-sans">
       <Sidebar
         navigate={navigate}
         collapsed={sidebarCollapsed}
-        onToggle={() =>
-          setSidebarCollapsed((currentValue) => !currentValue)
-        }
+        onToggle={toggleSidebarCollapsed}
       />
 
       <main
         className={classNames(
-          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-[padding] duration-300",
+          // Must match the sidebar's width transition exactly (220ms, same
+          // easing) or the content lags visibly behind the rail.
+          "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden [transition:padding-left_220ms_cubic-bezier(0.4,0,0.2,1)]",
           sidebarCollapsed ? "lg:pl-20" : "lg:pl-72"
         )}
       >
@@ -68,15 +68,11 @@ export default function OperationsShell({
         </header>
 
         <div
-          className={
-            contentClassName ||
-            classNames(
-              "min-h-0 flex-1 px-4 py-3 lg:px-5 lg:py-4 xl:px-6",
-              contentOverflow === "hidden"
-                ? "overflow-hidden"
-                : "overflow-y-auto"
-            )
-          }
+          className={classNames(
+            "min-h-0 flex-1",
+            contentOverflow === "hidden" ? "overflow-hidden" : "overflow-y-auto",
+            contentClassName || "px-4 py-3 lg:px-5 lg:py-4 xl:px-6"
+          )}
         >
           {children}
         </div>

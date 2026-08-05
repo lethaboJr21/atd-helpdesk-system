@@ -8,6 +8,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   Bell,
+  BriefcaseBusiness,
   ChevronDown,
   Clock,
   Factory,
@@ -15,12 +16,12 @@ import {
   HardDrive,
   Info,
   LifeBuoy,
+  PackagePlus,
   Plus,
   RefreshCw,
   Search,
-  Settings,
+  ShoppingCart,
   Ticket,
-  Wrench,
   X,
 } from "lucide-react";
 import {
@@ -38,6 +39,8 @@ import {
 } from "recharts";
 
 import Sidebar from "../components/Sidebar";
+import { REQUEST_MODULES, formPathForType } from "../data/requestModules";
+import useSidebarCollapsed from "../hooks/useSidebarCollapsed";
 import { useAuth } from "../hooks/useAuth";
 import {
   assetsApi,
@@ -71,7 +74,7 @@ function mergeNotifications(lists) {
 const CREATE_TICKET_OPTIONS = [
   {
     type: "incident",
-    title: "Report an Issue",
+    title: "Report an Incident",
     description:
       "Report something that is broken, unavailable or working incorrectly.",
     icon: LifeBuoy,
@@ -80,18 +83,24 @@ const CREATE_TICKET_OPTIONS = [
   {
     type: "service_request",
     title: "Request a Service",
-    description:
-      "Request software, access, equipment or another standard IT service.",
-    icon: Wrench,
+    description: "Open the service catalog for access, software, and IT help.",
+    icon: ShoppingCart,
+    colorClass: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  {
+    type: "asset_request",
+    title: "Request an Asset",
+    description: "Open the asset catalog for equipment and hardware.",
+    icon: PackagePlus,
     colorClass: "border-blue-200 bg-blue-50 text-blue-700",
   },
   {
     type: "change",
-    title: "Change Management Request",
+    title: "Request a Change",
     description:
-      "Request a planned change that requires assessment, approval and scheduling.",
-    icon: Settings,
-    colorClass: "border-purple-200 bg-purple-50 text-purple-700",
+      "Request a planned change that requires assessment and scheduling.",
+    icon: BriefcaseBusiness,
+    colorClass: "border-teal-200 bg-teal-50 text-teal-700",
   },
 ];
 
@@ -225,7 +234,7 @@ export default function Dashboard() {
   const [error, setError] = useState("");
   const [sectionErrors, setSectionErrors] = useState({});
 
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, toggleSidebarCollapsed] = useSidebarCollapsed();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showRangeMenu, setShowRangeMenu] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -534,8 +543,10 @@ export default function Dashboard() {
 
   const openTicketCreation = (ticketType) => {
     setShowCreateMenu(false);
-
-    navigate(`/tickets/new?type=${ticketType}`, {
+    const module = Object.values(REQUEST_MODULES).find(
+      (item) => item.ticketType === ticketType
+    );
+    navigate(module?.path || formPathForType(ticketType), {
       state: {
         createMode: ticketType,
       },
@@ -608,9 +619,7 @@ export default function Dashboard() {
       <Sidebar
         navigate={navigate}
         collapsed={sidebarCollapsed}
-        onToggle={() => {
-          setSidebarCollapsed((currentValue) => !currentValue);
-        }}
+        onToggle={toggleSidebarCollapsed}
       />
 
       <main
@@ -907,10 +916,7 @@ export default function Dashboard() {
                 onEscalate={() => setShowEscalationModal(true)}
               />
 
-              <QuickActions
-                onCreateTicket={openTicketCreation}
-                onOpenAssets={() => navigate("/assets")}
-              />
+              <QuickActions onCreateTicket={openTicketCreation} />
 
               <AssetSummary
                 assetStats={assetStats}
@@ -1593,27 +1599,27 @@ function TicketPreview({
   );
 }
 
-function QuickActions({ onCreateTicket, onOpenAssets }) {
+function QuickActions({ onCreateTicket }) {
   const actions = [
     {
-      label: "Log Incident",
+      label: "Report Incident",
       icon: LifeBuoy,
       onClick: () => onCreateTicket("incident"),
     },
     {
-      label: "Request Service",
-      icon: Wrench,
+      label: "Service Catalog",
+      icon: ShoppingCart,
       onClick: () => onCreateTicket("service_request"),
     },
     {
-      label: "Raise Change",
-      icon: Settings,
-      onClick: () => onCreateTicket("change"),
+      label: "Request Asset",
+      icon: PackagePlus,
+      onClick: () => onCreateTicket("asset_request"),
     },
     {
-      label: "Review Assets",
-      icon: HardDrive,
-      onClick: onOpenAssets,
+      label: "Request Change",
+      icon: BriefcaseBusiness,
+      onClick: () => onCreateTicket("change"),
     },
   ];
 
