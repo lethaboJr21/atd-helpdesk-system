@@ -16,6 +16,9 @@ import {
   X,
 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
+import OperationsShell from "../components/OperationsShell";
+import { catalogIconSrc } from "../data/catalogIcons";
+import { LEGACY_CATALOGUE, formPathForType } from "../data/requestModules";
 import { useAuth } from "../hooks/useAuth";
 import { assetsApi } from "../services/api";
 
@@ -76,6 +79,9 @@ function date(value) {
 function errorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback;
 }
+// Freshservice sends mixed casing ("Assigned" vs "assigned") — normalise once.
+const normalizeStatus = (value) => String(value || "").trim().toLowerCase();
+
 function statusClass(value) {
   return (
     {
@@ -84,11 +90,12 @@ function statusClass(value) {
       damaged: "bg-red-100 text-red-800",
       untraced: "bg-amber-100 text-amber-800",
       disposed: "bg-slate-200 text-slate-600",
-    }[value] || "bg-slate-100 text-slate-700"
+    }[normalizeStatus(value)] || "bg-slate-100 text-slate-700"
   );
 }
 
 function StatusBadge({ status }) {
+  const key = normalizeStatus(status);
   return (
     <span
       className={cn(
@@ -96,7 +103,7 @@ function StatusBadge({ status }) {
         statusClass(status),
       )}
     >
-      {STATUS_LABELS[status] || status || "Unknown"}
+      {STATUS_LABELS[key] || status || "Unknown"}
     </span>
   );
 }
@@ -104,7 +111,7 @@ function StatusBadge({ status }) {
 export default function AssetsPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user, employeeView } = useAuth();
+  const { user, employeeView, logout } = useAuth();
   const operationsRole = OPERATIONS_ROLES.has(user?.role);
   const employeeExperience =
     user?.role === "user" ||
@@ -212,10 +219,17 @@ export default function AssetsPage() {
       );
     });
   }, [assets, query, typeFilter, statusFilter]);
-  const support = (mode, asset = null) =>
-    navigate(`/tickets/new?type=service_request&catalogue=${mode}`, {
-      state: { createMode: "service_request", catalogueItem: mode, asset },
+  const support = (mode, asset = null) => {
+    const catalogue = LEGACY_CATALOGUE[mode];
+    const ticketType = catalogue?.type || "incident";
+    navigate(formPathForType(ticketType, { catalogue: mode }), {
+      state: {
+        createMode: ticketType,
+        catalogueItem: mode,
+        asset,
+      },
     });
+  };
   if (employeeExperience)
     return (
       <EmployeeAssets
@@ -246,43 +260,45 @@ export default function AssetsPage() {
     untraced: assets.filter((a) => a.status === "untraced").length,
   };
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 text-slate-900 sm:px-6 lg:px-8">
-      <header className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
+    <OperationsShell
+      breadcrumb="Helpdesk / Assets and CMDB"
+      title="Asset Register"
+      subtitle="Operational view of AMS-managed devices across the organisation."
+      actions={
+        <>
           <button
-            onClick={() => navigate("/")}
-            className="mb-3 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold shadow-sm hover:bg-slate-50"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Back to Dashboard
-          </button>
-          <p className="text-sm text-slate-500">Helpdesk / Assets and CMDB</p>
-          <h1 className="mt-1 text-3xl font-bold tracking-tight">
-            Asset Register
-          </h1>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <button
+            type="button"
             onClick={fetchAssets}
             disabled={loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold shadow-sm hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm hover:bg-slate-50 disabled:opacity-60 xl:px-4 xl:py-2.5"
           >
             <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
             Refresh
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate("/login", { replace: true });
+            }}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold shadow-sm hover:bg-slate-50 xl:px-4 xl:py-2.5"
+          >
+            Logout
           </button>
           <a
             href="https://portal.atdalliance.co.za/ams/"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded-xl bg-[#172b57] px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#1f376c] xl:px-4 xl:py-2.5"
           >
             <ExternalLink className="h-4 w-4" />
             Open AMS
           </a>
-        </div>
-      </header>
+        </>
+      }
+    >
       {error && <Alert text={error} />}
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5 xl:gap-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:mb-6 xl:grid-cols-5 xl:gap-4">
         {Object.entries({
           "Total Assets": stats.total,
           "In Use": stats.inUse,
@@ -292,30 +308,30 @@ export default function AssetsPage() {
         }).map(([label, value]) => (
           <div
             key={label}
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"
+            className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4 xl:p-5"
           >
             <p className="text-sm font-semibold text-slate-500">{label}</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums text-slate-950">
+            <p className="mt-2 text-2xl font-bold tabular-nums text-slate-950 xl:text-3xl">
               {value}
             </p>
           </div>
         ))}
       </div>
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col gap-3 border-b border-slate-200 p-5 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center xl:p-5">
           <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-10 w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              className="h-10 w-full rounded-xl border border-slate-200 py-2.5 pl-10 pr-3 text-sm outline-none focus:border-[#172b57]/40 focus:ring-4 focus:ring-[#172b57]/15"
               placeholder="Search assets"
             />
           </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="h-10 shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            className="h-10 shrink-0 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none focus:border-[#172b57]/40 focus:ring-4 focus:ring-[#172b57]/15"
           >
             {STATUS_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -332,7 +348,7 @@ export default function AssetsPage() {
               className={cn(
                 "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-4 py-2 text-sm font-bold transition",
                 typeFilter === tab.value
-                  ? "bg-blue-600 text-white shadow-sm"
+                  ? "bg-[#172b57] text-white shadow-sm"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200",
               )}
             >
@@ -367,7 +383,7 @@ export default function AssetsPage() {
                 className="grid w-full items-center gap-3 p-5 text-left hover:bg-slate-50 md:grid-cols-[minmax(0,1.4fr)_120px_minmax(0,1fr)_auto] md:gap-4"
               >
                 <div className="min-w-0">
-                  <p className="font-bold text-blue-700">
+                  <p className="font-bold text-[#172b57]">
                     {asset.asset_tag || `ASSET-${asset.id}`}
                   </p>
                   <p className="mt-1 truncate font-semibold text-slate-950">
@@ -400,7 +416,7 @@ export default function AssetsPage() {
           operational
         />
       )}
-    </div>
+    </OperationsShell>
   );
 }
 function EmployeeAssets({
@@ -415,145 +431,207 @@ function EmployeeAssets({
   support,
 }) {
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-7xl">
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <button
-              onClick={() =>
-                navigate(user?.role === "user" ? "/" : "/employee")
-              }
-              className="mb-4 inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Employee Dashboard
-            </button>
-            <p className="text-sm font-semibold text-blue-700">
-              Employee Self-Service
+    <OperationsShell
+      breadcrumb="Employee Self-Service"
+      title="Your Assets"
+      subtitle={`Devices currently assigned to ${employee?.name || user?.name || "your account"}.`}
+      actions={
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              navigate(user?.role === "user" ? "/" : "/employee")
+            }
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 xl:px-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Dashboard
+          </button>
+          <button
+            type="button"
+            onClick={() => support("asset_request")}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#172b57] px-3 text-sm font-bold text-white shadow-sm hover:bg-[#1f376c] xl:px-4"
+          >
+            <PackagePlus className="h-4 w-4" />
+            Request an Asset
+          </button>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={loading}
+            className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-60 xl:px-4"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            Refresh
+          </button>
+        </>
+      }
+    >
+      {error ? <Alert text={error} /> : null}
+
+      {!loading && assets.length > 0 ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-white px-5 py-3.5 shadow-soft">
+          <p className="text-sm text-slate-600">
+            <span className="font-bold text-slate-950">
+              {assets.length} device{assets.length === 1 ? "" : "s"}
+            </span>{" "}
+            assigned to you. Something not working? Report a problem on the
+            device and IT picks it up with the asset details attached.
+          </p>
+          <button
+            type="button"
+            onClick={() => support("asset_request")}
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 transition hover:border-[#172b57]/30 hover:text-[#172b57]"
+          >
+            <PackagePlus className="h-3.5 w-3.5" />
+            Request another
+          </button>
+        </div>
+      ) : null}
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 xl:gap-5">
+        {loading ? (
+          Array.from({ length: 3 }, (_, index) => (
+            <div
+              key={index}
+              className="h-72 animate-pulse rounded-2xl border border-slate-200 bg-white shadow-soft"
+            />
+          ))
+        ) : assets.length === 0 ? (
+          <div className="col-span-full rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center shadow-soft">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#172b57]/[0.06]">
+              <HardDrive className="h-7 w-7 text-[#172b57]" />
+            </div>
+            <p className="mt-4 text-lg font-bold text-slate-950">
+              No devices assigned to you yet
             </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-950">
-              Your Assets
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Devices currently assigned to{" "}
-              {employee?.name || user?.name || "your account"}.
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
+              When IT assigns you a laptop, monitor, or phone it appears here
+              with its tag and serial number.
             </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
             <button
+              type="button"
               onClick={() => support("asset_request")}
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-blue-600 px-4 text-sm font-bold text-white shadow-sm hover:bg-blue-700"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#172b57] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#1f376c]"
             >
               <PackagePlus className="h-4 w-4" />
-              Request an Asset
-            </button>
-            <button
-              onClick={refresh}
-              disabled={loading}
-              className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-60"
-            >
-              <RefreshCw
-                className={cn("h-4 w-4", loading && "animate-spin")}
-              />
-              Refresh
+              Request an asset
             </button>
           </div>
-        </header>
-        {error && <Alert text={error} />}
-        <section className="mt-6 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {loading ? (
-            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
-              Loading your assets...
-            </div>
-          ) : assets.length === 0 ? (
-            <div className="col-span-full rounded-xl border border-slate-200 bg-white p-10 text-center shadow-sm">
-              <HardDrive className="mx-auto h-10 w-10 text-slate-400" />
-              <p className="mt-3 font-semibold text-slate-700">
-                No assets assigned
-              </p>
-              <p className="mt-1 text-sm text-slate-500">
-                Request an asset if you need a device for work.
-              </p>
-            </div>
-          ) : (
-            assets.map((asset) => (
-              <Card
-                key={asset.id}
-                asset={asset}
-                open={open}
-                support={support}
-              />
-            ))
-          )}
-        </section>
-      </div>
-    </div>
+        ) : (
+          assets.map((asset) => (
+            <Card
+              key={asset.id}
+              asset={asset}
+              open={open}
+              support={support}
+            />
+          ))
+        )}
+      </section>
+    </OperationsShell>
   );
 }
 function Card({ asset, open, support }) {
   const Icon = TYPE_ICONS[asset.type] || HardDrive;
+  const artSrc = catalogIconSrc(asset.name) || catalogIconSrc(asset.type);
+  const assignedOn = date(asset.assigned_date);
+
   return (
-    <article className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-blue-100 text-blue-700">
-          <Icon className="h-5 w-5" />
+    <article className="group flex h-full flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-soft transition hover:border-[#172b57]/25 hover:shadow-lift">
+      <div className="flex items-start gap-4 border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white p-5">
+        <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200/80">
+          {artSrc ? (
+            <img
+              src={artSrc}
+              alt=""
+              loading="lazy"
+              className="h-full w-full object-contain p-2 transition duration-200 group-hover:scale-[1.04]"
+            />
+          ) : (
+            <Icon className="h-8 w-8 text-[#172b57]" strokeWidth={1.6} />
+          )}
         </div>
-        <StatusBadge status={asset.status} />
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <h2 className="min-w-0 text-base font-bold leading-snug text-slate-950">
+              {asset.name || "Assigned asset"}
+            </h2>
+            {/* Everything here is already assigned to you — only flag the
+                exceptions (damaged, untraced, in storage). */}
+            {normalizeStatus(asset.status) !== "assigned" ? (
+              <StatusBadge status={asset.status} />
+            ) : null}
+          </div>
+          {asset.type ? (
+            <p className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              {asset.type}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => open(asset)}
+            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#172b57] hover:underline"
+          >
+            View details
+            <ExternalLink className="h-3 w-3" />
+          </button>
+        </div>
       </div>
 
-      <div className="mt-4 min-w-0 flex-1">
-        <p className="truncate text-sm font-bold text-blue-700">
-          {asset.asset_tag || `ASSET-${asset.id}`}
-        </p>
-        <h2 className="mt-1 line-clamp-2 text-lg font-bold leading-snug text-slate-950">
-          {asset.name || "Assigned asset"}
-        </h2>
-        <dl className="mt-3 space-y-1 text-sm text-slate-600">
-          <div className="flex gap-2">
-            <dt className="shrink-0 font-semibold text-slate-500">Serial</dt>
-            <dd className="min-w-0 truncate font-medium text-slate-800">
-              {asset.serial_number || "N/A"}
-            </dd>
+      <dl className="flex-1 space-y-2 px-5 py-4 text-sm">
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Tag
+          </dt>
+          <dd className="min-w-0 truncate font-bold text-[#172b57]">
+            {asset.asset_tag || `ASSET-${asset.id}`}
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-3">
+          <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Serial
+          </dt>
+          <dd className="min-w-0 truncate font-semibold text-slate-700">
+            {asset.serial_number || "—"}
+          </dd>
+        </div>
+        {assignedOn && assignedOn !== "N/A" ? (
+          <div className="flex items-baseline justify-between gap-3">
+            <dt className="shrink-0 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Assigned
+            </dt>
+            <dd className="font-semibold text-slate-700">{assignedOn}</dd>
           </div>
-          <div className="flex gap-2">
-            <dt className="shrink-0 font-semibold text-slate-500">Assigned</dt>
-            <dd className="font-medium text-slate-800">
-              {date(asset.assigned_date)}
-            </dd>
-          </div>
-        </dl>
-      </div>
+        ) : null}
+      </dl>
 
-      <div className="mt-5 grid grid-cols-2 gap-2.5">
-        <button
-          type="button"
-          onClick={() => open(asset)}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-50"
-        >
-          View Details
-        </button>
+      <div className="border-t border-slate-100 p-4">
         <button
           type="button"
           onClick={() => support("asset_problem", asset)}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 text-sm font-bold text-white hover:bg-blue-700"
+          className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-[#172b57] px-3 text-sm font-bold text-white transition hover:bg-[#1f376c]"
         >
           <Wrench className="h-4 w-4 shrink-0" />
-          Report Problem
+          Report a problem
         </button>
-        <button
-          type="button"
-          onClick={() => support("laptop_checkup", asset)}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-50"
-        >
-          Request Checkup
-        </button>
-        <button
-          type="button"
-          onClick={() => support("asset_replacement", asset)}
-          className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-3 text-sm font-bold text-slate-800 hover:bg-slate-50"
-        >
-          Request Replacement
-        </button>
+        <div className="mt-2 flex gap-2">
+          <button
+            type="button"
+            onClick={() => support("laptop_checkup", asset)}
+            className="inline-flex h-9 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+          >
+            Checkup
+          </button>
+          <button
+            type="button"
+            onClick={() => support("asset_replacement", asset)}
+            className="inline-flex h-9 flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white px-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+          >
+            Replacement
+          </button>
+        </div>
       </div>
     </article>
   );
@@ -571,7 +649,7 @@ function Modal({ asset, loading, close, support, operational }) {
       <div className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl bg-white p-6">
         <div className="flex justify-between">
           <div>
-            <p className="font-bold text-blue-700">
+            <p className="font-bold text-[#172b57]">
               {asset.asset_tag || `ASSET-${asset.id}`}
             </p>
             <h2 className="text-2xl font-bold">
@@ -627,7 +705,7 @@ function Modal({ asset, loading, close, support, operational }) {
             <div className="mt-6 flex gap-2">
               <button
                 onClick={() => support("asset_problem", asset)}
-                className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white"
+                className="rounded-xl bg-[#172b57] px-4 py-2 text-sm font-bold text-white"
               >
                 Report a Problem
               </button>

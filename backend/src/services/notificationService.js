@@ -77,6 +77,27 @@ async function getAccountApprovalRecipientUserIds() {
   return result.rows.map((row) => Number(row.id));
 }
 
+/**
+ * Test-environment guard: when NOTIFY_ONLY_EMAILS is set (comma-separated),
+ * in-app notifications are only created for those accounts. Role-wide
+ * broadcasts are suppressed entirely. Keeps shared-DB test instances from
+ * pinging real agents.
+ */
+const NOTIFY_ONLY_EMAILS = String(process.env.NOTIFY_ONLY_EMAILS || "")
+  .split(/[;,]/)
+  .map((value) => value.trim().toLowerCase())
+  .filter(Boolean);
+
+async function restrictRecipients(recipients) {
+  if (!NOTIFY_ONLY_EMAILS.length || recipients.length === 0) return recipients;
+  const result = await pool.query(
+    `SELECT id FROM users WHERE LOWER(email) = ANY($1)`,
+    [NOTIFY_ONLY_EMAILS]
+  );
+  const allowed = new Set(result.rows.map((row) => Number(row.id)));
+  return recipients.filter((userId) => allowed.has(Number(userId)));
+}
+
 async function createNotifications({
   recipientUserIds,
   targetRole = null,
@@ -88,7 +109,9 @@ async function createNotifications({
   targetUrl = null,
   attachmentCount = 0,
 }) {
-  const recipients = normalizeRecipientIds(recipientUserIds);
+  let recipients = normalizeRecipientIds(recipientUserIds);
+  recipients = await restrictRecipients(recipients);
+  if (NOTIFY_ONLY_EMAILS.length) targetRole = null;
   const normalizedModule = normalizeModule(module);
   const cleanMessage = String(message || "").trim();
 

@@ -200,6 +200,17 @@ async function sendMailSafe({
     if (error.code !== "42P01") throw error;
   }
 
+  // Test-environment guard: EMAIL_REDIRECT_ALL forces testing mode for this
+  // process only, routing every outgoing email to the given address(es)
+  // regardless of the shared governance settings.
+  if (process.env.EMAIL_REDIRECT_ALL) {
+    governance = {
+      ...governance,
+      mode: "testing",
+      testRecipients: normalizeRecipients(process.env.EMAIL_REDIRECT_ALL),
+    };
+  }
+
   if (governance.mode === "disabled") {
     return { sent: false, skipped: true, reason: "System email delivery is disabled." };
   }
