@@ -212,7 +212,11 @@ export const workspacesApi = {
   addMember: (id, data) => api.post(`/workspaces/${id}/members`, data),
   updateMember: (id, memberId, data) => api.patch(`/workspaces/${id}/members/${memberId}`, data),
   removeMember: (id, memberId, reason) => api.delete(`/workspaces/${id}/members/${memberId}`, { data: { reason } }),
-  getActivity: (id) => api.get(`/workspaces/${id}/activity`),
+  getCategories: (id) => api.get(`/workspaces/${id}/categories`),
+  createCategory: (id, data) => api.post(`/workspaces/${id}/categories`, data),
+  updateCategory: (id, categoryId, data) => api.patch(`/workspaces/${id}/categories/${categoryId}`, data),
+  deactivateCategory: (id, categoryId) => api.post(`/workspaces/${id}/categories/${categoryId}/deactivate`, {}),
+  reactivateCategory: (id, categoryId) => api.post(`/workspaces/${id}/categories/${categoryId}/reactivate`, {}),  getActivity: (id) => api.get(`/workspaces/${id}/activity`),
 };
 export default api;
 
