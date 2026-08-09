@@ -80,9 +80,20 @@ function readingMinutes(text) {
   return Math.max(1, Math.round(words / 200));
 }
 
-router.get("/", async (_request, response) => {
+router.get("/", async (request, response) => {
   try {
-    const result = await pool.query(`
+    // Ops dashboard only needs a short suggestion list; full article bodies
+    // are for the employee Knowledge page.
+    const lite = ["1", "true", "yes"].includes(
+      String(request.query.lite || "").toLowerCase()
+    );
+    const requestedLimit = Number(request.query.limit);
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(Math.trunc(requestedLimit), 1), 500)
+      : 500;
+
+    const result = await pool.query(
+      `
       SELECT a.fs_id, a.name AS title, a.updated_at,
              a.raw->>'description'      AS body_html,
              a.raw->>'description_text' AS body_text,
@@ -97,27 +108,38 @@ router.get("/", async (_request, response) => {
          -- Freshservice ships demo articles ("… (Sample)"); never show them.
          AND a.name NOT ILIKE '%(sample)%'
        ORDER BY c.name NULLS LAST, f.name NULLS LAST, a.name
-       LIMIT 500
-    `);
+       LIMIT $1
+    `,
+      [limit]
+    );
 
     if (result.rows.length) {
       return response.json(
-        result.rows.map((row) => ({
-          id: `fs-${row.fs_id}`,
-          title: row.title,
-          category: row.category_name || "General",
-          folder: row.folder_name || null,
-          summary: summarise(row.body_text),
-          bodyHtml: sanitizeHtml(row.body_html),
-          bodyText: row.body_text || "",
-          readingMinutes: readingMinutes(row.body_text),
-          updatedAt: row.updated_at,
-        }))
+        result.rows.map((row) => {
+          const base = {
+            id: `fs-${row.fs_id}`,
+            title: row.title,
+            category: row.category_name || "General",
+            folder: row.folder_name || null,
+            summary: summarise(row.body_text),
+            readingMinutes: readingMinutes(row.body_text),
+            updatedAt: row.updated_at,
+          };
+
+          if (lite) return base;
+
+          return {
+            ...base,
+            bodyHtml: sanitizeHtml(row.body_html),
+            bodyText: row.body_text || "",
+          };
+        })
       );
     }
 
     const legacy = await pool.query(
-      "SELECT * FROM knowledge_base ORDER BY title"
+      "SELECT * FROM knowledge_base ORDER BY title LIMIT $1",
+      [limit]
     );
     return response.json(
       legacy.rows.map((row) => ({
@@ -126,8 +148,12 @@ router.get("/", async (_request, response) => {
         category: "General",
         folder: null,
         summary: "",
-        bodyHtml: "",
-        bodyText: "",
+        ...(lite
+          ? {}
+          : {
+              bodyHtml: "",
+              bodyText: "",
+            }),
         readingMinutes: 1,
         updatedAt: row.created_at,
       }))
