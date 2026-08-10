@@ -15,8 +15,18 @@ import {
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import OperationsShell from "../components/OperationsShell";
+import { moduleForTicketType } from "../data/requestModules";
 import { groupsApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+
+function initialsFor(name) {
+  return String(name || "")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
 
 const OPERATIONS_ROLES = new Set([
   "agent",
@@ -70,11 +80,11 @@ function priorityClass(value) {
 function statusClass(value) {
   return (
     {
-      Open: "bg-blue-100 text-blue-700",
+      Open: "bg-[#172b57]/10 text-[#172b57]",
       Assigned: "bg-slate-100 text-slate-700",
-      Pending: "bg-purple-100 text-purple-700",
-      Investigating: "bg-indigo-100 text-indigo-700",
-      "Waiting Approval": "bg-purple-100 text-purple-700",
+      Pending: "bg-amber-100 text-amber-800",
+      Investigating: "bg-[#172b57]/10 text-[#172b57]",
+      "Waiting Approval": "bg-amber-100 text-amber-800",
       Resolved: "bg-emerald-100 text-emerald-700",
       Closed: "bg-slate-200 text-slate-700",
       Escalated: "bg-red-100 text-red-700",
@@ -145,7 +155,7 @@ function PaginationBar({ pagination, loading, onPageChange }) {
                 onClick={() => onPageChange(pageNumber)}
                 className={
                   pageNumber === pagination.page
-                    ? "min-w-9 rounded-xl bg-blue-600 px-3 py-1.5 text-sm font-bold text-white"
+                    ? "min-w-9 rounded-xl bg-[#172b57] px-3 py-1.5 text-sm font-bold text-white"
                     : "min-w-9 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 hover:bg-slate-100"
                 }
               >
@@ -447,11 +457,11 @@ export default function TicketWorkspace() {
           </button>
           <button
             type="button"
-            onClick={() => navigate("/tickets/new?type=incident")}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-blue-700 xl:px-4 xl:py-2.5"
+            onClick={() => navigate("/incidents/new")}
+            className="inline-flex items-center gap-2 rounded-xl bg-[#172b57] px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#1f376c] xl:px-4 xl:py-2.5"
           >
             <Plus className="h-4 w-4" />
-            New Ticket
+            Report Incident
           </button>
         </>
       }
@@ -487,7 +497,7 @@ export default function TicketWorkspace() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search tickets"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 xl:py-2.5"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm outline-none focus:border-[#172b57]/40 focus:bg-white focus:ring-4 focus:ring-[#172b57]/15 xl:py-2.5"
               />
             </div>
           </div>
@@ -501,7 +511,7 @@ export default function TicketWorkspace() {
                 className={classNames(
                   "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold xl:px-3.5",
                   statusFilter === status
-                    ? "bg-blue-600 text-white"
+                    ? "bg-[#172b57] text-white"
                     : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                 )}
               >
@@ -533,7 +543,17 @@ export default function TicketWorkspace() {
             </div>
           ) : null}
 
-          <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
+          <div className="scroll-slim min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
+            {employeeExperience && !loading && tickets.length > 0 ? (
+              <div className="sticky top-0 z-10 hidden items-center gap-3 border-l-4 border-l-transparent bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 md:flex xl:px-4">
+                <span className="hidden w-10 shrink-0 sm:block" />
+                <span className="min-w-0 flex-1">Ticket</span>
+                <span className="w-44 shrink-0">Agent</span>
+                <span className="w-[7.5rem] shrink-0 text-right">
+                  Status · Priority
+                </span>
+              </div>
+            ) : null}
             {loading ? (
               Array.from({ length: 8 }, (_, index) => (
                 <TicketRowSkeleton key={index} />
@@ -551,6 +571,89 @@ export default function TicketWorkspace() {
                 const selected =
                   String(selectedTicket?.id) === String(item.id);
 
+                if (employeeExperience) {
+                  const module = moduleForTicketType(item.ticket_type);
+                  const ModuleIcon = module.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTicket((current) =>
+                          String(current?.id) === String(item.id)
+                            ? null
+                            : item
+                        )
+                      }
+                      onDoubleClick={() => navigate(`/tickets/${item.id}`)}
+                      className={classNames(
+                        "flex w-full items-center gap-3 border-l-4 px-3 py-3 text-left transition xl:px-4",
+                        selected
+                          ? "border-[#172b57] bg-[#172b57]/5"
+                          : "border-transparent hover:bg-slate-50"
+                      )}
+                    >
+                      <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#172b57]/[0.06] text-[#172b57] sm:flex">
+                        <ModuleIcon className="h-5 w-5" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate font-bold text-slate-950">
+                          {item.title}
+                        </p>
+                        <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs font-semibold text-slate-500">
+                          <span className="font-bold text-[#172b57]">
+                            {item.ticket_ref || `TICKET-${item.id}`}
+                          </span>
+                          <span className="text-slate-300">·</span>
+                          <span>{module.shortLabel}</span>
+                          <span className="text-slate-300">·</span>
+                          <span>{formatAge(item)} ago</span>
+                        </p>
+                      </div>
+
+                      <div className="hidden w-44 min-w-0 items-center gap-2 md:flex">
+                        {item.assigned_to_name ? (
+                          <>
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#172b57] text-[10px] font-bold text-white">
+                              {initialsFor(item.assigned_to_name)}
+                            </span>
+                            <span className="truncate text-sm font-semibold text-slate-800">
+                              {item.assigned_to_name}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="h-7 w-7 shrink-0 rounded-full border-2 border-dashed border-slate-300" />
+                            <span className="truncate text-sm font-semibold text-slate-400">
+                              Awaiting agent
+                            </span>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="flex w-[7.5rem] shrink-0 flex-col items-end gap-1">
+                        <span
+                          className={classNames(
+                            "whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold",
+                            statusClass(item.status)
+                          )}
+                        >
+                          {item.status || "Open"}
+                        </span>
+                        <span
+                          className={classNames(
+                            "whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-bold",
+                            priorityClass(item.priority)
+                          )}
+                        >
+                          {item.priority || "Medium"}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                }
+
                 return (
                   <button
                     key={item.id}
@@ -564,13 +667,13 @@ export default function TicketWorkspace() {
                     className={classNames(
                       "grid w-full gap-2 border-l-4 px-3 py-2 text-left transition md:grid-cols-[1fr_120px_64px] md:items-center xl:grid-cols-[1fr_140px_120px_70px] xl:gap-3 xl:px-4 xl:py-2.5",
                       selected
-                        ? "border-blue-600 bg-blue-50/70"
+                        ? "border-[#172b57] bg-[#172b57]/5"
                         : "border-transparent hover:bg-slate-50"
                     )}
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-blue-700">
+                        <span className="font-bold text-[#172b57]">
                           {item.ticket_ref || `TICKET-${item.id}`}
                         </span>
                         <span
@@ -667,7 +770,7 @@ export default function TicketWorkspace() {
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-blue-700">
+                  <p className="text-sm font-bold text-[#172b57]">
                     {selectedTicket.ticket_ref}
                   </p>
                   <h2 className="mt-1 text-lg font-bold text-slate-950">
@@ -690,21 +793,33 @@ export default function TicketWorkspace() {
 
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Info label="Priority" value={selectedTicket.priority} />
-                <Info label="Workspace" value={selectedTicket.workspace} />
+                {employeeExperience ? (
+                  <Info
+                    label="Type"
+                    value={
+                      moduleForTicketType(selectedTicket.ticket_type).shortLabel
+                    }
+                  />
+                ) : (
+                  <Info label="Workspace" value={selectedTicket.workspace} />
+                )}
                 <Info
                   label="Group"
                   value={selectedTicket.assigned_group_name || "No group"}
                 />
                 <Info
                   label="Assigned To"
-                  value={selectedTicket.assigned_to_name || "Unassigned"}
+                  value={
+                    selectedTicket.assigned_to_name ||
+                    (employeeExperience ? "Awaiting agent" : "Unassigned")
+                  }
                 />
               </div>
 
               <button
                 type="button"
                 onClick={() => navigate(`/tickets/${selectedTicket.id}`)}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#172b57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#1f376c]"
               >
                 <ExternalLink className="h-4 w-4" />
                 Open Full Ticket
@@ -725,7 +840,7 @@ export default function TicketWorkspace() {
                       changeSupportGroup(event.target.value || null)
                     }
                     disabled={actionLoading || Boolean(groupsError)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172b57]/40 focus:ring-4 focus:ring-[#172b57]/15 disabled:opacity-50"
                   >
                     <option value="">Select support group</option>
                     {groups.map((group) => (
@@ -745,7 +860,7 @@ export default function TicketWorkspace() {
                       !resolvedGroupId ||
                       Boolean(groupsError)
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:opacity-50"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172b57]/40 focus:ring-4 focus:ring-[#172b57]/15 disabled:opacity-50"
                   >
                     <option value="">Unassigned</option>
                     {assigneeOptions.map((member) => (
@@ -802,7 +917,7 @@ export default function TicketWorkspace() {
                 </div>
               )}
 
-              {selectedTicket.priority === "Critical" && (
+              {canOperate && selectedTicket.priority === "Critical" && (
                 <div className="mt-4 flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
                   Critical ticket requiring priority attention.

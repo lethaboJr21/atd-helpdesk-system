@@ -25,6 +25,7 @@ const settingsRoutes = require("./routes/settings");
 const adminControlsRoutes = require("./routes/adminControls");
 const assetRoutes = require("./routes/assets");
 const archiveRoutes = require("./routes/archive");
+const catalogRoutes = require("./routes/catalog");
 const productionSyncRoutes = require("./routes/productionSync");
 const productionEventRoutes = require("./routes/productionEvents");
 const workspaceRoutes = require("./routes/workspaces"); // BATCH1_WORKSPACE_ROUTE_REQUIRE
@@ -109,19 +110,13 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/admin-controls", adminControlsRoutes);
 app.use("/api/assets", assetRoutes);
 app.use("/api/workspaces", workspaceRoutes);
+app.use("/api/catalog", catalogRoutes);
 app.use("/api/archive", archiveRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/production/sync", productionSyncRoutes);
 app.use("/api/production/events", productionEventRoutes);
 
-app.get("/api/knowledge", auth, async (_request, response) => {
-  try {
-    const result = await pool.query("SELECT * FROM knowledge_base ORDER BY title");
-    return response.json(result.rows);
-  } catch (error) {
-    return response.status(500).json({ error: "Failed to fetch knowledge articles." });
-  }
-});
+app.use("/api/knowledge", require("./routes/knowledge"));
 
 app.get("/api", (_request, response) => response.json({
   ok: true,
@@ -171,6 +166,10 @@ if (process.env.NODE_ENV === "production" && process.env.SERVE_FRONTEND_FROM_NOD
 }
 
 function startBackgroundJobs() {
+  if (process.env.DISABLE_BACKGROUND_JOBS === "1") {
+    console.log("Background jobs disabled (DISABLE_BACKGROUND_JOBS=1).");
+    return;
+  }
   try { startTicketReminderJob(); }
   catch (error) { console.error("Ticket reminder scheduler startup failed:", error.message); }
   try { startProductionSyncScheduler(); }

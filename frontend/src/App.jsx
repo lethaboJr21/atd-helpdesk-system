@@ -4,6 +4,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useSearchParams,
 } from "react-router-dom";
 
 import { AuthProvider } from "./context/AuthContext";
@@ -29,8 +30,11 @@ import TicketDetailPage from "./pages/TicketDetailPage";
 import TicketWorkspace from "./pages/TicketWorkspace";
 import WaitingApproval from "./pages/WaitingApproval";
 import GroupManagementPage from "./pages/GroupManagementPage";
-import Workspaces from "./pages/Workspaces"; // BATCH1_WORKSPACES_IMPORT
+import Workspaces from "./pages/Workspaces";
 import WorkspaceDashboard from "./pages/WorkspaceDashboard";
+import KnowledgePage from "./pages/KnowledgePage";
+import RequestCatalogPage from "./pages/RequestCatalogPage";
+import { formPathForType } from "./data/requestModules";
 
 const MODULE_BASES = {
   helpdesk: "/helpdesk",
@@ -194,6 +198,31 @@ function EmployeeRoute({ children }) {
   return children;
 }
 
+/** Redirect legacy /tickets/new?type=â€¦ to dedicated module routes */
+function LegacyTicketCreateRedirect() {
+  const [params] = useSearchParams();
+  const type = params.get("type") || "incident";
+  const hasFormContext =
+    params.get("catalogue") ||
+    params.get("item") ||
+    params.get("title") ||
+    params.get("assetItem");
+
+  if (!hasFormContext && (type === "service_request" || type === "asset_request")) {
+    const catalogPath =
+      type === "asset_request" ? "/request-asset" : "/services";
+    return <Navigate to={catalogPath} replace />;
+  }
+
+  const target = formPathForType(type, {
+    catalogue: params.get("catalogue") || undefined,
+    item: params.get("item") || undefined,
+    prefillTitle: params.get("title") || undefined,
+    assetItem: params.get("assetItem") || undefined,
+  });
+  return <Navigate to={target} replace />;
+}
+
 function AppRoutes({ moduleBase }) {
   const production = moduleBase === MODULE_BASES.production;
 
@@ -271,7 +300,61 @@ function AppRoutes({ moduleBase }) {
         path="/tickets/new"
         element={
           <PrivateRoute>
-            <TicketCreatePage />
+            <LegacyTicketCreateRedirect />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/incidents/new"
+        element={
+          <PrivateRoute>
+            <TicketCreatePage lockedType="incident" />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/services"
+        element={
+          <PrivateRoute>
+            <RequestCatalogPage moduleKey="service" />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/services/request"
+        element={
+          <PrivateRoute>
+            <TicketCreatePage lockedType="service_request" />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/request-asset"
+        element={
+          <PrivateRoute>
+            <RequestCatalogPage moduleKey="asset" />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/request-asset/new"
+        element={
+          <PrivateRoute>
+            <TicketCreatePage lockedType="asset_request" />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/changes/new"
+        element={
+          <PrivateRoute>
+            <TicketCreatePage lockedType="change" />
           </PrivateRoute>
         }
       />
@@ -290,6 +373,15 @@ function AppRoutes({ moduleBase }) {
         element={
           <PrivateRoute>
             <AssetsPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/knowledge"
+        element={
+          <PrivateRoute>
+            <KnowledgePage />
           </PrivateRoute>
         }
       />

@@ -3,6 +3,7 @@ const express = require("express");
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
+const { shiftInfoForName } = require("../services/agentShifts");
 
 const router = express.Router();
 router.use(auth);
@@ -77,6 +78,100 @@ router.get("/catalogue", async (_request, response) => {
   } catch (error) {
     console.error("Fetch support-group catalogue failed:", error);
     return response.status(500).json({ error: "Failed to fetch support groups." });
+  }
+});
+
+/**
+ * Agent directory for assignment pickers — open to all authenticated users.
+ * Recommendation order factors, in priority order:
+ *   1. availability — rostered agents currently off shift sink to the bottom
+ *   2. relevant experience — has resolved this sub-category / category before
+ *   3. current workload — fewer active tickets wins
+ *   4. depth of experience — resolution counts (never shown to the user)
+ */
+router.get("/agents", async (request, response) => {
+  const category = cleanText(request.query.category, 120) || null;
+  const subCategory = cleanText(request.query.subCategory, 120) || null;
+  try {
+    const result = await pool.query(`
+      SELECT
+        u.id, u.name, u.job_title, u.department,
+        COALESCE(json_agg(DISTINCT jsonb_build_object('id', g.id, 'name', g.name))
+          FILTER (WHERE g.id IS NOT NULL), '[]'::json) AS groups,
+        stats.resolved_total,
+        stats.resolved_category,
+        stats.resolved_sub,
+        stats.open_count
+      FROM users u
+      LEFT JOIN support_group_members gm ON gm.user_id = u.id
+      LEFT JOIN support_groups g
+        ON g.id = gm.group_id AND COALESCE(g.is_active, TRUE) = TRUE
+      LEFT JOIN LATERAL (
+        SELECT
+          COUNT(*) FILTER (WHERE t.status IN ('Resolved','Closed'))
+            AS resolved_total,
+          COUNT(*) FILTER (
+            WHERE t.status IN ('Resolved','Closed')
+              AND $1::text IS NOT NULL AND t.category = $1
+          ) AS resolved_category,
+          COUNT(*) FILTER (
+            WHERE t.status IN ('Resolved','Closed')
+              AND $1::text IS NOT NULL AND t.category = $1
+              AND $2::text IS NOT NULL AND t.sub_category = $2
+          ) AS resolved_sub,
+          COUNT(*) FILTER (WHERE t.status NOT IN ('Resolved','Closed'))
+            AS open_count
+        FROM tickets t
+        WHERE t.assigned_to_user_id = u.id
+      ) stats ON TRUE
+      WHERE ${ELIGIBLE_AGENT_WHERE}
+      GROUP BY u.id, stats.resolved_total, stats.resolved_category,
+               stats.resolved_sub, stats.open_count
+    `, [category, subCategory]);
+
+    const now = new Date();
+    const agents = result.rows.map((row) => {
+      const shift = shiftInfoForName(row.name, now);
+      return {
+        id: row.id,
+        name: row.name,
+        job_title: row.job_title,
+        department: row.department,
+        groups: row.groups,
+        resolvedTotal: Number(row.resolved_total) || 0,
+        resolvedCategory: Number(row.resolved_category) || 0,
+        resolvedSub: Number(row.resolved_sub) || 0,
+        openCount: Number(row.open_count) || 0,
+        shiftLabel: shift ? shift.label : null,
+        onShift: shift ? shift.onShift : null,
+      };
+    });
+
+    agents.sort((a, b) => {
+      const availableA = a.onShift === false ? 0 : 1;
+      const availableB = b.onShift === false ? 0 : 1;
+      if (availableA !== availableB) return availableB - availableA;
+      const subA = a.resolvedSub > 0 ? 1 : 0;
+      const subB = b.resolvedSub > 0 ? 1 : 0;
+      if (subA !== subB) return subB - subA;
+      const catA = a.resolvedCategory > 0 ? 1 : 0;
+      const catB = b.resolvedCategory > 0 ? 1 : 0;
+      if (catA !== catB) return catB - catA;
+      if (a.openCount !== b.openCount) return a.openCount - b.openCount;
+      if (a.resolvedSub !== b.resolvedSub) return b.resolvedSub - a.resolvedSub;
+      if (a.resolvedCategory !== b.resolvedCategory) {
+        return b.resolvedCategory - a.resolvedCategory;
+      }
+      if (a.resolvedTotal !== b.resolvedTotal) {
+        return b.resolvedTotal - a.resolvedTotal;
+      }
+      return String(a.name).localeCompare(String(b.name));
+    });
+
+    return response.json(agents);
+  } catch (error) {
+    console.error("Fetch agent directory failed:", error);
+    return response.status(500).json({ error: "Failed to fetch agents." });
   }
 });
 

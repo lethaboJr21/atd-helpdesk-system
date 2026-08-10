@@ -6,9 +6,11 @@ function getModuleBase() {
     : "/helpdesk";
 }
 
+// Dev uses a relative path so the Vite proxy forwards /api to the backend —
+// works from any machine, not just the server itself.
 const API_BASE = import.meta.env.MODE === "production"
   ? `${window.location.origin}${getModuleBase()}/api`
-  : "http://localhost:3001/api";
+  : "/api";
 
 const api = axios.create({
   baseURL: API_BASE,
@@ -33,20 +35,69 @@ api.interceptors.response.use(
 export const ticketsApi = {
   getAll: (params) => api.get("/tickets", { params }),
   getMine: () => api.get("/tickets/my-tickets"),
+  assignAgent: (ticketId, assignedToUserId) =>
+    api.post(`/tickets/${ticketId}/assign-agent`, { assignedToUserId }),
   getEmployeeView: () =>api.get("/tickets/employee-view"),
+  getMyModules: () => api.get("/tickets/my-modules"),
   getById: (id) => api.get(`/tickets/${id}`),
   getHistory: (id) => api.get(`/tickets/${id}/history`),
-  create: (data) => api.post("/tickets", data),
+  create: (data, files = []) => {
+    if (Array.isArray(files) && files.length > 0) {
+      const body = new FormData();
+      Object.entries(data || {}).forEach(([key, value]) => {
+        if (value === undefined || value === null) return;
+        if (typeof value === "object") {
+          body.append(key, JSON.stringify(value));
+        } else {
+          body.append(key, String(value));
+        }
+      });
+      files.forEach((file) => body.append("attachments", file));
+      return api.post("/tickets", body, {
+        headers: { "Content-Type": undefined },
+        transformRequest: [(payload, headers) => {
+          if (payload instanceof FormData && headers) {
+            delete headers["Content-Type"];
+          }
+          return payload;
+        }],
+      });
+    }
+    return api.post("/tickets", data);
+  },
   update: (id, data) => api.put(`/tickets/${id}`, data),
   updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),
   resolve: (id) => api.patch(`/tickets/${id}/resolve`, {}),
   close: (id) => api.patch(`/tickets/${id}/close`, {}),
   assign: (id, assignedToUserId, assignedGroupId) => api.post(`/tickets/${id}/assign`, { assignedToUserId, assignedGroupId }),
+  getAttachments: (id) => api.get(`/tickets/${id}/attachments`),
+  downloadAttachment: (ticketId, attachmentId) =>
+    api.get(`/tickets/${ticketId}/attachments/${attachmentId}/download`, {
+      responseType: "blob",
+    }),
+  uploadAttachments: (id, files = []) => {
+    const body = new FormData();
+    (files || []).forEach((file) => body.append("attachments", file));
+    return api.post(`/tickets/${id}/attachments`, body, {
+      headers: { "Content-Type": undefined },
+      transformRequest: [
+        (payload, headers) => {
+          if (payload instanceof FormData && headers) {
+            delete headers["Content-Type"];
+          }
+          return payload;
+        },
+      ],
+    });
+  },
+  getComments: (id) => api.get(`/tickets/${id}/comments`),
+  addComment: (id, data) => api.post(`/tickets/${id}/comments`, data),
 };
 
 export const groupsApi = {
   getAll: () => api.get("/groups"),
   getCatalogue: () => api.get("/groups/catalogue"),
+  getAgents: (params) => api.get("/groups/agents", { params }),
   getMembers: (groupId) => api.get(`/groups/${groupId}/members`),
   getEligibleAgents: () => api.get("/groups/eligible-agents"),
   create: (data) => api.post("/groups", data),
@@ -96,6 +147,12 @@ export const assetsApi = {
 
   getByUser: (params) =>
      api.get("/assets/by-user", { params }),
+};
+
+export const catalogApi = {
+  getService: () => api.get("/catalog/service"),
+  getAssets: () => api.get("/catalog/assets"),
+  getFields: () => api.get("/catalog/fields"),
 };
 
 export const knowledgeApi = { getAll: (params) => api.get("/knowledge", { params }) };

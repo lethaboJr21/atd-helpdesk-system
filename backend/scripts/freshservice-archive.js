@@ -1011,11 +1011,14 @@ async function promoteToTickets() {
      SELECT
        -- Temporary unique placeholder; rewritten to INC-/REQ-/CHG-<id> below.
        'TMP-FS-' || s.fs_id,
+       -- Strip email reply and forward wrappers plus the Freshservice ticket prefix.
+       -- Backslashes are doubled because the SQL is inside a JavaScript template literal.
+       -- Incorrect escaping previously removed the first character from some ticket titles.
        COALESCE(
          NULLIF(
            trim(both FROM regexp_replace(
              COALESCE(s.subject, ''),
-             '^\s*((re|fw|fwd)\s*:\s*)?\[ticket\s*#\d+\]\s*',
+             '^\\s*((re|fw|fwd)\\s*:\\s*)?\\[ticket\\s*#\\d+\\]\\s*',
              '',
              'i'
            )),
