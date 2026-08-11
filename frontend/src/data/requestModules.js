@@ -1,6 +1,7 @@
 import {
   BriefcaseBusiness,
   ClipboardCheck,
+  FolderKanban,
   KeyRound,
   Laptop,
   LifeBuoy,
@@ -70,7 +71,19 @@ export const REQUEST_MODULES = {
     tone: "teal",
     submitLabel: "Submit Change Request",
   },
-};
+  project: {
+    key: "project",
+    ticketType: "project",
+    label: "Create a Project",
+    shortLabel: "Project",
+    description: "Initiate a structured project with objectives, ownership, dates and deliverables.",
+    path: "/projects/new",
+    catalogPath: null,
+    workspace: "Project Management",
+    icon: FolderKanban,
+    tone: "purple",
+    submitLabel: "Create Project",
+  },};
 
 /**
  * High-volume incident shortcuts from Freshservice history (Syspro, printers).

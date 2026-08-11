@@ -358,6 +358,14 @@ function AppRoutes({ moduleBase }) {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/projects/new"
+        element={
+          <PrivateRoute>
+            <TicketCreatePage lockedType="project" />
+          </PrivateRoute>
+        }
+      />
 
       <Route
         path="/tickets/:id"

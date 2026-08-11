@@ -15,6 +15,7 @@ import {
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import OperationsShell from "../components/OperationsShell";
+import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
 import { moduleForTicketType } from "../data/requestModules";
 import { groupsApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
@@ -222,6 +223,7 @@ export default function TicketWorkspace() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [groupsError, setGroupsError] = useState("");
+  const [requestEntryOpen, setRequestEntryOpen] = useState(false);
 
   // The search term goes to the server because history reaches back to June 2024.
   const [appliedQuery, setAppliedQuery] = useState("");
@@ -457,11 +459,11 @@ export default function TicketWorkspace() {
           </button>
           <button
             type="button"
-            onClick={() => navigate("/incidents/new")}
+            onClick={() => setRequestEntryOpen(true)}
             className="inline-flex items-center gap-2 rounded-xl bg-[#172b57] px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#1f376c] xl:px-4 xl:py-2.5"
           >
             <Plus className="h-4 w-4" />
-            Report Incident
+            Create Request
           </button>
         </>
       }
@@ -927,7 +929,15 @@ export default function TicketWorkspace() {
           )}
         </aside>
       </div>
-    </OperationsShell>
+
+      <RequestEntryMenu
+        open={requestEntryOpen}
+        onClose={() => setRequestEntryOpen(false)}
+        onSelect={(entry) => {
+          setRequestEntryOpen(false);
+          navigate(entry.path);
+        }}
+      />    </OperationsShell>
   );
 }
 

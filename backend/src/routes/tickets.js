@@ -22,7 +22,7 @@ router.use(auth);
 const OPERATIONS_ROLES = new Set(["agent", "operator", "manager", "admin", "superadmin"]);
 const STATUS_MAP = new Map([["open","Open"],["assigned","Assigned"],["pending","Pending"],["investigating","Investigating"],["waiting approval","Waiting Approval"],["resolved","Resolved"],["closed","Closed"],["escalated","Escalated"]]);
 const PRIORITY_MAP = new Map([["low","Low"],["medium","Medium"],["high","High"],["critical","Critical"],["urgent","Critical"]]);
-const TYPE_PREFIX = { incident:"INC", request:"REQ", service_request:"REQ", asset_request:"REQ", change:"CHG" };
+const TYPE_PREFIX = { incident:"INC", request:"REQ", service_request:"REQ", asset_request:"REQ", change:"CHG", project:"PRJ" };
 
 // Imported Freshservice tickets can reference people and teams that never had an
 // ATD Helpdesk record, so fall back to the name captured on the ticket itself.

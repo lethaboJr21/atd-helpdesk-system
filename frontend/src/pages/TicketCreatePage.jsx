@@ -187,6 +187,14 @@ export default function TicketCreatePage({ lockedType = null }) {
     changeReason: "",
     changePlan: "",
     backoutPlan: "",
+    // Project
+    projectObjective: "",
+    projectSponsor: "",
+    projectOwner: "",
+    projectStart: "",
+    projectEnd: "",
+    projectScope: "",
+    projectDeliverables: "",
   });
 
   const update = (field, value) =>
@@ -479,6 +487,17 @@ export default function TicketCreatePage({ lockedType = null }) {
         : "not_required";
     }
 
+
+    if (ticketType === "project") {
+      details.module = "project";
+      details.objective = form.projectObjective.trim();
+      details.sponsor = form.projectSponsor.trim();
+      details.owner = form.projectOwner.trim();
+      details.proposedStart = form.projectStart || null;
+      details.targetCompletion = form.projectEnd || null;
+      details.scope = form.projectScope.trim();
+      details.deliverables = form.projectDeliverables.trim();
+    }
     return details;
   }, [form, ticketType, catalogItem, prefillTitle, params]);
 
@@ -550,6 +569,16 @@ export default function TicketCreatePage({ lockedType = null }) {
       }
     }
 
+
+    if (ticketType === "project") {
+      if (!form.projectObjective.trim()) return setError("A business objective is required.");
+      if (!form.projectSponsor.trim()) return setError("A project sponsor is required.");
+      if (!form.projectOwner.trim()) return setError("A project owner is required.");
+      if (!form.projectStart || !form.projectEnd) return setError("Project start and target completion dates are required.");
+      if (new Date(form.projectEnd) < new Date(form.projectStart)) return setError("Target completion must be after the project start date.");
+      if (!form.projectScope.trim()) return setError("Project scope is required.");
+      if (!form.projectDeliverables.trim()) return setError("Project deliverables are required.");
+    }
     setSubmitting(true);
 
     try {
@@ -562,7 +591,9 @@ export default function TicketCreatePage({ lockedType = null }) {
               "Service Catalog"
             : ticketType === "asset_request"
               ? "Hardware Provisioning"
-              : form.category || "Change";
+              : ticketType === "project"
+                ? "Project Management"
+                : form.category || "Change";
 
       const subCategory =
         ticketType === "incident"
@@ -574,7 +605,9 @@ export default function TicketCreatePage({ lockedType = null }) {
               null
             : ticketType === "asset_request"
               ? catalogItem?.name || form.assetItem || prefillTitle || null
-              : form.changeType || null;
+              : ticketType === "project"
+                ? form.projectObjective || null
+                : form.changeType || null;
 
       const itemCategory =
         ticketType === "incident"
@@ -649,6 +682,13 @@ export default function TicketCreatePage({ lockedType = null }) {
       changeReason: "",
       changePlan: "",
       backoutPlan: "",
+      projectObjective: "",
+      projectSponsor: "",
+      projectOwner: "",
+      projectStart: "",
+      projectEnd: "",
+      projectScope: "",
+      projectDeliverables: "",
       plannedStart: "",
       plannedEnd: "",
     }));
@@ -1174,6 +1214,38 @@ export default function TicketCreatePage({ lockedType = null }) {
               </Section>
             ) : null}
 
+
+            {ticketType === "project" ? (
+              <div className="space-y-4 rounded-2xl border border-purple-200 bg-purple-50/40 p-4">
+                <div>
+                  <h3 className="font-bold text-slate-900">Project initiation</h3>
+                  <p className="mt-1 text-sm text-slate-600">Define the business outcome, ownership, schedule, scope and deliverables.</p>
+                </div>
+                <Field label="Business Objective">
+                  <textarea rows="3" value={form.projectObjective} onChange={(event) => update("projectObjective", event.target.value)} className="input" required placeholder="What business outcome should this project achieve?" />
+                </Field>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Project Sponsor">
+                    <input value={form.projectSponsor} onChange={(event) => update("projectSponsor", event.target.value)} className="input" required placeholder="Executive or business sponsor" />
+                  </Field>
+                  <Field label="Project Owner">
+                    <input value={form.projectOwner} onChange={(event) => update("projectOwner", event.target.value)} className="input" required placeholder="Accountable project owner" />
+                  </Field>
+                  <Field label="Proposed Start Date">
+                    <input type="date" value={form.projectStart} onChange={(event) => update("projectStart", event.target.value)} className="input" required />
+                  </Field>
+                  <Field label="Target Completion Date">
+                    <input type="date" min={form.projectStart || undefined} value={form.projectEnd} onChange={(event) => update("projectEnd", event.target.value)} className="input" required />
+                  </Field>
+                </div>
+                <Field label="Project Scope">
+                  <textarea rows="4" value={form.projectScope} onChange={(event) => update("projectScope", event.target.value)} className="input" required placeholder="What is included and excluded from the project?" />
+                </Field>
+                <Field label="Deliverables">
+                  <textarea rows="4" value={form.projectDeliverables} onChange={(event) => update("projectDeliverables", event.target.value)} className="input" required placeholder="List the expected outputs and acceptance outcomes." />
+                </Field>
+              </div>
+            ) : null}
             {ticketType === "change" ? (
               <Section title="Change assessment">
                 <div
@@ -1276,6 +1348,38 @@ export default function TicketCreatePage({ lockedType = null }) {
               </Section>
             ) : null}
 
+
+            {ticketType === "project" ? (
+              <div className="space-y-4 rounded-2xl border border-purple-200 bg-purple-50/40 p-4">
+                <div>
+                  <h3 className="font-bold text-slate-900">Project initiation</h3>
+                  <p className="mt-1 text-sm text-slate-600">Define the business outcome, ownership, schedule, scope and deliverables.</p>
+                </div>
+                <Field label="Business Objective">
+                  <textarea rows="3" value={form.projectObjective} onChange={(event) => update("projectObjective", event.target.value)} className="input" required placeholder="What business outcome should this project achieve?" />
+                </Field>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <Field label="Project Sponsor">
+                    <input value={form.projectSponsor} onChange={(event) => update("projectSponsor", event.target.value)} className="input" required placeholder="Executive or business sponsor" />
+                  </Field>
+                  <Field label="Project Owner">
+                    <input value={form.projectOwner} onChange={(event) => update("projectOwner", event.target.value)} className="input" required placeholder="Accountable project owner" />
+                  </Field>
+                  <Field label="Proposed Start Date">
+                    <input type="date" value={form.projectStart} onChange={(event) => update("projectStart", event.target.value)} className="input" required />
+                  </Field>
+                  <Field label="Target Completion Date">
+                    <input type="date" min={form.projectStart || undefined} value={form.projectEnd} onChange={(event) => update("projectEnd", event.target.value)} className="input" required />
+                  </Field>
+                </div>
+                <Field label="Project Scope">
+                  <textarea rows="4" value={form.projectScope} onChange={(event) => update("projectScope", event.target.value)} className="input" required placeholder="What is included and excluded from the project?" />
+                </Field>
+                <Field label="Deliverables">
+                  <textarea rows="4" value={form.projectDeliverables} onChange={(event) => update("projectDeliverables", event.target.value)} className="input" required placeholder="List the expected outputs and acceptance outcomes." />
+                </Field>
+              </div>
+            ) : null}
             {ticketType === "change" ? (
               <Section title="Planning">
                 <Field label="Reason for Change">
