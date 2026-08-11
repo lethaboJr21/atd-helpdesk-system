@@ -48,6 +48,15 @@ const STATUS_OPTIONS = [
 ];
 const STATUS_TABS = ["All", "Unresolved", ...STATUS_OPTIONS];
 const PAGE_SIZE = 30;
+const ASSIGNMENT_SCOPES = [
+  { key: "all", label: "All Tickets" },
+  { key: "mine", label: "Assigned to Me" },
+  { key: "unassigned", label: "Unassigned" },
+  { key: "my-groups", label: "My Support Groups" },
+];
+const ASSIGNMENT_SCOPE_KEYS = new Set(
+  ASSIGNMENT_SCOPES.map((item) => item.key)
+);
 
 function classNames(...items) {
   return items.filter(Boolean).join(" ");
@@ -208,14 +217,27 @@ export default function TicketWorkspace() {
   // staff land on unresolved tickets and reach the rest through search / Closed.
   const defaultStatus =
     searchParams.get("status") || (employeeExperience ? "All" : "Unresolved");
+  const requestedAssignmentScope =
+    searchParams.get("assignment") ||
+    (searchParams.get("view") === "mine" ? "mine" : "all");
+  const defaultAssignmentScope = ASSIGNMENT_SCOPE_KEYS.has(
+    requestedAssignmentScope
+  )
+    ? requestedAssignmentScope
+    : "all";
+  const defaultPage = Math.max(Number(searchParams.get("page")) || 1, 1);
+  const defaultQuery = searchParams.get("search") || "";
   const [tickets, setTickets] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(defaultQuery);
+  const [assignmentScope, setAssignmentScope] = useState(
+    defaultAssignmentScope
+  );
   const [statusFilter, setStatusFilter] = useState(
     STATUS_TABS.includes(defaultStatus) ? defaultStatus : "All"
   );
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(defaultPage);
   const [pagination, setPagination] = useState(null);
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -226,15 +248,21 @@ export default function TicketWorkspace() {
   const [requestEntryOpen, setRequestEntryOpen] = useState(false);
 
   // The search term goes to the server because history reaches back to June 2024.
-  const [appliedQuery, setAppliedQuery] = useState("");
+  const [appliedQuery, setAppliedQuery] = useState(defaultQuery.trim());
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setAppliedQuery(query.trim());
+      const nextQuery = query.trim();
+      setAppliedQuery(nextQuery);
       setPage(1);
+      const next = new URLSearchParams(searchParams);
+      if (nextQuery) next.set("search", nextQuery);
+      else next.delete("search");
+      next.delete("page");
+      setSearchParams(next, { replace: true });
     }, 350);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, searchParams, setSearchParams]);
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
@@ -266,7 +294,7 @@ export default function TicketWorkspace() {
         per_page: PAGE_SIZE,
         status: statusFilter === "All" ? undefined : statusFilter,
         ...(appliedQuery ? { search: appliedQuery } : {}),
-        ...(searchParams.get("view") === "mine" ? { view: "mine" } : {}),
+        ...(assignmentScope !== "all" ? { assignmentScope } : {}),
       });
       const {
         tickets: data,
@@ -289,7 +317,7 @@ export default function TicketWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [appliedQuery, employeeExperience, page, searchParams, statusFilter]);
+  }, [appliedQuery, assignmentScope, employeeExperience, page, statusFilter]);
 
   useEffect(() => {
     fetchTickets();
@@ -328,6 +356,31 @@ export default function TicketWorkspace() {
     const next = new URLSearchParams(searchParams);
     if (value === "All") next.delete("status");
     else next.set("status", value);
+    next.delete("page");
+    setSearchParams(next, { replace: true });
+  };
+
+
+  const changeAssignmentScope = (value) => {
+    const nextValue = ASSIGNMENT_SCOPE_KEYS.has(value) ? value : "all";
+    setAssignmentScope(nextValue);
+    setPage(1);
+    setSelectedTicket(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("view");
+    if (nextValue === "all") next.delete("assignment");
+    else next.set("assignment", nextValue);
+    next.delete("page");
+    setSearchParams(next, { replace: true });
+  };
+
+  const changePage = (nextPage) => {
+    const safePage = Math.max(Number(nextPage) || 1, 1);
+    setPage(safePage);
+    setSelectedTicket(null);
+    const next = new URLSearchParams(searchParams);
+    if (safePage === 1) next.delete("page");
+    else next.set("page", String(safePage));
     setSearchParams(next, { replace: true });
   };
 
@@ -531,16 +584,35 @@ export default function TicketWorkspace() {
               </button>
             ))}
           </div>
-
+          {!employeeExperience ? (
+            <div className="scrollbar-thin flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-3 py-2.5 [scrollbar-width:thin] xl:px-4">
+              <span className="mr-1 whitespace-nowrap text-xs font-bold uppercase tracking-wide text-slate-500">
+                Assignment
+              </span>
+              {ASSIGNMENT_SCOPES.map((scope) => (
+                <button
+                  key={scope.key}
+                  type="button"
+                  onClick={() => changeAssignmentScope(scope.key)}
+                  className={classNames(
+                    "whitespace-nowrap rounded-xl border px-3 py-1.5 text-sm font-bold transition",
+                    assignmentScope === scope.key
+                      ? "border-[#172b57] bg-[#172b57] text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                  )}
+                >
+                  {scope.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {!employeeExperience ? (
             <div className="shrink-0">
               <PaginationBar
                 pagination={pagination}
                 loading={loading}
-                onPageChange={(nextPage) => {
-                  setPage(nextPage);
-                  setSelectedTicket(null);
-                }}
+                onPageChange={changePage}
+
               />
             </div>
           ) : null}
@@ -738,10 +810,8 @@ export default function TicketWorkspace() {
               <PaginationBar
                 pagination={pagination}
                 loading={loading}
-                onPageChange={(nextPage) => {
-                  setPage(nextPage);
-                  setSelectedTicket(null);
-                }}
+                onPageChange={changePage}
+
               />
             </div>
           ) : null}
@@ -937,7 +1007,8 @@ export default function TicketWorkspace() {
           setRequestEntryOpen(false);
           navigate(entry.path);
         }}
-      />    </OperationsShell>
+      />
+    </OperationsShell>
   );
 }
 

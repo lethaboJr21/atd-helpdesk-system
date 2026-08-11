@@ -124,9 +124,30 @@ router.get("/",async(req,res)=>{
     const i=values.length;
     conditions.push(`(t.ticket_ref ILIKE $${i} OR t.external_id ILIKE $${i} OR t.title ILIKE $${i} OR t.description ILIKE $${i} OR t.category ILIKE $${i} OR requester.name ILIKE $${i} OR t.external_requester_name ILIKE $${i} OR t.external_requester_email ILIKE $${i} OR assignee.name ILIKE $${i} OR t.external_assignee_name ILIKE $${i} OR g.name ILIKE $${i} OR t.external_group_name ILIKE $${i})`);
   }
-
-  if(String(req.query.view||"").toLowerCase()==="mine"){
+  const legacyView=String(req.query.view||"").toLowerCase();
+  const assignmentScope=String(
+    req.query.assignmentScope||req.query.assignee||req.query.scope||(legacyView==="mine"?"mine":"all")
+  ).trim().toLowerCase();
+  const allowedAssignmentScopes=new Set(["all","mine","unassigned","my-groups"]);
+  if(!allowedAssignmentScopes.has(assignmentScope)){
+    return res.status(400).json({error:"Invalid assignment filter."});
+  }
+  if(assignmentScope!=="all"&&!operations(req.user)){
+    return res.status(403).json({error:"Assignment filters are available to Helpdesk operations users only."});
+  }
+  if(assignmentScope==="mine"){
     add("t.assigned_to_user_id=?",req.user.id);
+  }else if(assignmentScope==="unassigned"){
+    conditions.push("t.assigned_to_user_id IS NULL");
+  }else if(assignmentScope==="my-groups"){
+    values.push(req.user.id);
+    const i=values.length;
+    conditions.push(`t.assigned_group_id IN(
+      SELECT gm.group_id
+      FROM support_group_members gm
+      JOIN support_groups sg ON sg.id=gm.group_id AND COALESCE(sg.is_active,TRUE)=TRUE
+      WHERE gm.user_id=${i}
+    )`);
   }
 
   const baseWhere=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";
