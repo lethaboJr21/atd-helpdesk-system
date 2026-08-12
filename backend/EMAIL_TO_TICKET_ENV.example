@@ -1,0 +1,10 @@
+# Email-to-ticket intake (Microsoft Graph application access)
+# EMAIL_TO_TICKET_ENABLED=false
+# EMAIL_TO_TICKET_INTERVAL_MS=60000
+# EMAIL_TO_TICKET_PAGE_SIZE=25
+# GRAPH_MAIL_TENANT_ID=
+# GRAPH_MAIL_CLIENT_ID=
+# GRAPH_MAIL_CLIENT_SECRET=
+# GRAPH_MAIL_SENDER=info@atdalliance.co.za
+# Required Graph application permissions: Mail.ReadWrite and Mail.Send,
+# scoped in Exchange Online to the Helpdesk mailbox only.

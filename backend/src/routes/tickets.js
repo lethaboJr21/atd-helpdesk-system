@@ -73,7 +73,7 @@ function assignmentLabel(ticket){
   if(!ticket)return "Unassigned";
   const agent=ticket.assigned_to_name||(ticket.assigned_to_user_id?`User #${ticket.assigned_to_user_id}`:"Unassigned");
   const group=ticket.assigned_group_name||(ticket.assigned_group_id?`Group #${ticket.assigned_group_id}`:"No group");
-  return `${agent} · ${group}`;
+  return `${agent} Â· ${group}`;
 }
 async function logAssignmentChange(database,ticketId,actorId,before,after){
   const from=assignmentLabel(before);
@@ -146,7 +146,7 @@ router.get("/",async(req,res)=>{
       SELECT gm.group_id
       FROM support_group_members gm
       JOIN support_groups sg ON sg.id=gm.group_id AND COALESCE(sg.is_active,TRUE)=TRUE
-      WHERE gm.user_id=${i}
+      WHERE gm.user_id=$${i}
     )`);
   }
 
@@ -537,7 +537,7 @@ router.post("/:id/assign",allowRoles("agent","operator","manager","admin","super
   }
 });
 /**
- * Requester-driven assignment — employees may pick or change the agent on
+ * Requester-driven assignment â€” employees may pick or change the agent on
  * their own active tickets. The group follows the agent's membership so the
  * assignment always stays valid.
  */

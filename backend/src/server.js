@@ -26,6 +26,7 @@ const adminControlsRoutes = require("./routes/adminControls");
 const assetRoutes = require("./routes/assets");
 const archiveRoutes = require("./routes/archive");
 const catalogRoutes = require("./routes/catalog");
+const emailIntakeRoutes = require("./routes/emailIntake");
 const productionSyncRoutes = require("./routes/productionSync");
 const productionEventRoutes = require("./routes/productionEvents");
 const workspaceRoutes = require("./routes/workspaces"); // BATCH1_WORKSPACE_ROUTE_REQUIRE
@@ -33,6 +34,7 @@ const workspaceRoutes = require("./routes/workspaces"); // BATCH1_WORKSPACE_ROUT
 const { startTicketReminderJob } = require("./services/ticketReminders");
 const { startProductionSyncScheduler } = require("./services/productionSyncScheduler");
 const { EMAIL_PROVIDER, verifyEmailProvider } = require("./services/email");
+const { startEmailTicketIntakeScheduler } = require("./services/emailTicketIntake");
 
 const app = express();
 const server = http.createServer(app);
@@ -111,6 +113,7 @@ app.use("/api/admin-controls", adminControlsRoutes);
 app.use("/api/assets", assetRoutes);
 app.use("/api/workspaces", workspaceRoutes);
 app.use("/api/catalog", catalogRoutes);
+app.use("/api/email-intake", emailIntakeRoutes);
 app.use("/api/archive", archiveRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/production/sync", productionSyncRoutes);
@@ -172,7 +175,8 @@ function startBackgroundJobs() {
   }
   try { startTicketReminderJob(); }
   catch (error) { console.error("Ticket reminder scheduler startup failed:", error.message); }
-  try { startProductionSyncScheduler(); }
+  try { startProductionSyncScheduler();
+startEmailTicketIntakeScheduler(); }
   catch (error) { console.error("Production sync scheduler startup failed:", error.message); }
 }
 
