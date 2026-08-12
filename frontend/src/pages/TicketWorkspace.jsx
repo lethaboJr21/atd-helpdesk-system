@@ -1,7 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
+  Check,
+  Filter,
+  RotateCcw,
+  X,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -246,6 +250,11 @@ export default function TicketWorkspace() {
   const [success, setSuccess] = useState("");
   const [groupsError, setGroupsError] = useState("");
   const [requestEntryOpen, setRequestEntryOpen] = useState(false);
+  const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [draftAssignmentScope, setDraftAssignmentScope] = useState(
+    defaultAssignmentScope
+  );
+  const filterPanelRef = useRef(null);
 
   // The search term goes to the server because history reaches back to June 2024.
   const [appliedQuery, setAppliedQuery] = useState(defaultQuery.trim());
@@ -338,6 +347,33 @@ export default function TicketWorkspace() {
       );
   }, [employeeExperience, operationsUser]);
 
+  useEffect(() => {
+    if (!filterPanelOpen) return undefined;
+
+    const closeOnPointer = (event) => {
+      if (!filterPanelRef.current?.contains(event.target)) {
+        setFilterPanelOpen(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setFilterPanelOpen(false);
+    };
+
+    document.addEventListener("mousedown", closeOnPointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnPointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [filterPanelOpen]);
+
+  const activeAssignmentLabel =
+    ASSIGNMENT_SCOPES.find((scope) => scope.key === assignmentScope)?.label ||
+    "All Tickets";
+  const activeFilterCount = assignmentScope === "all" ? 0 : 1;
+  const hasSearchOrStatusFilter =
+    Boolean(appliedQuery) || statusFilter !== (employeeExperience ? "All" : "Unresolved");
+
   const statusCount = (status) => {
     if (counts && counts[status] != null) return counts[status];
     if (status === "All") return tickets.length;
@@ -361,7 +397,7 @@ export default function TicketWorkspace() {
   };
 
 
-  const changeAssignmentScope = (value) => {
+  const applyAssignmentScope = (value) => {
     const nextValue = ASSIGNMENT_SCOPE_KEYS.has(value) ? value : "all";
     setAssignmentScope(nextValue);
     setPage(1);
@@ -372,6 +408,25 @@ export default function TicketWorkspace() {
     else next.set("assignment", nextValue);
     next.delete("page");
     setSearchParams(next, { replace: true });
+    setFilterPanelOpen(false);
+  };
+
+  const clearAssignmentFilter = () => {
+    setDraftAssignmentScope("all");
+    applyAssignmentScope("all");
+  };
+
+  const clearAllTicketFilters = () => {
+    const defaultStatusValue = employeeExperience ? "All" : "Unresolved";
+    setDraftAssignmentScope("all");
+    setAssignmentScope("all");
+    setStatusFilter(defaultStatusValue);
+    setQuery("");
+    setAppliedQuery("");
+    setPage(1);
+    setSelectedTicket(null);
+    setFilterPanelOpen(false);
+    setSearchParams(new URLSearchParams(), { replace: true });
   };
 
   const changePage = (nextPage) => {
@@ -525,10 +580,21 @@ export default function TicketWorkspace() {
         <div className="mb-3 shrink-0 space-y-2">
           {error ? (
             <div
-              className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700"
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700"
               role="alert"
             >
-              {error}
+              <div>
+                <p className="font-bold">Tickets could not be loaded.</p>
+                <p className="mt-0.5">{error}</p>
+              </div>
+              <button
+                type="button"
+                onClick={fetchTickets}
+                disabled={loading}
+                className="rounded-xl border border-red-300 bg-white px-3 py-2 font-bold hover:bg-red-100 disabled:opacity-50"
+              >
+                Retry
+              </button>
             </div>
           ) : null}
           {success ? (
@@ -585,25 +651,125 @@ export default function TicketWorkspace() {
             ))}
           </div>
           {!employeeExperience ? (
-            <div className="scrollbar-thin flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-slate-50/70 px-3 py-2.5 [scrollbar-width:thin] xl:px-4">
-              <span className="mr-1 whitespace-nowrap text-xs font-bold uppercase tracking-wide text-slate-500">
-                Assignment
-              </span>
-              {ASSIGNMENT_SCOPES.map((scope) => (
+            <div className="relative flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-3 py-2.5 xl:px-4">
+              <div className="min-w-0">
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                  Assignment scope
+                </p>
+                <p className="truncate text-sm font-semibold text-slate-800">
+                  {activeAssignmentLabel}
+                </p>
+              </div>
+
+              <div ref={filterPanelRef} className="relative shrink-0">
                 <button
-                  key={scope.key}
                   type="button"
-                  onClick={() => changeAssignmentScope(scope.key)}
+                  onClick={() => {
+                    setDraftAssignmentScope(assignmentScope);
+                    setFilterPanelOpen((current) => !current);
+                  }}
+                  aria-expanded={filterPanelOpen}
+                  aria-haspopup="dialog"
                   className={classNames(
-                    "whitespace-nowrap rounded-xl border px-3 py-1.5 text-sm font-bold transition",
-                    assignmentScope === scope.key
+                    "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold shadow-sm transition",
+                    activeFilterCount
                       ? "border-[#172b57] bg-[#172b57] text-white"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
                   )}
                 >
-                  {scope.label}
+                  <Filter className="h-4 w-4" />
+                  Filter
+                  {activeFilterCount ? (
+                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs">
+                      {activeFilterCount}
+                    </span>
+                  ) : null}
                 </button>
-              ))}
+
+                {filterPanelOpen ? (
+                  <section
+                    role="dialog"
+                    aria-label="Ticket filters"
+                    className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+                  >
+                    <header className="flex items-start justify-between border-b border-slate-200 p-4">
+                      <div>
+                        <p className="font-bold text-slate-950">Filter tickets</p>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Choose which assignment queue to display.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFilterPanelOpen(false)}
+                        className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
+                        aria-label="Close filters"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </header>
+
+                    <div className="space-y-2 p-4">
+                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                        Assignment scope
+                      </p>
+                      {ASSIGNMENT_SCOPES.map((scope) => (
+                        <button
+                          key={scope.key}
+                          type="button"
+                          onClick={() => setDraftAssignmentScope(scope.key)}
+                          className={classNames(
+                            "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition",
+                            draftAssignmentScope === scope.key
+                              ? "border-[#172b57] bg-[#172b57]/5"
+                              : "border-slate-200 hover:bg-slate-50"
+                          )}
+                        >
+                          <span
+                            className={classNames(
+                              "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
+                              draftAssignmentScope === scope.key
+                                ? "border-[#172b57] bg-[#172b57] text-white"
+                                : "border-slate-300 text-transparent"
+                            )}
+                          >
+                            <Check className="h-3 w-3" />
+                          </span>
+                          <span>
+                            <span className="block text-sm font-bold text-slate-900">
+                              {scope.label}
+                            </span>
+                            <span className="mt-0.5 block text-xs leading-5 text-slate-500">
+                              {scope.key === "all" && "All tickets you are authorised to view."}
+                              {scope.key === "mine" && "Tickets assigned directly to your account."}
+                              {scope.key === "unassigned" && "Tickets that do not yet have an assigned agent."}
+                              {scope.key === "my-groups" && "Tickets routed to your active support groups."}
+                            </span>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 p-4">
+                      <button
+                        type="button"
+                        onClick={clearAssignmentFilter}
+                        disabled={assignmentScope === "all"}
+                        className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-white disabled:opacity-40"
+                      >
+                        <RotateCcw className="h-4 w-4" /> Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => applyAssignmentScope(draftAssignmentScope)}
+                        className="rounded-xl bg-[#172b57] px-4 py-2 text-sm font-bold text-white hover:bg-[#1f376c]"
+                      >
+                        Apply filter
+                      </button>
+                    </footer>
+                  </section>
+                ) : null}
+              </div>
             </div>
           ) : null}
           {!employeeExperience ? (
@@ -635,10 +801,28 @@ export default function TicketWorkspace() {
             ) : tickets.length === 0 ? (
               <div className="p-10 text-center">
                 <Ticket className="mx-auto h-10 w-10 text-slate-400" />
-                <p className="mt-3 font-bold text-slate-950">No tickets found</p>
-                <p className="mt-1 text-sm text-slate-500">
-                  Try another status filter or clear the search.
+                <p className="mt-3 font-bold text-slate-950">
+                  {assignmentScope === "my-groups"
+                    ? "No tickets in your support groups"
+                    : "No tickets match the current filters"}
                 </p>
+                <p className="mx-auto mt-1 max-w-lg text-sm text-slate-500">
+                  {assignmentScope === "my-groups"
+                    ? groups.length === 0
+                      ? "No active support groups are linked to your account. Ask a Helpdesk administrator to add your account to a support group."
+                      : "No tickets are currently routed to your active support groups."
+                    : "Clear the assignment filter, change the status, or try another search term."}
+                </p>
+                {assignmentScope !== "all" || hasSearchOrStatusFilter ? (
+                  <button
+                    type="button"
+                    onClick={clearAllTicketFilters}
+                    className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Clear filters
+                  </button>
+                ) : null}
               </div>
             ) : (
               tickets.map((item) => {
