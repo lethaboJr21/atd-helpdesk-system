@@ -153,18 +153,26 @@ router.get("/",async(req,res)=>{
   const baseWhere=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";
   const baseValues=[...values];
 
-  const statusRaw=String(req.query.status||"all").trim();
-  const statusKey=statusRaw.toLowerCase();
+  const requestedStatuses=String(req.query.statuses||req.query.status||"all")
+    .split(",")
+    .map(value=>value.trim())
+    .filter(Boolean);
+  const statusKeys=requestedStatuses.map(value=>value.toLowerCase());
   const listValues=[...values];
   const listConditions=[...conditions];
-  if(statusKey&&statusKey!=="all"){
-    if(statusKey==="unresolved"){
+  if(!statusKeys.includes("all")&&requestedStatuses.length){
+    if(statusKeys.includes("unresolved")){
+      if(requestedStatuses.length!==1){
+        return res.status(400).json({error:"Unresolved cannot be combined with individual statuses."});
+      }
       listConditions.push(`t.status NOT IN ('Resolved','Closed')`);
     }else{
-      const normalized=status(statusRaw);
-      if(!normalized)return res.status(400).json({error:"Invalid status filter."});
-      listValues.push(normalized);
-      listConditions.push(`t.status=$${listValues.length}`);
+      const normalizedStatuses=[...new Set(requestedStatuses.map(status))];
+      if(normalizedStatuses.some(value=>!value)){
+        return res.status(400).json({error:"Invalid status filter."});
+      }
+      listValues.push(normalizedStatuses);
+      listConditions.push(`t.status = ANY($${listValues.length}::text[])`);
     }
   }
   const listWhere=listConditions.length?`WHERE ${listConditions.join(" AND ")}`:"";

@@ -51,7 +51,20 @@ const STATUS_OPTIONS = [
   "Escalated",
 ];
 const STATUS_TABS = ["All", "Unresolved", ...STATUS_OPTIONS];
+const UNRESOLVED_STATUSES = STATUS_OPTIONS.filter(
+  (status) => !["Resolved", "Closed"].includes(status)
+);
+const STATUS_OPTION_KEYS = new Set(STATUS_OPTIONS);
 const PAGE_SIZE = 30;
+
+function normalizeStatusSelection(values, fallback = []) {
+  const clean = [...new Set(values)].filter((value) => STATUS_OPTION_KEYS.has(value));
+  return clean.length ? clean : [...fallback];
+}
+
+function sameStatuses(left, right) {
+  return left.length === right.length && left.every((value) => right.includes(value));
+}
 const ASSIGNMENT_SCOPES = [
   { key: "all", label: "All Tickets" },
   { key: "mine", label: "Assigned to Me" },
@@ -219,8 +232,17 @@ export default function TicketWorkspace() {
 
   // Two years of imported Freshservice history shares the list with live work, so
   // staff land on unresolved tickets and reach the rest through search / Closed.
-  const defaultStatus =
-    searchParams.get("status") || (employeeExperience ? "All" : "Unresolved");
+  const legacyStatus = searchParams.get("status");
+  const statusQuery = searchParams.get("statuses");
+  const defaultStatuses = statusQuery
+    ? normalizeStatusSelection(statusQuery.split(","))
+    : legacyStatus === "All"
+      ? []
+      : legacyStatus === "Unresolved" || (!legacyStatus && !employeeExperience)
+        ? [...UNRESOLVED_STATUSES]
+        : legacyStatus && STATUS_OPTION_KEYS.has(legacyStatus)
+          ? [legacyStatus]
+          : [];
   const requestedAssignmentScope =
     searchParams.get("assignment") ||
     (searchParams.get("view") === "mine" ? "mine" : "all");
@@ -238,9 +260,7 @@ export default function TicketWorkspace() {
   const [assignmentScope, setAssignmentScope] = useState(
     defaultAssignmentScope
   );
-  const [statusFilter, setStatusFilter] = useState(
-    STATUS_TABS.includes(defaultStatus) ? defaultStatus : "All"
-  );
+  const [selectedStatuses, setSelectedStatuses] = useState(defaultStatuses);
   const [page, setPage] = useState(defaultPage);
   const [pagination, setPagination] = useState(null);
   const [counts, setCounts] = useState(null);
@@ -254,6 +274,7 @@ export default function TicketWorkspace() {
   const [draftAssignmentScope, setDraftAssignmentScope] = useState(
     defaultAssignmentScope
   );
+  const [draftStatuses, setDraftStatuses] = useState(defaultStatuses);
   const filterPanelRef = useRef(null);
 
   // The search term goes to the server because history reaches back to June 2024.
@@ -280,13 +301,9 @@ export default function TicketWorkspace() {
       if (employeeExperience) {
         const response = await ticketsApi.getEmployeeView();
         const data = Array.isArray(response.data) ? response.data : [];
-        const filtered = data.filter((item) => {
-          if (statusFilter === "All") return true;
-          if (statusFilter === "Unresolved") {
-            return !["Resolved", "Closed"].includes(item.status);
-          }
-          return item.status === statusFilter;
-        });
+        const filtered = data.filter(
+          (item) => !selectedStatuses.length || selectedStatuses.includes(item.status)
+        );
         setTickets(filtered);
         setPagination(null);
         setCounts(null);
@@ -301,7 +318,9 @@ export default function TicketWorkspace() {
       const response = await ticketsApi.getAll({
         page,
         per_page: PAGE_SIZE,
-        status: statusFilter === "All" ? undefined : statusFilter,
+        ...(selectedStatuses.length
+          ? { statuses: selectedStatuses.join(",") }
+          : {}),
         ...(appliedQuery ? { search: appliedQuery } : {}),
         ...(assignmentScope !== "all" ? { assignmentScope } : {}),
       });
@@ -326,7 +345,7 @@ export default function TicketWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [appliedQuery, assignmentScope, employeeExperience, page, statusFilter]);
+  }, [appliedQuery, assignmentScope, employeeExperience, page, selectedStatuses]);
 
   useEffect(() => {
     fetchTickets();
@@ -370,9 +389,17 @@ export default function TicketWorkspace() {
   const activeAssignmentLabel =
     ASSIGNMENT_SCOPES.find((scope) => scope.key === assignmentScope)?.label ||
     "All Tickets";
-  const activeFilterCount = assignmentScope === "all" ? 0 : 1;
-  const hasSearchOrStatusFilter =
-    Boolean(appliedQuery) || statusFilter !== (employeeExperience ? "All" : "Unresolved");
+  const unresolvedSelected = sameStatuses(selectedStatuses, UNRESOLVED_STATUSES);
+  const activeStatusLabel = !selectedStatuses.length
+    ? "All statuses"
+    : unresolvedSelected
+      ? "Unresolved"
+      : selectedStatuses.length === 1
+        ? selectedStatuses[0]
+        : `${selectedStatuses.length} statuses`;
+  const activeFilterCount =
+    (assignmentScope === "all" ? 0 : 1) + (selectedStatuses.length ? 1 : 0);
+  const hasSearchOrStatusFilter = Boolean(appliedQuery) || selectedStatuses.length > 0;
 
   const statusCount = (status) => {
     if (counts && counts[status] != null) return counts[status];
@@ -385,42 +412,42 @@ export default function TicketWorkspace() {
     return tickets.filter((item) => item.status === status).length;
   };
 
-  const changeFilter = (value) => {
-    setStatusFilter(value);
-    setPage(1);
-    setSelectedTicket(null);
-    const next = new URLSearchParams(searchParams);
-    if (value === "All") next.delete("status");
-    else next.set("status", value);
-    next.delete("page");
-    setSearchParams(next, { replace: true });
+  const toggleDraftStatus = (value) => {
+    setDraftStatuses((current) =>
+      current.includes(value)
+        ? current.filter((status) => status !== value)
+        : [...current, value]
+    );
   };
 
+  const applyTicketFilters = () => {
+    const nextAssignment = ASSIGNMENT_SCOPE_KEYS.has(draftAssignmentScope)
+      ? draftAssignmentScope
+      : "all";
+    const nextStatuses = normalizeStatusSelection(draftStatuses);
 
-  const applyAssignmentScope = (value) => {
-    const nextValue = ASSIGNMENT_SCOPE_KEYS.has(value) ? value : "all";
-    setAssignmentScope(nextValue);
+    setAssignmentScope(nextAssignment);
+    setSelectedStatuses(nextStatuses);
     setPage(1);
     setSelectedTicket(null);
+    setFilterPanelOpen(false);
+
     const next = new URLSearchParams(searchParams);
     next.delete("view");
-    if (nextValue === "all") next.delete("assignment");
-    else next.set("assignment", nextValue);
+    next.delete("status");
+    if (nextAssignment === "all") next.delete("assignment");
+    else next.set("assignment", nextAssignment);
+    if (nextStatuses.length) next.set("statuses", nextStatuses.join(","));
+    else next.delete("statuses");
     next.delete("page");
     setSearchParams(next, { replace: true });
-    setFilterPanelOpen(false);
-  };
-
-  const clearAssignmentFilter = () => {
-    setDraftAssignmentScope("all");
-    applyAssignmentScope("all");
   };
 
   const clearAllTicketFilters = () => {
-    const defaultStatusValue = employeeExperience ? "All" : "Unresolved";
     setDraftAssignmentScope("all");
     setAssignmentScope("all");
-    setStatusFilter(defaultStatusValue);
+    setDraftStatuses([]);
+    setSelectedStatuses([]);
     setQuery("");
     setAppliedQuery("");
     setPage(1);
@@ -623,41 +650,15 @@ export default function TicketWorkspace() {
             </div>
           </div>
 
-          <div className="scrollbar-thin flex shrink-0 gap-2 overflow-x-auto border-b border-slate-200 px-3 py-2.5 [scrollbar-width:thin] xl:px-4 xl:py-3">
-            {STATUS_TABS.map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => changeFilter(status)}
-                className={classNames(
-                  "whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-bold xl:px-3.5",
-                  statusFilter === status
-                    ? "bg-[#172b57] text-white"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                )}
-              >
-                {status}
-                <span
-                  className={classNames(
-                    "ml-2 rounded-full px-2 py-0.5 text-xs",
-                    statusFilter === status
-                      ? "bg-white/20 text-white"
-                      : "bg-white text-slate-500"
-                  )}
-                >
-                  {statusCount(status)}
-                </span>
-              </button>
-            ))}
-          </div>
+
           {!employeeExperience ? (
             <div className="relative flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-3 py-2.5 xl:px-4">
               <div className="min-w-0">
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                  Assignment scope
+                  Active filters
                 </p>
                 <p className="truncate text-sm font-semibold text-slate-800">
-                  {activeAssignmentLabel}
+                  {activeStatusLabel} Â· {activeAssignmentLabel}
                 </p>
               </div>
 
@@ -666,6 +667,7 @@ export default function TicketWorkspace() {
                   type="button"
                   onClick={() => {
                     setDraftAssignmentScope(assignmentScope);
+                    setDraftStatuses(selectedStatuses);
                     setFilterPanelOpen((current) => !current);
                   }}
                   aria-expanded={filterPanelOpen}
@@ -696,7 +698,7 @@ export default function TicketWorkspace() {
                       <div>
                         <p className="font-bold text-slate-950">Filter tickets</p>
                         <p className="mt-1 text-sm text-slate-500">
-                          Choose which assignment queue to display.
+                          Combine compatible statuses with one assignment scope.
                         </p>
                       </div>
                       <button
@@ -709,10 +711,85 @@ export default function TicketWorkspace() {
                       </button>
                     </header>
 
-                    <div className="space-y-2 p-4">
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
-                        Assignment scope
-                      </p>
+                    <div className="max-h-[65vh] space-y-5 overflow-y-auto p-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                            Ticket status
+                          </p>
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setDraftStatuses([])}
+                              className={classNames(
+                                "rounded-lg border px-2.5 py-1 text-xs font-bold",
+                                !draftStatuses.length
+                                  ? "border-[#172b57] bg-[#172b57] text-white"
+                                  : "border-slate-200 bg-white text-slate-600"
+                              )}
+                            >
+                              All
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDraftStatuses([...UNRESOLVED_STATUSES])}
+                              className={classNames(
+                                "rounded-lg border px-2.5 py-1 text-xs font-bold",
+                                sameStatuses(draftStatuses, UNRESOLVED_STATUSES)
+                                  ? "border-[#172b57] bg-[#172b57] text-white"
+                                  : "border-slate-200 bg-white text-slate-600"
+                              )}
+                            >
+                              Unresolved
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {STATUS_OPTIONS.map((status) => {
+                            const selected = draftStatuses.includes(status);
+                            return (
+                              <button
+                                key={status}
+                                type="button"
+                                role="checkbox"
+                                aria-checked={selected}
+                                onClick={() => toggleDraftStatus(status)}
+                                className={classNames(
+                                  "flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition",
+                                  selected
+                                    ? "border-[#172b57] bg-[#172b57]/5"
+                                    : "border-slate-200 hover:bg-slate-50"
+                                )}
+                              >
+                                <span className="flex min-w-0 items-center gap-3">
+                                  <span
+                                    className={classNames(
+                                      "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
+                                      selected
+                                        ? "border-[#172b57] bg-[#172b57] text-white"
+                                        : "border-slate-300 text-transparent"
+                                    )}
+                                  >
+                                    <Check className="h-3 w-3" />
+                                  </span>
+                                  <span className="truncate text-sm font-bold text-slate-900">
+                                    {status}
+                                  </span>
+                                </span>
+                                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-500">
+                                  {statusCount(status)}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 border-t border-slate-200 pt-4">
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                          Assignment scope
+                        </p>
                       {ASSIGNMENT_SCOPES.map((scope) => (
                         <button
                           key={scope.key}
@@ -748,23 +825,28 @@ export default function TicketWorkspace() {
                           </span>
                         </button>
                       ))}
+                      </div>
                     </div>
 
                     <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 p-4">
                       <button
                         type="button"
-                        onClick={clearAssignmentFilter}
-                        disabled={assignmentScope === "all"}
+                        onClick={clearAllTicketFilters}
+                        disabled={
+                          assignmentScope === "all" &&
+                          !selectedStatuses.length &&
+                          !appliedQuery
+                        }
                         className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-white disabled:opacity-40"
                       >
-                        <RotateCcw className="h-4 w-4" /> Clear
+                        <RotateCcw className="h-4 w-4" /> Clear all
                       </button>
                       <button
                         type="button"
-                        onClick={() => applyAssignmentScope(draftAssignmentScope)}
+                        onClick={applyTicketFilters}
                         className="rounded-xl bg-[#172b57] px-4 py-2 text-sm font-bold text-white hover:bg-[#1f376c]"
                       >
-                        Apply filter
+                        Apply filters
                       </button>
                     </footer>
                   </section>
