@@ -16,7 +16,8 @@ function config() {
     mailbox: process.env.GRAPH_MAIL_SENDER || process.env.EMAIL_FROM || "info@atdalliance.co.za",
     enabled: String(process.env.EMAIL_TO_TICKET_ENABLED || "false").toLowerCase() === "true",
     intervalMs: Math.max(Number(process.env.EMAIL_TO_TICKET_INTERVAL_MS) || 60000, 30000),
-    pageSize: Math.min(Math.max(Number(process.env.EMAIL_TO_TICKET_PAGE_SIZE) || 25, 1), 100),
+    pageSize: Math.min(Math.max(Number(process.env.EMAIL_TO_TICKET_PAGE_SIZE) || 1, 1), 25),
+    receivedAfter: String(process.env.EMAIL_TO_TICKET_RECEIVED_AFTER || "").trim(),
   };
 }
 
@@ -49,9 +50,16 @@ async function graphRequest(path, options = {}, settings = config()) {
       ...(options.headers || {}),
     },
   });
-  if (!response.ok) throw new Error(`Graph request failed (${response.status}): ${await response.text()}`);
-  if (response.status === 204) return null;
-  return response.json();
+  const responseText = await response.text();
+  if (!response.ok) {
+    throw new Error(`Graph request failed (${response.status}): ${responseText}`);
+  }
+  if (!responseText.trim()) return null;
+  try {
+    return JSON.parse(responseText);
+  } catch (error) {
+    throw new Error(`Graph returned invalid JSON (${response.status}): ${error.message}`);
+  }
 }
 
 function htmlToText(value = "") {
@@ -74,6 +82,26 @@ function htmlToText(value = "") {
 function senderFrom(message = {}) {
   const address = message.replyTo?.[0]?.emailAddress || message.from?.emailAddress || message.sender?.emailAddress || {};
   return { email: String(address.address || "").trim().toLowerCase(), name: String(address.name || "").trim() };
+}
+
+function validSmtpAddress(value = "") {
+  const email = String(value).trim().toLowerCase();
+  if (!email || email.length > 254) return false;
+  if (email.startsWith("/o=") || email.includes("imceaex") || email.includes("x500:")) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function automatedMessageReason(message = {}, settings = config()) {
+  const sender = senderFrom(message).email;
+  const subject = String(message.subject || "").trim();
+  const mailbox = String(settings.mailbox || "").trim().toLowerCase();
+  if (!validSmtpAddress(sender)) return "invalid-or-legacy-sender";
+  if (sender === mailbox) return "helpdesk-mailbox-message";
+  if (/^(postmaster|mailer-daemon|no-?reply)@/i.test(sender) || /(^|[._-])no-?reply@/i.test(sender)) return "automated-sender";
+  if (/^(automatic reply|auto(?:matic)? reply|out of office|undeliverable|delivery (?:has )?failed|non-delivery report|mail delivery failed)\s*:/i.test(subject)) return "automated-subject";
+  if (/^\[(?:INC|REQ|CHG|PRJ)-\d+\]\s+We received your Helpdesk request/i.test(subject)) return "helpdesk-acknowledgement";
+  if (/^\[Ticket #\d+\]/i.test(subject)) return "legacy-ticket-notification";
+  return null;
 }
 
 async function findGroup(client, classification) {
@@ -113,7 +141,7 @@ async function allocateTicketRef(client, ticketId, ticketType) {
 }
 
 async function acknowledge({ mailbox, recipient, senderName, ticketRef, title }, settings = config()) {
-  if (!recipient) return;
+  if (!validSmtpAddress(recipient)) return { status: "skipped", reason: "invalid-recipient" };
   const safeName = senderName || "there";
   const body = {
     message: {
@@ -127,6 +155,7 @@ async function acknowledge({ mailbox, recipient, senderName, ticketRef, title },
     saveToSentItems: true,
   };
   await graphRequest(`/users/${encodeURIComponent(mailbox)}/sendMail`, { method: "POST", body: JSON.stringify(body) }, settings);
+  return { status: "sent" };
 }
 
 async function reserveMessage(client, message, settings) {
@@ -222,12 +251,27 @@ async function createTicketFromMessage(message, settings = config()) {
     ).catch((error) => console.warn("Email intake history was not recorded:", error.message));
 
     try {
-      await acknowledge({ mailbox: settings.mailbox, recipient: sender.email, senderName: sender.name,
+      const acknowledgement = await acknowledge({ mailbox: settings.mailbox, recipient: sender.email, senderName: sender.name,
         ticketRef, title }, settings);
-      await pool.query("UPDATE email_ticket_intake SET status='acknowledged', updated_at=NOW() WHERE id=$1", [intakeId]);
+      const acknowledgementStatus = acknowledgement?.status || "skipped";
+      await pool.query(
+        `UPDATE email_ticket_intake
+         SET status=CASE WHEN $1='sent' THEN 'acknowledged' ELSE status END,
+             acknowledgement_status=$1, acknowledgement_error=NULL,
+             acknowledged_at=CASE WHEN $1='sent' THEN NOW() ELSE acknowledged_at END,
+             error_message=NULL, updated_at=NOW()
+         WHERE id=$2`,
+        [acknowledgementStatus, intakeId]
+      );
     } catch (error) {
       console.error("Email ticket acknowledgement failed:", error.message);
-      await pool.query("UPDATE email_ticket_intake SET error_message=$1, updated_at=NOW() WHERE id=$2", [error.message, intakeId]);
+      await pool.query(
+        `UPDATE email_ticket_intake
+         SET acknowledgement_status='failed', acknowledgement_error=$1,
+             error_message=NULL, updated_at=NOW()
+         WHERE id=$2`,
+        [error.message, intakeId]
+      );
     }
 
     return { duplicate: false, intakeId, ticketId, ticketRef, classification, group };
@@ -244,10 +288,18 @@ async function createTicketFromMessage(message, settings = config()) {
 
 async function listUnreadMessages(settings = config()) {
   const select = ["id", "internetMessageId", "conversationId", "subject", "body", "from", "sender", "replyTo", "receivedDateTime", "webLink", "importance", "isRead"].join(",");
+  const filters = ["isRead eq false"];
+  if (settings.receivedAfter) {
+    const cutoff = new Date(settings.receivedAfter);
+    if (Number.isNaN(cutoff.getTime())) {
+      throw new Error("EMAIL_TO_TICKET_RECEIVED_AFTER must be a valid ISO-8601 timestamp.");
+    }
+    filters.push(`receivedDateTime ge ${cutoff.toISOString()}`);
+  }
   const path = `/users/${encodeURIComponent(settings.mailbox)}/mailFolders/inbox/messages?` +
     new URLSearchParams({
-      "$filter": "isRead eq false",
-      "$orderby": "receivedDateTime asc",
+      "$filter": filters.join(" and "),
+      "$orderby": "receivedDateTime desc",
       "$top": String(settings.pageSize),
       "$select": select,
     }).toString();
@@ -266,6 +318,12 @@ async function runEmailIntake({ includeRead = false } = {}) {
   const results = [];
   for (const message of messages) {
     try {
+      const skipReason = automatedMessageReason(message, settings);
+      if (skipReason) {
+        results.push({ messageId: message.id, ok: true, skipped: true, reason: skipReason });
+        if (!includeRead) await markRead(message.id, settings);
+        continue;
+      }
       const result = await createTicketFromMessage(message, settings);
       results.push({ messageId: message.id, ok: true, ...result });
       if (!includeRead) await markRead(message.id, settings);

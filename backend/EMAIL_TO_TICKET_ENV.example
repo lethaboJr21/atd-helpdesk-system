@@ -8,3 +8,6 @@
 # GRAPH_MAIL_SENDER=info@atdalliance.co.za
 # Required Graph application permissions: Mail.ReadWrite and Mail.Send,
 # scoped in Exchange Online to the Helpdesk mailbox only.
+# Ignore mailbox history before the production go-live timestamp (ISO-8601).
+EMAIL_TO_TICKET_PAGE_SIZE=1
+EMAIL_TO_TICKET_RECEIVED_AFTER=2026-08-16T17:00:00+02:00
