@@ -778,9 +778,10 @@ export default function Dashboard() {
             ) : (
               <>
                 <StatCard
-                  title="Open Tickets"
-                  value={formatCount(kpiStats?.open)}
-                  supportingText={`${formatCount(kpiStats?.total)} total tickets in the system`}
+                  title="All Tickets"
+                  value={formatCount(kpiStats?.total)}
+                  supportingText={`${formatCount(kpiStats?.open)} unresolved tickets`}
+                  onClick={() => navigate("/tickets")}
                   definition={kpiStats?.definitions?.open}
                   icon={Ticket}
                   accent="bg-blue-100 text-blue-700"
@@ -796,9 +797,10 @@ export default function Dashboard() {
                 />
 
                 <StatCard
-                  title="Critical / At Risk"
-                  value={formatCount(kpiStats?.critical)}
-                  supportingText="Open tickets that are critical or overdue"
+                  title="Critical Tickets"
+                  value={formatCount(kpiStats?.criticalTickets ?? kpiStats?.critical)}
+                  supportingText="Open tickets with Critical priority"
+                  onClick={() => navigate("/tickets?priority=Critical&status=Unresolved")}
                   definition={kpiStats?.definitions?.critical}
                   icon={AlertTriangle}
                   accent="bg-red-100 text-red-700"
@@ -892,7 +894,7 @@ export default function Dashboard() {
                 workspaces={workspaces}
                 onSelectTicket={setSelectedTicket}
                 onWorkspaceChange={setWorkspaceFilter}
-                onOpenWorkspace={() => navigate("/tickets")}
+                onOpenWorkspace={() => navigate("/tickets?status=Unresolved")}
                 loading={ticketLoading}
                 error={sectionErrors.tickets}
               />
@@ -1006,9 +1008,18 @@ function StatCard({
   definition,
   icon: Icon,
   accent,
+  onClick,
 }) {
+  const Component = onClick ? "button" : "div";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-sm">
+    <Component
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={classNames(
+        "w-full rounded-xl border border-slate-200 bg-white p-3.5 text-left shadow-sm",
+        onClick && "transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100"
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-1.5">
@@ -1030,7 +1041,7 @@ function StatCard({
       </div>
 
       <p className="mt-2 text-sm leading-5 text-slate-500">{supportingText}</p>
-    </div>
+    </Component>
   );
 }
 

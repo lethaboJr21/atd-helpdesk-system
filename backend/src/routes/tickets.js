@@ -175,6 +175,19 @@ router.get("/",async(req,res)=>{
       listConditions.push(`t.status = ANY($${listValues.length}::text[])`);
     }
   }
+  const requestedPriorities=String(req.query.priorities||req.query.priority||"")
+    .split(",")
+    .map(value=>value.trim())
+    .filter(Boolean);
+  if(requestedPriorities.length){
+    const normalizedPriorities=[...new Set(requestedPriorities.map(priority))];
+    if(normalizedPriorities.some(value=>!value)){
+      return res.status(400).json({error:"Invalid priority filter."});
+    }
+    listValues.push(normalizedPriorities);
+    listConditions.push(`t.priority = ANY($${listValues.length}::text[])`);
+  }
+
   const listWhere=listConditions.length?`WHERE ${listConditions.join(" AND ")}`:"";
 
   const requestedLimit=Number(req.query.per_page||req.query.limit);

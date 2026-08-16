@@ -253,6 +253,9 @@ export default function TicketWorkspace() {
     : "all";
   const defaultPage = Math.max(Number(searchParams.get("page")) || 1, 1);
   const defaultQuery = searchParams.get("search") || "";
+  const defaultPriority = ["Low", "Medium", "High", "Critical"].includes(searchParams.get("priority"))
+    ? searchParams.get("priority")
+    : "";
   const [tickets, setTickets] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -261,6 +264,7 @@ export default function TicketWorkspace() {
     defaultAssignmentScope
   );
   const [selectedStatuses, setSelectedStatuses] = useState(defaultStatuses);
+  const [selectedPriority] = useState(defaultPriority);
   const [page, setPage] = useState(defaultPage);
   const [pagination, setPagination] = useState(null);
   const [counts, setCounts] = useState(null);
@@ -283,16 +287,20 @@ export default function TicketWorkspace() {
   useEffect(() => {
     const timer = setTimeout(() => {
       const nextQuery = query.trim();
+      if (nextQuery === appliedQuery) return;
       setAppliedQuery(nextQuery);
       setPage(1);
-      const next = new URLSearchParams(searchParams);
-      if (nextQuery) next.set("search", nextQuery);
-      else next.delete("search");
-      next.delete("page");
-      setSearchParams(next, { replace: true });
+      setSelectedTicket(null);
+      setSearchParams((currentParams) => {
+        const next = new URLSearchParams(currentParams);
+        if (nextQuery) next.set("search", nextQuery);
+        else next.delete("search");
+        next.delete("page");
+        return next;
+      }, { replace: true });
     }, 350);
     return () => clearTimeout(timer);
-  }, [query, searchParams, setSearchParams]);
+  }, [appliedQuery, query, setSearchParams]);
 
   const fetchTickets = useCallback(async () => {
     setLoading(true);
@@ -322,6 +330,7 @@ export default function TicketWorkspace() {
           ? { statuses: selectedStatuses.join(",") }
           : {}),
         ...(appliedQuery ? { search: appliedQuery } : {}),
+        ...(selectedPriority ? { priority: selectedPriority } : {}),
         ...(assignmentScope !== "all" ? { assignmentScope } : {}),
       });
       const {
@@ -345,7 +354,7 @@ export default function TicketWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [appliedQuery, assignmentScope, employeeExperience, page, selectedStatuses]);
+  }, [appliedQuery, assignmentScope, employeeExperience, page, selectedPriority, selectedStatuses]);
 
   useEffect(() => {
     fetchTickets();
@@ -443,7 +452,18 @@ export default function TicketWorkspace() {
     setSearchParams(next, { replace: true });
   };
 
-  const clearAllTicketFilters = () => {
+  const clearDraftTicketFilters = () => {
+    setDraftAssignmentScope("all");
+    setDraftStatuses([]);
+  };
+
+  const cancelTicketFilters = () => {
+    setDraftAssignmentScope(assignmentScope);
+    setDraftStatuses(selectedStatuses);
+    setFilterPanelOpen(false);
+  };
+
+  const resetAppliedTicketFilters = () => {
     setDraftAssignmentScope("all");
     setAssignmentScope("all");
     setDraftStatuses([]);
@@ -831,23 +851,31 @@ export default function TicketWorkspace() {
                     <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 p-4">
                       <button
                         type="button"
-                        onClick={clearAllTicketFilters}
+                        onClick={clearDraftTicketFilters}
                         disabled={
-                          assignmentScope === "all" &&
-                          !selectedStatuses.length &&
-                          !appliedQuery
+                          draftAssignmentScope === "all" &&
+                          !draftStatuses.length
                         }
                         className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-white disabled:opacity-40"
                       >
                         <RotateCcw className="h-4 w-4" /> Clear all
                       </button>
-                      <button
-                        type="button"
-                        onClick={applyTicketFilters}
-                        className="rounded-xl bg-[#172b57] px-4 py-2 text-sm font-bold text-white hover:bg-[#1f376c]"
-                      >
-                        Apply filters
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={cancelTicketFilters}
+                          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={applyTicketFilters}
+                          className="rounded-xl bg-[#172b57] px-4 py-2 text-sm font-bold text-white hover:bg-[#1f376c]"
+                        >
+                          Apply filters
+                        </button>
+                      </div>
                     </footer>
                   </section>
                 ) : null}
@@ -898,7 +926,7 @@ export default function TicketWorkspace() {
                 {assignmentScope !== "all" || hasSearchOrStatusFilter ? (
                   <button
                     type="button"
-                    onClick={clearAllTicketFilters}
+                    onClick={resetAppliedTicketFilters}
                     className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
                   >
                     <RotateCcw className="h-4 w-4" />
