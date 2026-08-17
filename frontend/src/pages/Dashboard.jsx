@@ -2,6 +2,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -22,6 +23,12 @@ import {
   Search,
   ShoppingCart,
   Ticket,
+  UserCircle,
+  LogOut,
+  Monitor,
+  Moon,
+  Sun,
+  LayoutDashboard,
   X,
 } from "lucide-react";
 import {
@@ -55,6 +62,26 @@ const DASHBOARD_TICKET_LIMIT = 100;
 const NOTIFICATION_MODULES = ["admin", "helpdesk"];
 const SEARCH_DEBOUNCE_MS = 300;
 const ADMIN_ROLES = new Set(["manager", "admin", "superadmin"]);
+const THEME_STORAGE_KEY = "atd-helpdesk-theme";
+const DASHBOARD_VIEW_STORAGE_KEY = "atd-helpdesk-dashboard-view";
+const THEME_OPTIONS = new Set(["light", "dark", "system"]);
+const DASHBOARD_VIEW_OPTIONS = new Set(["simple", "explorative"]);
+
+function storedPreference(key, allowedValues, fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return allowedValues.has(value) ? value : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function applyThemePreference(theme) {
+  const dark = theme === "dark" ||
+    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  document.documentElement.dataset.theme = dark ? "dark" : "light";
+  document.documentElement.style.colorScheme = dark ? "dark" : "light";
+}
 
 function mergeNotifications(lists) {
   const byId = new Map();
@@ -236,12 +263,66 @@ export default function Dashboard() {
 
   const [sidebarCollapsed, toggleSidebarCollapsed] = useSidebarCollapsed();
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false);
+  const [theme, setTheme] = useState(() =>
+    storedPreference(THEME_STORAGE_KEY, THEME_OPTIONS, "system")
+  );
+  const [dashboardView, setDashboardView] = useState(() =>
+    storedPreference(DASHBOARD_VIEW_STORAGE_KEY, DASHBOARD_VIEW_OPTIONS, "explorative")
+  );
+  const notificationMenuRef = useRef(null);
+  const accountMenuRef = useRef(null);
   const [showRangeMenu, setShowRangeMenu] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [showEscalationModal, setShowEscalationModal] = useState(false);
 
   const [pendingAssigneeId, setPendingAssigneeId] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+    applyThemePreference(theme);
+    if (theme !== "system") return undefined;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyThemePreference("system");
+    media.addEventListener?.("change", onChange);
+    return () => media.removeEventListener?.("change", onChange);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(DASHBOARD_VIEW_STORAGE_KEY, dashboardView);
+  }, [dashboardView]);
+
+  useEffect(() => {
+    if (!showNotifications && !showAccountMenu) return undefined;
+    const closeOnPointer = (event) => {
+      if (
+        showNotifications &&
+        !notificationMenuRef.current?.contains(event.target)
+      ) {
+        setShowNotifications(false);
+      }
+      if (
+        showAccountMenu &&
+        !accountMenuRef.current?.contains(event.target)
+      ) {
+        setShowAccountMenu(false);
+      }
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") {
+        setShowNotifications(false);
+        setShowAccountMenu(false);
+      }
+    };
+    document.addEventListener("mousedown", closeOnPointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnPointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [showAccountMenu, showNotifications]);
 
   const fetchDashboardData = useCallback(async () => {
     setLoading(true);
@@ -486,12 +567,19 @@ export default function Dashboard() {
   }, [filteredTickets]);
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/login", { replace: true });
+    setActionLoading(true);
+    try {
+      await logout();
+      navigate("/login", { replace: true });
+    } finally {
+      setActionLoading(false);
+      setShowLogoutConfirmation(false);
+    }
   };
 
   const handleOpenNotifications = async () => {
     const shouldOpen = !showNotifications;
+    setShowAccountMenu(false);
     setShowNotifications(shouldOpen);
 
     if (!shouldOpen || unreadCount === 0) {
@@ -661,12 +749,14 @@ export default function Dashboard() {
               </div>
 
               <NotificationMenu
+                menuRef={notificationMenuRef}
                 notifications={notifications}
                 unreadCount={unreadCount}
                 open={showNotifications}
                 onToggle={handleOpenNotifications}
                 onClear={handleClearNotifications}
                 onOpenNotification={(notification) => {
+                  setShowNotifications(false);
                   if (notification.target_url) {
                     navigate(notification.target_url);
                   }
@@ -688,13 +778,23 @@ export default function Dashboard() {
                 Refresh
               </button>
 
-              <button
-                type="button"
-                onClick={handleLogout}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
-              >
-                Logout
-              </button>
+              <AccountMenu
+                menuRef={accountMenuRef}
+                open={showAccountMenu}
+                user={user}
+                theme={theme}
+                dashboardView={dashboardView}
+                onToggle={() => {
+                  setShowNotifications(false);
+                  setShowAccountMenu((current) => !current);
+                }}
+                onThemeChange={setTheme}
+                onDashboardViewChange={setDashboardView}
+                onRequestLogout={() => {
+                  setShowAccountMenu(false);
+                  setShowLogoutConfirmation(true);
+                }}
+              />
 
               {adminUser && (
                 <Link
@@ -818,6 +918,7 @@ export default function Dashboard() {
             )}
           </div>
 
+          {dashboardView === "explorative" ? (
           <div className="grid gap-4 xl:grid-cols-3">
             <ChartPanel
               title="Ticket Volume"
@@ -884,6 +985,7 @@ export default function Dashboard() {
               hasData={serviceMixStats !== null}
             />
           </div>
+          ) : null}
 
           <div className="grid items-stretch gap-4 xl:grid-cols-3">
             <div className="flex flex-col gap-4 xl:col-span-2">
@@ -931,6 +1033,18 @@ export default function Dashboard() {
           </div>
         </section>
       </main>
+
+      {showLogoutConfirmation && (
+        <ConfirmationModal
+          title="Sign out of ATD Helpdesk?"
+          description="Any unsaved form changes may be lost."
+          confirmLabel="Sign out"
+          confirming={actionLoading}
+          danger
+          onCancel={() => setShowLogoutConfirmation(false)}
+          onConfirm={handleLogout}
+        />
+      )}
 
       {showAssignmentModal && selectedTicket && (
         <ConfirmationModal
@@ -1088,7 +1202,100 @@ function SectionError({ message, className }) {
   );
 }
 
+function AccountMenu({
+  menuRef,
+  open,
+  user,
+  theme,
+  dashboardView,
+  onToggle,
+  onThemeChange,
+  onDashboardViewChange,
+  onRequestLogout,
+}) {
+  const initials = String(user?.name || user?.email || "U")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+
+  const optionClass = (selected) => classNames(
+    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition",
+    selected ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100"
+  );
+
+  return (
+    <div ref={menuRef} className="relative">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm hover:bg-slate-50"
+      >
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#172b57] text-xs font-bold text-white">
+          {initials || <UserCircle className="h-5 w-5" />}
+        </span>
+        <span className="hidden max-w-36 truncate text-left text-sm font-semibold text-slate-800 2xl:block">
+          {user?.name || "My account"}
+        </span>
+        <ChevronDown className="h-4 w-4 text-slate-500" />
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          aria-label="Account and appearance"
+          className="absolute right-0 z-50 mt-2 w-[min(92vw,22rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        >
+          <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <p className="font-bold text-slate-950">{user?.name || "Portal account"}</p>
+            <p className="mt-1 truncate text-sm text-slate-500">{user?.email || ""}</p>
+            {user?.job_title || user?.jobTitle ? (
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                {user?.job_title || user?.jobTitle}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-3">
+            <section>
+              <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Dashboard view</p>
+              <button type="button" role="menuitemradio" aria-checked={dashboardView === "simple"} onClick={() => onDashboardViewChange("simple")} className={optionClass(dashboardView === "simple")}>
+                <LayoutDashboard className="h-4 w-4" /> Simple
+              </button>
+              <button type="button" role="menuitemradio" aria-checked={dashboardView === "explorative"} onClick={() => onDashboardViewChange("explorative")} className={optionClass(dashboardView === "explorative")}>
+                <Gauge className="h-4 w-4" /> Explorative
+              </button>
+            </section>
+
+            <section className="border-t border-slate-100 pt-3">
+              <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Theme</p>
+              <button type="button" role="menuitemradio" aria-checked={theme === "light"} onClick={() => onThemeChange("light")} className={optionClass(theme === "light")}>
+                <Sun className="h-4 w-4" /> Light
+              </button>
+              <button type="button" role="menuitemradio" aria-checked={theme === "dark"} onClick={() => onThemeChange("dark")} className={optionClass(theme === "dark")}>
+                <Moon className="h-4 w-4" /> Dark
+              </button>
+              <button type="button" role="menuitemradio" aria-checked={theme === "system"} onClick={() => onThemeChange("system")} className={optionClass(theme === "system")}>
+                <Monitor className="h-4 w-4" /> Use device setting
+              </button>
+            </section>
+
+            <section className="border-t border-slate-100 pt-3">
+              <button type="button" role="menuitem" onClick={onRequestLogout} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50">
+                <LogOut className="h-4 w-4" /> Sign out
+              </button>
+            </section>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 function NotificationMenu({
+  menuRef,
   notifications,
   unreadCount,
   open,
@@ -1097,10 +1304,12 @@ function NotificationMenu({
   onOpenNotification,
 }) {
   return (
-    <div className="relative">
+    <div ref={menuRef} className="relative">
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={open}
+        aria-haspopup="dialog"
         className="relative inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
       >
         <Bell className="h-4 w-4" />
@@ -1114,7 +1323,11 @@ function NotificationMenu({
       </button>
 
       {open && (
-        <div className="absolute right-0 z-50 mt-2 w-[min(92vw,26rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
+        <div
+          role="dialog"
+          aria-label="Notifications"
+          className="absolute right-0 z-50 mt-2 w-[min(92vw,26rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
+        >
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="font-bold text-slate-950">Notifications</h3>
 

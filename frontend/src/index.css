@@ -94,3 +94,24 @@ body {
   .kb-article th { @apply bg-slate-50 font-bold text-slate-800; }
   .kb-article hr { @apply my-6 border-slate-200; }
 }
+/* Batch 1B1 appearance foundation. Portal-wide token migration follows in Batch 1B2. */
+:root[data-theme="dark"] body {
+  background-color: #07111f;
+  color: #e2e8f0;
+}
+:root[data-theme="dark"] .bg-slate-100 { background-color: #07111f !important; }
+:root[data-theme="dark"] .bg-white,
+:root[data-theme="dark"] .bg-white\/90 { background-color: #0f1d2e !important; }
+:root[data-theme="dark"] .bg-slate-50,
+:root[data-theme="dark"] .bg-slate-50\/70 { background-color: #132337 !important; }
+:root[data-theme="dark"] .border-slate-200 { border-color: #334155 !important; }
+:root[data-theme="dark"] .text-slate-950,
+:root[data-theme="dark"] .text-slate-900,
+:root[data-theme="dark"] .text-slate-800,
+:root[data-theme="dark"] .text-slate-700 { color: #e2e8f0 !important; }
+:root[data-theme="dark"] .text-slate-600,
+:root[data-theme="dark"] .text-slate-500,
+:root[data-theme="dark"] .text-slate-400 { color: #94a3b8 !important; }
+:root[data-theme="dark"] input,
+:root[data-theme="dark"] select,
+:root[data-theme="dark"] textarea { color: #e2e8f0; }
