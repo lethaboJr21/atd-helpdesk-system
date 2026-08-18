@@ -242,13 +242,27 @@ async function createTicketFromMessage(message, settings = config()) {
 
     // History is best-effort and runs after COMMIT so a legacy history schema
     // cannot roll back a successfully created email ticket.
-    await pool.query(
-      `INSERT INTO ticket_history (ticket_id, action, details, created_by, created_at)
-       VALUES ($1,'email_intake',$2::jsonb,$3,NOW())`,
-      [ticketId, JSON.stringify({ source: "microsoft-graph", mailbox: settings.mailbox, sender: sender.email,
-        classification: classification.ticketType, confidence: classification.confidence,
-        assignedGroupId: group?.id || null }), requester?.id || null]
-    ).catch((error) => console.warn("Email intake history was not recorded:", error.message));
+   await pool.query(
+  `INSERT INTO ticket_history
+    (ticket_id, actor_user_id, action, old_value, new_value)
+   VALUES ($1, $2, $3, $4, $5)`,
+  [
+    ticketId,
+    requester?.id || null,
+    "email_intake",
+    null,
+    JSON.stringify({
+      source: "microsoft-graph",
+      mailbox: settings.mailbox,
+      sender: sender.email,
+      classification: classification.ticketType,
+      confidence: classification.confidence,
+      assignedGroupId: group?.id || null
+    })
+  ]
+).catch((error) =>
+  console.warn("Email intake history was not recorded:", error.message)
+);
 
     try {
       const acknowledgement = await acknowledge({ mailbox: settings.mailbox, recipient: sender.email, senderName: sender.name,
