@@ -196,6 +196,21 @@ router.get("/",async(req,res)=>{
   const offset=(page-1)*perPage;
   const orderBy=`${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,t.created_at DESC`;
 
+  // Queue badges are independent of the active list filters.
+  const countValues=[...baseValues];
+  countValues.push(req.user.id);
+  const queueUserIndex=countValues.length;
+  const assignedToMePredicate=`t.status NOT IN ('Resolved','Closed') AND t.assigned_to_user_id=$${queueUserIndex}`;
+  const myGroupsPredicate=`t.status NOT IN ('Resolved','Closed') AND t.assigned_group_id IN(
+    SELECT gm.group_id FROM support_group_members gm
+    JOIN support_groups sg ON sg.id=gm.group_id AND COALESCE(sg.is_active,TRUE)=TRUE
+    WHERE gm.user_id=$${queueUserIndex}
+  )`;
+  const myOpenPredicate=`t.status NOT IN ('Resolved','Closed') AND (
+    t.assigned_to_user_id=$${queueUserIndex} OR
+    t.assigned_group_id IN(SELECT group_id FROM support_group_members WHERE user_id=$${queueUserIndex})
+  )`;
+
   try{
     const [countResult,rows,countsResult]=await Promise.all([
       pool.query(`SELECT COUNT(*)::int AS total FROM tickets t LEFT JOIN users requester ON requester.id=t.requester_id LEFT JOIN users assignee ON assignee.id=t.assigned_to_user_id LEFT JOIN support_groups g ON g.id=t.assigned_group_id ${listWhere}`,listValues),
@@ -204,6 +219,9 @@ router.get("/",async(req,res)=>{
         `SELECT
            COUNT(*)::int AS all_count,
            COUNT(*) FILTER (WHERE t.status NOT IN ('Resolved','Closed'))::int AS unresolved,
+           COUNT(*) FILTER (WHERE ${assignedToMePredicate})::int AS assigned_to_me,
+           COUNT(*) FILTER (WHERE ${myGroupsPredicate})::int AS my_groups,
+           COUNT(*) FILTER (WHERE ${myOpenPredicate})::int AS my_open,
            COUNT(*) FILTER (WHERE t.status='Open')::int AS open,
            COUNT(*) FILTER (WHERE t.status='Assigned')::int AS assigned,
            COUNT(*) FILTER (WHERE t.status='Pending')::int AS pending,
@@ -217,7 +235,7 @@ router.get("/",async(req,res)=>{
          LEFT JOIN users assignee ON assignee.id=t.assigned_to_user_id
          LEFT JOIN support_groups g ON g.id=t.assigned_group_id
          ${baseWhere}`,
-        baseValues
+        countValues
       ),
     ]);
 
@@ -233,6 +251,9 @@ router.get("/",async(req,res)=>{
       },
       counts:{
         All:c.all_count,
+        "Assigned to me":c.assigned_to_me,
+        "My groups":c.my_groups,
+        "My open tickets":c.my_open,
         Unresolved:c.unresolved,
         Open:c.open,
         Assigned:c.assigned,

@@ -13,7 +13,6 @@
   "dependencies": {
     "@azure/msal-node": "^5.2.4",
     "axios": "^1.17.0",
-    "bcrypt": "^5.1.1",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "csv-parser": "^3.2.1",

@@ -1,5 +1,5 @@
 const pool = require('./pool')
-const bcrypt = require('bcrypt')
+const bcrypt = require('bcryptjs')
 require('dotenv').config()
 
 async function seed() {
