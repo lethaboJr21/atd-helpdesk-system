@@ -46,10 +46,14 @@ import {
 } from "recharts";
 
 import Sidebar from "../components/Sidebar";
+import { useToast } from "../components/notifications/ToastProvider";
+import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
+import PendingAcceptanceCards from "../components/tickets/PendingAcceptanceCards";
 import { REQUEST_MODULES, formPathForType } from "../data/requestModules";
 import useSidebarCollapsed from "../hooks/useSidebarCollapsed";
 import { useAuth } from "../hooks/useAuth";
 import {
+  accessRequestsApi,
   assetsApi,
   groupsApi,
   knowledgeApi,
@@ -57,14 +61,14 @@ import {
   statsApi,
   ticketsApi,
 } from "../services/api";
+import assignmentAcceptanceApi from "../services/assignmentAcceptanceApi";
+import useAppearance from "../hooks/useAppearance";
 
 const DASHBOARD_TICKET_LIMIT = 100;
 const NOTIFICATION_MODULES = ["admin", "helpdesk"];
 const SEARCH_DEBOUNCE_MS = 300;
 const ADMIN_ROLES = new Set(["manager", "admin", "superadmin"]);
-const THEME_STORAGE_KEY = "atd-helpdesk-theme";
 const DASHBOARD_VIEW_STORAGE_KEY = "atd-helpdesk-dashboard-view";
-const THEME_OPTIONS = new Set(["light", "dark", "system"]);
 const DASHBOARD_VIEW_OPTIONS = new Set(["simple", "explorative"]);
 
 function storedPreference(key, allowedValues, fallback) {
@@ -75,14 +79,6 @@ function storedPreference(key, allowedValues, fallback) {
     return fallback;
   }
 }
-
-function applyThemePreference(theme) {
-  const dark = theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.dataset.theme = dark ? "dark" : "light";
-  document.documentElement.style.colorScheme = dark ? "dark" : "light";
-}
-
 function mergeNotifications(lists) {
   const byId = new Map();
 
@@ -98,38 +94,6 @@ function mergeNotifications(lists) {
   });
 }
 
-const CREATE_TICKET_OPTIONS = [
-  {
-    type: "incident",
-    title: "Report an Incident",
-    description:
-      "Report something that is broken, unavailable or working incorrectly.",
-    icon: LifeBuoy,
-    colorClass: "border-red-200 bg-red-50 text-red-700",
-  },
-  {
-    type: "service_request",
-    title: "Request a Service",
-    description: "Open the service catalog for access, software, and IT help.",
-    icon: ShoppingCart,
-    colorClass: "border-amber-200 bg-amber-50 text-amber-700",
-  },
-  {
-    type: "asset_request",
-    title: "Request an Asset",
-    description: "Open the asset catalog for equipment and hardware.",
-    icon: PackagePlus,
-    colorClass: "border-blue-200 bg-blue-50 text-blue-700",
-  },
-  {
-    type: "change",
-    title: "Request a Change",
-    description:
-      "Request a planned change that requires assessment and scheduling.",
-    icon: BriefcaseBusiness,
-    colorClass: "border-teal-200 bg-teal-50 text-teal-700",
-  },
-];
 
 function classNames(...items) {
   return items.filter(Boolean).join(" ");
@@ -208,12 +172,12 @@ function getPriorityClassName(priority) {
     Low: "border-emerald-200 bg-emerald-100 text-emerald-700",
   };
 
-  return classes[priority] || classes.Medium;
+  return ({ Critical: "portal-priority-critical", High: "portal-priority-high", Medium: "portal-priority-medium", Low: "portal-priority-low" })[priority] || "portal-priority-medium";
 }
 
 function getStatusClassName(status) {
   const classes = {
-    Open: "bg-blue-100 text-blue-700",
+    Open: "bg-blue-100 text-[var(--portal-primary)]",
     Assigned: "bg-slate-100 text-slate-700",
     Pending: "bg-purple-100 text-purple-700",
     Investigating: "bg-indigo-100 text-indigo-700",
@@ -237,8 +201,10 @@ function getErrorMessage(error, fallbackMessage) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const toast = useToast();
   const { logout, user } = useAuth();
   const adminUser = ADMIN_ROLES.has(user?.role);
+  const { appearance, setMode } = useAppearance();
 
   const [tickets, setTickets] = useState([]);
   const [kpiStats, setKpiStats] = useState(null);
@@ -265,9 +231,6 @@ export default function Dashboard() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
   const [showLogoutConfirmation, setShowLogoutConfirmation] = useState(false);
-  const [theme, setTheme] = useState(() =>
-    storedPreference(THEME_STORAGE_KEY, THEME_OPTIONS, "system")
-  );
   const [dashboardView, setDashboardView] = useState(() =>
     storedPreference(DASHBOARD_VIEW_STORAGE_KEY, DASHBOARD_VIEW_OPTIONS, "explorative")
   );
@@ -279,16 +242,8 @@ export default function Dashboard() {
   const [showEscalationModal, setShowEscalationModal] = useState(false);
 
   const [pendingAssigneeId, setPendingAssigneeId] = useState("");
+  const [pendingAcceptances, setPendingAcceptances] = useState([]);
 
-  useEffect(() => {
-    localStorage.setItem(THEME_STORAGE_KEY, theme);
-    applyThemePreference(theme);
-    if (theme !== "system") return undefined;
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => applyThemePreference("system");
-    media.addEventListener?.("change", onChange);
-    return () => media.removeEventListener?.("change", onChange);
-  }, [theme]);
 
   useEffect(() => {
     localStorage.setItem(DASHBOARD_VIEW_STORAGE_KEY, dashboardView);
@@ -419,6 +374,14 @@ export default function Dashboard() {
       return { ...nextErrors, ...failedSections };
     });
 
+    try {
+      const pendingResponse = await assignmentAcceptanceApi.getPendingMine();
+      setPendingAcceptances(Array.isArray(pendingResponse.data?.items) ? pendingResponse.data.items : []);
+      setSectionErrors((current) => { const next={...current}; delete next.pendingAcceptances; return next; });
+    } catch (requestError) {
+      setPendingAcceptances([]);
+      setSectionErrors((current) => ({...current,pendingAcceptances:getErrorMessage(requestError,"Pending assignments could not be refreshed.")}));
+    }
     setLoading(false);
   }, [rangeDays]);
 
@@ -585,6 +548,13 @@ export default function Dashboard() {
     if (!shouldOpen || unreadCount === 0) {
       return;
     }
+    const hasActionRequired = notifications.some((item) => {
+      const payload = item?.action_payload || {};
+      return !item.is_read && Boolean(payload.requiresAction || payload.requires_action);
+    });
+    if (hasActionRequired) {
+      return;
+    }
 
     try {
       await Promise.all(
@@ -608,9 +578,120 @@ export default function Dashboard() {
     }
   };
 
+  const handleNotificationAction = async (notification, action) => {
+    const payload = notification?.action_payload || {};
+    const requestId = Number(payload.requestId || payload.request_id);
+    const ticketId = Number(payload.ticketId || payload.ticket_id);
+    const isAccessRequest =
+      notification?.target_type === "access_request" ||
+      notification?.type === "access_request_approval" ||
+      (Number.isInteger(requestId) && requestId > 0);
+
+    setActionLoading(true);
+    setError("");
+
+    try {
+      if (isAccessRequest) {
+        if (!Number.isInteger(requestId) || requestId < 1) {
+          throw new Error("This notification does not contain a valid access request.");
+        }
+
+        if (action === "view") {
+          await notificationApi.markRead(notification.id);
+          setShowNotifications(false);
+          navigate("/access-requests");
+          return;
+        }
+
+        const decisionReason = window.prompt(
+          action === "reject"
+            ? "Enter the rejection reason:"
+            : "Enter an optional approval note:",
+          ""
+        );
+
+        if (decisionReason === null) return;
+
+        if (action === "reject" && decisionReason.trim().length < 5) {
+          throw new Error("Provide a rejection reason of at least 5 characters.");
+        }
+
+        const result = await accessRequestsApi.decide(requestId, {
+          decision: action === "approve" ? "approved" : "rejected",
+          decisionReason: decisionReason.trim(),
+        });
+
+        await notificationApi.markRead(notification.id);
+        setNotifications((current) =>
+          current.map((item) =>
+            item.id === notification.id
+              ? { ...item, is_read: true, read_at: new Date().toISOString() }
+              : item
+          )
+        );
+        setShowNotifications(false);
+        toast.success(result.data?.message || `Access request ${action}d.`, {
+          title: "Access request updated",
+          duration: 5000,
+        });
+        navigate("/access-requests");
+        return;
+      }
+
+      if (!Number.isInteger(ticketId) || ticketId < 1) {
+        throw new Error("This notification does not contain a valid ticket action.");
+      }
+
+      if (action === "accept") {
+        await assignmentAcceptanceApi.accept(ticketId, {});
+      } else if (action === "return_to_queue") {
+        await assignmentAcceptanceApi.returnToQueue(ticketId, {});
+      } else {
+        await notificationApi.markRead(notification.id);
+        setShowNotifications(false);
+        navigate(`/tickets/${ticketId}`);
+        return;
+      }
+
+      await notificationApi.markRead(notification.id);
+      setNotifications((current) =>
+        current.map((item) =>
+          item.id === notification.id
+            ? { ...item, is_read: true, read_at: new Date().toISOString() }
+            : item
+        )
+      );
+      setShowNotifications(false);
+      toast.success(
+        action === "accept" ? "Assignment accepted." : "Ticket returned to the group queue.",
+        { title: "Ticket activity recorded", duration: 5000 }
+      );
+      navigate(`/tickets/${ticketId}`);
+    } catch (requestError) {
+      const message = getErrorMessage(
+        requestError,
+        requestError?.message || "The notification action could not be completed."
+      );
+      setError(message);
+      toast.error(message, { title: "Action not completed" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleClearNotifications = async () => {
+    const protectedActions = notifications.filter((item) => {
+      const payload = item?.action_payload || {};
+      return !item.is_read && Boolean(payload.requiresAction || payload.requires_action);
+    });
+    if (protectedActions.length > 0) {
+      setError(
+        `${protectedActions.length} action-required notification(s) must be completed or opened before alerts can be cleared.`
+      );
+      return;
+    }
     const confirmed = window.confirm(
-      "Clear all Helpdesk and administration alerts?"
+      "Clear all completed Helpdesk and administration alerts?"
     );
 
     if (!confirmed) {
@@ -755,6 +836,8 @@ export default function Dashboard() {
                 open={showNotifications}
                 onToggle={handleOpenNotifications}
                 onClear={handleClearNotifications}
+                onAction={handleNotificationAction}
+                actionLoading={actionLoading}
                 onOpenNotification={(notification) => {
                   setShowNotifications(false);
                   if (notification.target_url) {
@@ -782,13 +865,13 @@ export default function Dashboard() {
                 menuRef={accountMenuRef}
                 open={showAccountMenu}
                 user={user}
-                theme={theme}
+                theme={appearance.mode}
                 dashboardView={dashboardView}
                 onToggle={() => {
                   setShowNotifications(false);
                   setShowAccountMenu((current) => !current);
                 }}
-                onThemeChange={setTheme}
+                onThemeChange={setMode}
                 onDashboardViewChange={setDashboardView}
                 onRequestLogout={() => {
                   setShowAccountMenu(false);
@@ -819,19 +902,13 @@ export default function Dashboard() {
                   onClick={() => {
                     setShowCreateMenu((currentValue) => !currentValue);
                   }}
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-blue-700"
+                  className="inline-flex items-center gap-2 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
                 >
                   <Plus className="h-4 w-4" />
                   New Ticket
                   <ChevronDown className="h-4 w-4" />
                 </button>
 
-                {showCreateMenu && (
-                  <CreateTicketMenu
-                    onSelect={openTicketCreation}
-                    onClose={() => setShowCreateMenu(false)}
-                  />
-                )}
               </div>
             </div>
           </div>
@@ -858,7 +935,8 @@ export default function Dashboard() {
             </div>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {sectionErrors.pendingAcceptances ? <SectionError message={sectionErrors.pendingAcceptances} /> : null}
+          <PendingAcceptanceCards items={pendingAcceptances} busy={actionLoading} onAccept={async(item)=>{setActionLoading(true);try{await assignmentAcceptanceApi.accept(item.ticket_id,{});toast.success("Assignment accepted.",{title:"Ticket activity recorded",duration:5000});await refreshDashboard();navigate(`/tickets/${item.ticket_id}`);}catch(requestError){toast.error(getErrorMessage(requestError,"Assignment could not be accepted."),{title:"Action not completed"});}finally{setActionLoading(false);}}} onReturn={async(item)=>{setActionLoading(true);try{await assignmentAcceptanceApi.returnToQueue(item.ticket_id,{});toast.success("Ticket returned to the group queue.",{title:"Ticket activity recorded",duration:5000});await refreshDashboard();}catch(requestError){toast.error(getErrorMessage(requestError,"Assignment could not be returned."),{title:"Action not completed"});}finally{setActionLoading(false);}}} onReadMore={(item)=>navigate(`/tickets/${item.ticket_id}`)} />          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {sectionErrors.kpis && kpiStats && (
               <SectionError
                 message={`${sectionErrors.kpis} Showing the last loaded totals.`}
@@ -884,16 +962,17 @@ export default function Dashboard() {
                   onClick={() => navigate("/tickets")}
                   definition={kpiStats?.definitions?.open}
                   icon={Ticket}
-                  accent="bg-blue-100 text-blue-700"
+                  accent="bg-blue-100 text-[var(--portal-primary)]"
                 />
 
                 <StatCard
-                  title="SLA Compliance"
-                  value={kpiStats?.slaCompliance || "N/A"}
-                  supportingText="Due-dated tickets currently within SLA"
-                  definition={kpiStats?.definitions?.slaCompliance}
-                  icon={Gauge}
-                  accent="bg-emerald-100 text-emerald-700"
+                  title="Overdue Tickets"
+                  value={formatCount(kpiStats?.overdueTickets)}
+                  supportingText="Unresolved tickets whose governed resolution due time is exhausted"
+                  definition={kpiStats?.definitions?.overdueTickets}
+                  onClick={() => navigate("/tickets?statuses=Open,Assigned,Pending,Investigating,Waiting%20Approval,Escalated&overdue=true")}
+                  icon={AlertTriangle}
+                  accent="bg-red-100 text-red-700"
                 />
 
                 <StatCard
@@ -1034,6 +1113,14 @@ export default function Dashboard() {
         </section>
       </main>
 
+      <RequestEntryMenu
+        open={showCreateMenu}
+        onClose={() => setShowCreateMenu(false)}
+        onSelect={(entry) => {
+          setShowCreateMenu(false);
+          navigate(entry.path);
+        }}
+      />
       {showLogoutConfirmation && (
         <ConfirmationModal
           title="Sign out of ATD Helpdesk?"
@@ -1131,7 +1218,7 @@ function StatCard({
       onClick={onClick}
       className={classNames(
         "w-full rounded-xl border border-slate-200 bg-white p-3.5 text-left shadow-sm",
-        onClick && "transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100"
+        onClick && "transition hover:-translate-y-0.5 hover:border-[var(--portal-primary)] hover:shadow-md focus:outline-none focus:ring-4 focus:ring-blue-100"
       )}
     >
       <div className="flex items-start justify-between gap-3">
@@ -1222,7 +1309,7 @@ function AccountMenu({
 
   const optionClass = (selected) => classNames(
     "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition",
-    selected ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-100"
+    selected ? "bg-blue-50 text-[var(--portal-primary)]" : "text-slate-700 hover:bg-slate-100"
   );
 
   return (
@@ -1234,7 +1321,7 @@ function AccountMenu({
         aria-haspopup="menu"
         className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm hover:bg-slate-50"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#172b57] text-xs font-bold text-white">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full portal-accent-fill bg-[var(--portal-primary)] text-xs font-bold text-white">
           {initials || <UserCircle className="h-5 w-5" />}
         </span>
         <span className="hidden max-w-36 truncate text-left text-sm font-semibold text-slate-800 2xl:block">
@@ -1301,6 +1388,8 @@ function NotificationMenu({
   open,
   onToggle,
   onClear,
+  onAction,
+  actionLoading,
   onOpenNotification,
 }) {
   return (
@@ -1346,33 +1435,106 @@ function NotificationMenu({
                 No notifications
               </p>
             ) : (
-              notifications.map((notification) => (
-                <button
-                  key={notification.id}
-                  type="button"
-                  onClick={() => onOpenNotification(notification)}
-                  className={classNames(
-                    "block w-full rounded-xl border p-3 text-left text-sm transition hover:brightness-95",
-                    notification.is_read
-                      ? "border-slate-200 bg-slate-50"
-                      : notification.type === "critical"
-                      ? "border-red-300 bg-red-50"
-                      : notification.type === "warning"
-                      ? "border-amber-300 bg-amber-50"
-                      : "border-blue-200 bg-blue-50"
-                  )}
-                >
-                  <p className="font-semibold text-slate-800">
-                    {notification.message}
-                  </p>
+              notifications.map((notification) => {
+                const payload = notification.action_payload || {};
+                const requiresAction = Boolean(
+                  payload.requiresAction || payload.requires_action
+                );
+                const requestId = Number(payload.requestId || payload.request_id);
+                const isAccessRequest =
+                  notification.target_type === "access_request" ||
+                  notification.type === "access_request_approval" ||
+                  (Number.isInteger(requestId) && requestId > 0);
 
-                  {notification.created_at && (
-                    <p className="mt-1 text-xs text-slate-500">
-                      {new Date(notification.created_at).toLocaleString()}
-                    </p>
-                  )}
-                </button>
-              ))
+                return (
+                  <article
+                    key={notification.id}
+                    className={classNames(
+                      "w-full rounded-xl border p-3 text-left text-sm transition hover:brightness-95",
+                      notification.is_read
+                        ? "border-slate-200 bg-slate-50"
+                        : notification.type === "critical"
+                        ? "border-red-300 bg-red-50"
+                        : notification.type === "warning"
+                        ? "border-amber-300 bg-amber-50"
+                        : "border-[var(--portal-selected-border)] bg-blue-50"
+                    )}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onOpenNotification(notification)}
+                      className="block w-full text-left"
+                    >
+                      <p className="font-semibold text-slate-800">
+                        {notification.message}
+                      </p>
+                      {notification.created_at && (
+                        <p className="mt-1 text-xs text-slate-500">
+                          {new Date(notification.created_at).toLocaleString()}
+                        </p>
+                      )}
+                    </button>
+
+                    {requiresAction ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {isAccessRequest ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => onAction(notification, "approve")}
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => onAction(notification, "reject")}
+                              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 disabled:opacity-50"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onAction(notification, "view")}
+                              className="rounded-lg border border-[var(--portal-selected-border)] bg-white px-3 py-1.5 text-xs font-bold text-[var(--portal-primary)]"
+                            >
+                              View Request
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => onAction(notification, "accept")}
+                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+                            >
+                              Accept and Action
+                            </button>
+                            <button
+                              type="button"
+                              disabled={actionLoading}
+                              onClick={() => onAction(notification, "return_to_queue")}
+                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 disabled:opacity-50"
+                            >
+                              Return to Queue
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onAction(notification, "view")}
+                              className="rounded-lg border border-[var(--portal-selected-border)] bg-white px-3 py-1.5 text-xs font-bold text-[var(--portal-primary)]"
+                            >
+                              View Ticket
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })
             )}
           </div>
         </div>
@@ -1381,60 +1543,7 @@ function NotificationMenu({
   );
 }
 
-function CreateTicketMenu({ onSelect, onClose }) {
-  return (
-    <div className="absolute right-0 z-50 mt-2 w-[min(92vw,28rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
-      <div className="flex items-center justify-between px-2 pb-2">
-        <div>
-          <p className="font-bold text-slate-950">Create New Ticket</p>
-          <p className="text-xs text-slate-500">
-            Choose the workflow that best matches the request.
-          </p>
-        </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg p-2 hover:bg-slate-100"
-          aria-label="Close ticket creation menu"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
-      <div className="space-y-2">
-        {CREATE_TICKET_OPTIONS.map((option) => {
-          const Icon = option.icon;
-
-          return (
-            <button
-              key={option.type}
-              type="button"
-              onClick={() => onSelect(option.type)}
-              className="flex w-full items-start gap-3 rounded-xl border border-slate-200 p-3 text-left hover:border-blue-300 hover:bg-slate-50"
-            >
-              <div
-                className={classNames(
-                  "rounded-xl border p-2.5",
-                  option.colorClass
-                )}
-              >
-                <Icon className="h-5 w-5" />
-              </div>
-
-              <div>
-                <p className="font-bold text-slate-950">{option.title}</p>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  {option.description}
-                </p>
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
 
 function RangeSelector({
   rangeDays,
@@ -1655,12 +1764,12 @@ function TicketQueue({
                 onClick={() => onSelectTicket(ticketItem)}
                 className={classNames(
                   "grid w-full gap-3 px-4 py-2.5 text-left transition hover:bg-slate-50 lg:grid-cols-[1fr_150px_100px] lg:items-center",
-                  selectedTicketId === ticketItem.id && "bg-blue-50/70"
+                  selectedTicketId === ticketItem.id && "bg-[var(--portal-selected-bg)]"
                 )}
               >
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-blue-700">
+                    <span className="font-bold text-[var(--portal-primary)]">
                       {ticketItem.ticket_ref || `TICKET-${ticketItem.id}`}
                     </span>
 
@@ -1707,11 +1816,11 @@ function TicketQueue({
                     <div
                       className={classNames(
                         "h-2 rounded-full",
-                        slaPercent < 30
-                          ? "bg-red-500"
-                          : slaPercent < 60
-                          ? "bg-amber-500"
-                          : "bg-emerald-500"
+                        slaPercent <= 25
+                          ? "portal-sla-breached"
+                          : slaPercent <= 50
+                          ? "portal-sla-risk"
+                          : "portal-sla-normal"
                       )}
                       style={{ width: `${slaPercent}%` }}
                     />
@@ -1731,7 +1840,7 @@ function TicketQueue({
         <button
           type="button"
           onClick={onOpenWorkspace}
-          className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50"
+          className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]"
         >
           View all in Ticket Workspace →
         </button>
@@ -1769,7 +1878,7 @@ function TicketPreview({
         </span>
       </div>
 
-      <p className="mt-2 text-sm font-bold text-blue-700">
+      <p className="mt-2 text-sm font-bold text-[var(--portal-primary)]">
         {ticket.ticket_ref || `TICKET-${ticket.id}`}
       </p>
 
@@ -1806,7 +1915,7 @@ function TicketPreview({
         <button
           type="button"
           onClick={onAssign}
-          className="rounded-xl border border-blue-200 px-3 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50"
+          className="rounded-xl border border-[var(--portal-selected-border)] px-3 py-2 text-sm font-semibold text-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]"
         >
           Assign
         </button>
@@ -1863,9 +1972,9 @@ function QuickActions({ onCreateTicket }) {
               key={action.label}
               type="button"
               onClick={action.onClick}
-              className="rounded-lg border border-slate-200 p-2.5 text-left transition hover:border-blue-300 hover:bg-blue-50"
+              className="rounded-lg border border-slate-200 p-2.5 text-left transition hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]"
             >
-              <Icon className="h-4 w-4 text-blue-700" />
+              <Icon className="h-4 w-4 text-[var(--portal-primary)]" />
               <p className="mt-2 text-sm font-bold text-slate-950">
                 {action.label}
               </p>
@@ -1961,7 +2070,7 @@ function AssetSummary({ assetStats, onOpenAssets, loading, error, fill = false }
               type="button"
               onClick={onOpenAssets}
               className={classNames(
-                "w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50",
+                "w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]",
                 fill ? "mt-auto pt-3" : "mt-3"
               )}
             >
@@ -2010,7 +2119,7 @@ function KnowledgePanel({ articles, loading, error }) {
               key={article.id || article.title}
               className="flex w-full items-start gap-2.5 rounded-lg border border-slate-100 p-3 text-left"
             >
-              <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-blue-700">
+              <div className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-bold text-[var(--portal-primary)]">
                 {index + 1}
               </div>
 
@@ -2091,7 +2200,7 @@ function ConfirmationModal({
               "rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-60",
               danger
                 ? "bg-red-600 hover:bg-red-700"
-                : "bg-blue-600 hover:bg-blue-700"
+                : "portal-accent-fill bg-[var(--portal-primary)] hover:opacity-90"
             )}
           >
             {confirming ? "Saving..." : confirmLabel}

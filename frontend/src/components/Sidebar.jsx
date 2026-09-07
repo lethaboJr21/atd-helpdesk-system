@@ -8,6 +8,7 @@ import {
   Factory,
   HardDrive,
   Home,
+  KeyRound,
   LayoutDashboard,
   LifeBuoy,
   Lightbulb,
@@ -63,28 +64,13 @@ export default function Sidebar({
       label: "Employee Home",
       path: employeeAccount ? "/" : "/employee",
     },
-    { section: "Raise a request" },
-    {
-      icon: LifeBuoy,
-      label: "Report an Incident",
-      path: "/incidents/new",
-    },
-    {
-      icon: ShoppingCart,
-      label: "Service Catalog",
-      path: "/services",
-    },
-    {
-      icon: PackagePlus,
-      label: "Request an Asset",
-      path: "/request-asset",
-    },
-    {
-      icon: BriefcaseBusiness,
-      label: "Request a Change",
-      path: "/changes/new",
-    },
     { section: "Track and self-help" },
+
+    {
+      icon: KeyRound,
+      label: "Access Requests",
+      path: "/access-requests",
+    },
     {
       icon: Ticket,
       label: "My Tickets",
@@ -103,10 +89,21 @@ export default function Sidebar({
   ];
 
   const operationsItems = [
+
+    {
+      icon: KeyRound,
+      label: "Access Requests",
+      path: "/access-requests",
+    },
     {
       icon: LayoutDashboard,
       label: "Operations Dashboard",
       path: "/",
+    },
+    {
+      icon: Ticket,
+      label: "Ticket Monitor",
+      path: "/ticket-monitor",
     },
     {
       icon: Ticket,
@@ -138,16 +135,6 @@ export default function Sidebar({
   if (admin) {
     operationsItems.push(
       { section: "Administration" },
-      {
-        icon: Users,
-        label: "User Administration",
-        path: "/admin/users?view=active",
-      },
-      {
-        icon: UsersRound,
-        label: "Groups and Agents",
-        path: "/admin/groups",
-      },
       {
         icon: ShieldCheck,
         label: "Employee Access Preview",
@@ -372,7 +359,7 @@ export default function Sidebar({
                   "[transition:background-color_150ms_ease,color_150ms_ease]",
                   collapsed ? "justify-center px-3" : "gap-3 px-4",
                   active
-                    ? "bg-blue-600 text-white"
+                    ? "bg-[var(--portal-primary)] text-white"
                     : "text-slate-300 hover:bg-white/10 hover:text-white",
                   item.disabled && "cursor-not-allowed opacity-50"
                 )}
@@ -424,7 +411,7 @@ export default function Sidebar({
               className={classNames(
                 "m-3 shrink-0 overflow-hidden rounded-2xl border border-blue-400/25 bg-blue-500/10 text-left transition-colors duration-150",
                 employeeExperience &&
-                  "hover:border-blue-300/40 hover:bg-blue-500/20",
+                  "hover:border-[var(--portal-primary)]/40 hover:bg-[var(--portal-primary-hover)]/20",
                 collapsed ? "flex justify-center p-3" : "p-3.5"
               )}
             >

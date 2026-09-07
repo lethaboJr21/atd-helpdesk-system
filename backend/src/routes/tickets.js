@@ -1,11 +1,13 @@
+
 const express = require("express");
 const fs = require("fs");
 
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
-const { sendTicketAssignmentEmail } = require("../services/email");
-const { createTicketAssignmentNotifications } = require("../services/notificationService");
+const { sendTicketCreatedLifecycle } = require("../services/ticketLifecycleEmail");
+const { sendMailSafe } = require("../services/email");
+const { createTicketAssignmentNotifications, createTicketCreatedNotification } = require("../services/notificationService");
 const {
   optionalAttachments,
   saveUploadedFiles,
@@ -15,6 +17,7 @@ const {
   absoluteFromStored,
 } = require("../services/ticketAttachments");
 const { getPersonalizedModules } = require("../services/personalization");
+const { getSlaPolicy, calculateSla } = require("../services/slaPolicy");
 
 const router = express.Router();
 router.use(auth);
@@ -50,7 +53,7 @@ function priority(value){ return PRIORITY_MAP.get(text(value,50).toLowerCase())|
 function status(value){ return STATUS_MAP.get(text(value,50).toLowerCase())||null; }
 function operations(user){ return OPERATIONS_ROLES.has(text(user?.role,50).toLowerCase()); }
 function age(value){ const created=new Date(value).getTime(); if(!Number.isFinite(created))return "N/A"; const m=Math.max(0,Math.floor((Date.now()-created)/60000)); if(m<60)return `${m}m`; const h=Math.floor(m/60); return h<24?`${h}h ${m%60}m`:`${Math.floor(h/24)}d ${h%24}h`; }
-function decorate(ticket){ return {...ticket,age:age(ticket.created_at),overdue:Boolean(ticket.due_at&&new Date(ticket.due_at)<new Date()&&!['Resolved','Closed'].includes(ticket.status))}; }
+function decorate(ticket){ const active=!['Resolved','Closed'].includes(ticket.status); const now=Date.now(); return {...ticket,age:age(ticket.created_at),overdue:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active),response_overdue:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now&&active),sla:{policyKey:ticket.sla_policy_key||null,policyVersion:ticket.sla_policy_version||null,responseDueAt:ticket.response_due_at||null,resolutionDueAt:ticket.due_at||null,responseMinutes:ticket.sla_response_minutes||null,resolutionMinutes:ticket.sla_resolution_minutes||null,responseBreached:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now),resolutionBreached:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active)}}; }
 function prefix(typeValue,title,workspace){ const normalized=text(typeValue,50).toLowerCase().replace(/[\s-]+/g,"_"); if(TYPE_PREFIX[normalized])return TYPE_PREFIX[normalized]; const context=`${title} ${workspace}`.toLowerCase(); if(context.includes("change"))return "CHG"; if(context.includes("request")||context.includes("asset"))return "REQ"; return "INC"; }
 function canView(user,ticket){ return operations(user)||Number(ticket.requester_id)===Number(user?.id); }
 function parseDetails(value){
@@ -91,8 +94,10 @@ async function validateAssignment(database,groupId,assigneeId){
  if(groupId){ const result=await database.query(`SELECT id FROM support_groups WHERE id=$1 AND COALESCE(is_active,TRUE)=TRUE`,[groupId]); if(!result.rows[0])throw Object.assign(new Error("The selected support group is unavailable."),{status:400}); }
  if(assigneeId){ if(!groupId)throw Object.assign(new Error("Select a support group before choosing an agent."),{status:400}); const result=await database.query(`SELECT u.id FROM users u JOIN support_group_members gm ON gm.user_id=u.id AND gm.group_id=$2 WHERE u.id=$1 AND u.approved=TRUE AND u.status='active' AND u.archived_at IS NULL AND COALESCE(u.account_type,'person')='person' AND COALESCE(u.microsoft_account_enabled,TRUE)=TRUE AND u.role IN ('agent','operator','manager','admin','superadmin') LIMIT 1`,[assigneeId,groupId]); if(!result.rows[0])throw Object.assign(new Error("The selected agent is not an eligible member of this support group."),{status:400}); }
 }
-async function notify(ticket){ try{ await createTicketAssignmentNotifications({ticket,assignedGroupId:ticket.assigned_group_id,assignedToUserId:ticket.assigned_to_user_id}); }catch(error){console.error("Ticket notification failed:",error.message);} try{ const result=await pool.query(`SELECT DISTINCT u.email FROM users u WHERE u.approved=TRUE AND u.status='active' AND u.archived_at IS NULL AND COALESCE(u.account_type,'person')='person' AND (u.id=$1 OR EXISTS(SELECT 1 FROM support_group_members gm WHERE gm.user_id=u.id AND gm.group_id=$2))`,[ticket.assigned_to_user_id,ticket.assigned_group_id]); await sendTicketAssignmentEmail({recipients:result.rows.map(r=>r.email).filter(Boolean),ticket,groupName:ticket.assigned_group_name}); }catch(error){console.error("Ticket email failed:",error.message);} }
-
+async function notify(ticket){ try{ await createTicketAssignmentNotifications({ticket,assignedGroupId:ticket.assigned_group_id,assignedToUserId:ticket.assigned_to_user_id}); }catch(error){console.error("Ticket notification failed:",error.message);} }
+router.get("/sla-policy",async(req,res)=>{
+  try{const policy=await getSlaPolicy();return res.json(policy);}catch(error){console.error("SLA policy fetch failed:",error);return res.status(500).json({error:"SLA policy could not be loaded."});}
+});
 router.get("/employee-view",async(req,res)=>{ try{const result=await pool.query(`${TICKET_SELECT} WHERE t.requester_id=$1 ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){console.error(error);return res.status(500).json({error:"Failed to fetch your tickets."});}});
 router.get("/my-modules",async(req,res)=>{
   try{
@@ -124,11 +129,42 @@ router.get("/",async(req,res)=>{
     const i=values.length;
     conditions.push(`(t.ticket_ref ILIKE $${i} OR t.external_id ILIKE $${i} OR t.title ILIKE $${i} OR t.description ILIKE $${i} OR t.category ILIKE $${i} OR requester.name ILIKE $${i} OR t.external_requester_name ILIKE $${i} OR t.external_requester_email ILIKE $${i} OR assignee.name ILIKE $${i} OR t.external_assignee_name ILIKE $${i} OR g.name ILIKE $${i} OR t.external_group_name ILIKE $${i})`);
   }
-  const legacyView=String(req.query.view||"").toLowerCase();
-  const assignmentScope=String(
-    req.query.assignmentScope||req.query.assignee||req.query.scope||(legacyView==="mine"?"mine":"all")
-  ).trim().toLowerCase();
-  const allowedAssignmentScopes=new Set(["all","mine","unassigned","my-groups"]);
+  const legacyView = String(req.query.view || "")
+    .trim()
+    .toLowerCase();
+
+  const legacyStatusKey = String(req.query.status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[ _]+/g, "-");
+
+  const legacyAssignmentAliases = new Map([
+    ["assigned-to-me", "mine"],
+    ["my-groups", "my-groups"],
+    ["my-support-groups", "my-groups"],
+  ]);
+
+  const legacyAssignmentScope =
+    legacyAssignmentAliases.get(legacyStatusKey) || null;
+
+  const assignmentScope = String(
+    req.query.assignmentScope ||
+      req.query.assignment ||
+      req.query.assignee ||
+      req.query.scope ||
+      legacyAssignmentScope ||
+      (legacyView === "mine" ? "mine" : "all")
+  )
+    .trim()
+    .toLowerCase();
+
+
+  const allowedAssignmentScopes = new Set([
+    "all",
+    "mine",
+    "unassigned",
+    "my-groups",
+  ]);
   if(!allowedAssignmentScopes.has(assignmentScope)){
     return res.status(400).json({error:"Invalid assignment filter."});
   }
@@ -153,7 +189,11 @@ router.get("/",async(req,res)=>{
   const baseWhere=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";
   const baseValues=[...values];
 
-  const requestedStatuses=String(req.query.statuses||req.query.status||"all")
+  const requestedStatuses = String(
+    req.query.statuses ||
+      (legacyAssignmentScope ? "all" : req.query.status) ||
+      "all"
+  )
     .split(",")
     .map(value=>value.trim())
     .filter(Boolean);
@@ -291,6 +331,38 @@ router.get("/:id/history",async(req,res)=>{
     return res.status(500).json({error:"Failed to fetch ticket history."});
   }
 });
+router.post("/:id/history/:historyId/undo",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+ const client=await pool.connect();
+ try{
+  await client.query("BEGIN");
+  const ticketResult=await client.query("SELECT * FROM tickets WHERE id=$1 FOR UPDATE",[req.params.id]);
+  const ticket=ticketResult.rows[0];
+  if(!ticket)throw Object.assign(new Error("Ticket not found."),{status:404,code:"UNDO_TICKET_NOT_FOUND"});
+  const historyResult=await client.query("SELECT * FROM ticket_history WHERE id=$1 AND ticket_id=$2 FOR UPDATE",[req.params.historyId,ticket.id]);
+  const activity=historyResult.rows[0];
+  if(!activity)throw Object.assign(new Error("Activity not found."),{status:404,code:"UNDO_ACTIVITY_NOT_FOUND"});
+  if(Number(activity.actor_user_id)!==Number(req.user.id)&&req.user.role!=="superadmin")throw Object.assign(new Error("Only the participant who made this change or a superadministrator may undo it."),{status:403,code:"UNDO_FORBIDDEN"});
+  if(Date.now()-new Date(activity.created_at).getTime()>30000)throw Object.assign(new Error("The Undo period has expired."),{status:409,code:"UNDO_EXPIRED"});
+  const action=String(activity.action||"").toLowerCase();
+  if(!["status_changed","priority_changed"].includes(action))throw Object.assign(new Error("This activity does not have a safe Undo operation."),{status:409,code:"UNDO_NOT_SUPPORTED"});
+  const existing=await client.query("SELECT * FROM ticket_activity_undo WHERE history_id=$1 FOR UPDATE",[activity.id]);
+  if(existing.rows[0]?.consumed_at)throw Object.assign(new Error("This activity has already been undone."),{status:409,code:"UNDO_ALREADY_USED"});
+  const column=action==="status_changed"?"status":"priority";
+  if(String(ticket[column]??"")!==String(activity.new_value??""))throw Object.assign(new Error("The ticket changed again, so this activity can no longer be undone safely."),{status:409,code:"UNDO_STATE_CONFLICT"});
+  const ledger=existing.rows[0]||(await client.query(`INSERT INTO ticket_activity_undo(ticket_id,history_id,requested_by_user_id,action,expected_value,restore_value,expires_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[ticket.id,activity.id,req.user.id,action,String(activity.new_value??""),activity.old_value,new Date(new Date(activity.created_at).getTime()+30000)])).rows[0];
+  if(new Date(ledger.expires_at).getTime()<=Date.now())throw Object.assign(new Error("The Undo period has expired."),{status:409,code:"UNDO_EXPIRED"});
+  const allowed=column==="status"?STATUS_MAP:PRIORITY_MAP;
+  const restored=allowed.get(String(activity.old_value||"").trim().toLowerCase());
+  if(!restored)throw Object.assign(new Error("The previous value is no longer valid."),{status:409,code:"UNDO_RESTORE_INVALID"});
+  if(column==="status")await client.query(`UPDATE tickets SET status=$1,resolved_at=CASE WHEN $1 IN ('Resolved','Closed') THEN COALESCE(resolved_at,NOW()) ELSE NULL END,closed_at=CASE WHEN $1='Closed' THEN COALESCE(closed_at,NOW()) ELSE NULL END,updated_at=NOW() WHERE id=$2`,[restored,ticket.id]);
+  else await client.query("UPDATE tickets SET priority=$1,updated_at=NOW() WHERE id=$2",[restored,ticket.id]);
+  await client.query("UPDATE ticket_activity_undo SET consumed_at=NOW(),consumed_by_user_id=$2 WHERE id=$1 AND consumed_at IS NULL",[ledger.id,req.user.id]);
+  const undoHistory=(await client.query(`INSERT INTO ticket_history(ticket_id,actor_user_id,action,old_value,new_value) VALUES($1,$2,'undo_applied',$3,$4) RETURNING *`,[ticket.id,req.user.id,JSON.stringify({historyId:activity.id,action:activity.action,value:activity.new_value}),JSON.stringify({restoredValue:restored})])).rows[0];
+  await client.query("COMMIT");
+  return res.json({message:`${column==="status"?"Status":"Priority"} change undone.`,ticket:decorate(await getTicket(ticket.id)),activity:undoHistory});
+ }catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(error.status||500).json({code:error.code||"UNDO_ERROR",error:error.status?error.message:"The activity could not be undone."});}
+ finally{client.release();}
+});
 router.get("/:id/comments",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
@@ -358,6 +430,43 @@ router.post("/:id/comments",async(req,res)=>{
   }
 });
 
+router.post("/:id/reply-action",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+  const body=text(req.body.body || req.body.comment);
+  const action=text(req.body.action || "send",30).toLowerCase();
+  const allowed=new Set(["send","send_resolve","send_close"]);
+  if(!body)return res.status(400).json({error:"Write a message before sending."});
+  if(!allowed.has(action))return res.status(400).json({error:"Invalid reply action."});
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const ticket=await getTicket(req.params.id,client);
+    if(!ticket){await client.query("ROLLBACK");return res.status(404).json({error:"Ticket not found."});}
+    const isInternal=Boolean(req.body.isInternal || req.body.is_internal);
+    if(isInternal && action!=="send")throw Object.assign(new Error("Internal notes cannot resolve or close a ticket."),{status:400});
+    await client.query(`INSERT INTO ticket_comments(ticket_id,author_user_id,body,is_internal,created_at,author_name,author_email,origin) VALUES($1,$2,$3,$4,NOW(),$5,$6,'helpdesk')`,[ticket.id,req.user.id,body,isInternal,req.user.name||null,req.user.email||null]);
+    await history(client,ticket.id,req.user.id,isInternal?"internal_note":"comment_added",null,body.slice(0,120));
+    let nextStatus=ticket.status;
+    let statusAction=null;
+    if(action==="send_resolve"){nextStatus="Resolved";statusAction="resolve";}
+    if(action==="send_close"){nextStatus="Closed";statusAction="closed";}
+    if(statusAction){
+      await client.query(`UPDATE tickets SET status=$1,resolved_at=COALESCE(resolved_at,NOW()),closed_at=CASE WHEN $1='Closed' THEN NOW() ELSE NULL END,updated_at=NOW() WHERE id=$2`,[nextStatus,ticket.id]);
+      await logStatusChange(client,ticket.id,req.user.id,ticket.status,nextStatus,statusAction);
+    }else await client.query(`UPDATE tickets SET updated_at=NOW() WHERE id=$1`,[ticket.id]);
+    await client.query("COMMIT");
+    let emailResult={sent:false,skipped:true,reason:"Internal notes are portal-only."};
+    if(!isInternal){
+      const participants=await pool.query(`SELECT email,participant_type FROM ticket_email_participants WHERE ticket_id=$1 AND is_active=TRUE ORDER BY id`,[ticket.id]);
+      const selected=Array.isArray(req.body.recipients)?req.body.recipients.map(v=>String(v).toLowerCase()):[];
+      const allowed=new Map([[String(ticket.requester_email||"").toLowerCase(),"to"],[String(ticket.assigned_to_email||"").toLowerCase(),"cc"]]);for(const row of participants.rows)allowed.set(String(row.email).toLowerCase(),row.participant_type);
+      const chosen=(selected.length?selected:Array.from(allowed.keys())).filter(v=>v&&allowed.has(v));const to=chosen.filter(v=>(allowed.get(v)||"to")==="to");const cc=chosen.filter(v=>!to.includes(v));if(!to.length&&ticket.requester_email)to.push(String(ticket.requester_email).toLowerCase());
+      emailResult=await sendMailSafe({to,cc,category:"requester_update",subject:`[${ticket.ticket_ref||`TICKET-${ticket.id}`}] ${ticket.title||"Ticket update"}`,text:body,html:`<div style="font-family:Segoe UI,Arial,sans-serif;white-space:pre-wrap">${body.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;")}</div>`});
+      await history(pool,ticket.id,req.user.id,"email_recipients_selected",null,JSON.stringify({to,cc,result:{sent:Boolean(emailResult.sent),skipped:Boolean(emailResult.skipped)}}));
+    }
+    return res.status(201).json({message:nextStatus===ticket.status?"Reply recorded.":`Reply recorded and ticket marked ${nextStatus}.`,email:emailResult,ticket:decorate(await getTicket(ticket.id))});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(error.status||500).json({error:error.status?error.message:"Failed to send reply action."});}
+  finally{client.release();}
+});
 router.get("/:id",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
@@ -390,6 +499,8 @@ router.post("/",optionalAttachments,async(req,res)=>{
 
   if(!title){ cleanupFiles(files); return res.status(400).json({error:"A ticket title is required."}); }
   if(!description){ cleanupFiles(files); return res.status(400).json({error:"A ticket description is required."}); }
+  if(!assigneeId){ cleanupFiles(files); return res.status(400).json({code:"AGENT_REQUIRED",error:"Select an eligible agent before submitting this ticket."}); }
+  if(!groupId){ cleanupFiles(files); return res.status(400).json({code:"SUPPORT_GROUP_REQUIRED",error:"Select the support team for the chosen agent."}); }
 
   const requestedFor=id(req.body.requesterId||req.body.requestedForUserId);
   if(requestedFor&&requestedFor!==req.user.id){
@@ -405,12 +516,21 @@ router.post("/",optionalAttachments,async(req,res)=>{
   try{
     await client.query("BEGIN");
     open=true;
+    const slaPolicy=await getSlaPolicy(client);
+    const sla=calculateSla(slaPolicy,ticketPriority,new Date(),{
+      workspace,
+      ticketType,
+      category,
+      subCategory,
+      itemCategory,
+      title,
+    });
     const requester=await validRequester(client,requesterId);
     if(!requester){
       await client.query("ROLLBACK"); open=false; cleanupFiles(files);
       return res.status(400).json({error:"The selected requester is not an active person account."});
     }
-    if(!groupId)groupId=await defaultGroup(client);
+    // New portal tickets require an explicit eligible agent and support group.
     await validateAssignment(client,groupId,assigneeId);
     const duplicate=await client.query(
       `SELECT id,ticket_ref FROM tickets
@@ -431,12 +551,12 @@ router.post("/",optionalAttachments,async(req,res)=>{
       `INSERT INTO tickets(
          id,ticket_ref,title,description,requester_id,created_by_user_id,priority,status,workspace,
          assigned_group_id,assigned_to_user_id,ticket_type,category,sub_category,item_category,
-         impact,urgency,source,request_details
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb)`,
+         impact,urgency,source,request_details,response_due_at,due_at,sla_policy_key,sla_policy_version,sla_calculated_at,sla_response_minutes,sla_resolution_minutes
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21,$22,$23,NOW(),$24,$25)`,
       [
         nextId,reference,title,description,requesterId,req.user.id,ticketPriority,openStatus,workspace,
         groupId,assigneeId,ticketType,category,subCategory,itemCategory,
-        impact,urgency,source,JSON.stringify(details),
+        impact,urgency,source,JSON.stringify(details),sla.responseDueAt,sla.resolutionDueAt,sla.policyKey,sla.policyVersion,sla.responseMinutes,sla.resolutionMinutes,
       ]
     );
 
@@ -445,6 +565,17 @@ router.post("/",optionalAttachments,async(req,res)=>{
       await history(client,nextId,req.user.id,"attachment_added",null,`${attachments.length} file(s)`);
     }
     await history(client,nextId,req.user.id,"created",null,openStatus);
+    await history(client,nextId,req.user.id,"sla_applied",null,JSON.stringify({
+      priority:ticketPriority,
+      service:sla.service,
+      policyKey:sla.policyKey,
+      policyVersion:sla.policyVersion,
+      responseOnlyOverride:sla.responseOnlyOverride,
+      responseMinutes:sla.responseMinutes,
+      resolutionMinutes:sla.resolutionMinutes,
+      responseDueAt:sla.responseDueAt.toISOString(),
+      resolutionDueAt:sla.resolutionDueAt.toISOString(),
+    }));
     if(openStatus==="Waiting Approval"){
       await history(client,nextId,req.user.id,"approval_required",null,details.changeType||"Change");
     }
@@ -452,8 +583,14 @@ router.post("/",optionalAttachments,async(req,res)=>{
     await client.query("COMMIT");
     open=false;
     const ticket=await getTicket(nextId);
-    setImmediate(()=>notify(ticket));
-    return res.status(201).json({...decorate(ticket),attachments});
+    setImmediate(async () => {
+      await Promise.allSettled([
+        notify(ticket),
+        createTicketCreatedNotification({ ticket, requesterUserId: requester.id, attachmentCount: attachments.length }),
+        sendTicketCreatedLifecycle({ requester, ticket, attachmentCount: attachments.length }),
+      ]);
+    });
+    return res.status(201).json({...decorate(ticket),attachments,confirmationQueued:true});
   }catch(error){
     if(open)await client.query("ROLLBACK").catch(()=>{});
     cleanupFiles(files);

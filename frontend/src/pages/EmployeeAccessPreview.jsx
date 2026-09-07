@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { userApi } from "../services/api";
+import AdminUniversalHeader from "../components/admin/AdminUniversalHeader";
 
 const SEARCH_DEBOUNCE_MS = 250;
 const MINIMUM_SEARCH_LENGTH = 2;
@@ -126,10 +127,10 @@ export default function EmployeeAccessPreview() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-5 text-slate-900 xl:p-8">
+    <div className="portal-shell min-h-screen p-5 portal-title xl:p-8"><AdminUniversalHeader title="Employee Access Preview" />
       <div className="mx-auto max-w-6xl space-y-6">
         <header>
-          <p className="text-sm font-semibold text-blue-700">
+          <p className="text-sm font-semibold text-[var(--portal-primary)]">
             Administration
           </p>
 
@@ -137,7 +138,7 @@ export default function EmployeeAccessPreview() {
             Employee Access Preview
           </h1>
 
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+          <p className="mt-2 max-w-3xl text-sm leading-6 portal-muted">
             Review the information and modules available to an employee without
             creating an impersonated session or allowing write operations.
           </p>
@@ -153,10 +154,10 @@ export default function EmployeeAccessPreview() {
         )}
 
         <div className="grid gap-6 lg:grid-cols-3">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-2xl border portal-border portal-surface-raised p-5 shadow-sm">
             <label
               htmlFor="employee-access-search"
-              className="text-sm font-bold text-slate-700"
+              className="text-sm font-bold portal-copy"
             >
               Find an employee
             </label>
@@ -171,13 +172,13 @@ export default function EmployeeAccessPreview() {
                   setSearchQuery(event.target.value);
                 }}
                 placeholder="Search name, email or employee number..."
-                className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                className="w-full rounded-xl border portal-border py-3 pl-10 pr-3 text-sm outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
               />
             </div>
 
             <div className="mt-3 max-h-[60vh] divide-y divide-slate-100 overflow-y-auto">
               {searching && (
-                <p className="p-4 text-sm text-slate-500">
+                <p className="p-4 text-sm portal-muted">
                   Searching employees...
                 </p>
               )}
@@ -185,7 +186,7 @@ export default function EmployeeAccessPreview() {
               {!searching &&
                 searchQuery.trim().length >= MINIMUM_SEARCH_LENGTH &&
                 searchResults.length === 0 && (
-                  <p className="p-4 text-sm text-slate-500">
+                  <p className="p-4 text-sm portal-muted">
                     No matching employees found.
                   </p>
                 )}
@@ -200,15 +201,15 @@ export default function EmployeeAccessPreview() {
                     type="button"
                     onClick={() => loadEmployeePreview(employee)}
                     className={classNames(
-                      "w-full p-3 text-left transition hover:bg-slate-50",
-                      isSelected && "bg-blue-50"
+                      "w-full p-3 text-left transition hover:portal-surface-muted",
+                      isSelected && "bg-[var(--portal-selected-bg)]"
                     )}
                   >
                     <p className="font-bold text-slate-950">
                       {employee.name}
                     </p>
 
-                    <p className="mt-1 text-sm text-slate-500">
+                    <p className="mt-1 text-sm portal-muted">
                       {employee.email}
                     </p>
 
@@ -223,23 +224,23 @@ export default function EmployeeAccessPreview() {
 
           <section className="space-y-5 lg:col-span-2">
             {previewLoading && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm font-semibold text-slate-600 shadow-sm">
+              <div className="rounded-2xl border portal-border portal-surface-raised p-6 text-sm font-semibold portal-copy shadow-sm">
                 Loading employee preview...
               </div>
             )}
 
             {!previewLoading && preview && (
               <>
-                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-blue-950">
+                <div className="rounded-2xl border border-[var(--portal-selected-border)] bg-[var(--portal-selected-bg)] p-4 text-blue-950">
                   <div className="flex items-start gap-3">
-                    <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-700" />
+                    <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-[var(--portal-primary)]" />
 
                     <div>
                       <p className="font-bold">
                         Read-only employee preview
                       </p>
 
-                      <p className="mt-1 text-sm text-blue-800">
+                      <p className="mt-1 text-sm text-[var(--portal-primary-hover)]">
                         Viewing access for {selectedEmployee?.name}. No
                         employee session has been created and no changes can be
                         made from this preview.
@@ -268,14 +269,14 @@ export default function EmployeeAccessPreview() {
                   />
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border portal-border portal-surface-raised p-5 shadow-sm">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <h2 className="text-lg font-bold text-slate-950">
                         Employee Profile
                       </h2>
 
-                      <p className="mt-1 text-sm text-slate-500">
+                      <p className="mt-1 text-sm portal-muted">
                         Identity and employment information available to the
                         Helpdesk.
                       </p>
@@ -320,12 +321,12 @@ export default function EmployeeAccessPreview() {
                   </dl>
                 </div>
 
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <div className="rounded-2xl border portal-border portal-surface-raised p-5 shadow-sm">
                   <h2 className="text-lg font-bold text-slate-950">
                     Access Matrix
                   </h2>
 
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm portal-muted">
                     Allowed and blocked modules for the selected employee role.
                   </p>
 
@@ -334,9 +335,9 @@ export default function EmployeeAccessPreview() {
                       ([accessKey, allowed]) => (
                         <div
                           key={accessKey}
-                          className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"
+                          className="flex items-center justify-between gap-3 rounded-xl portal-surface-muted p-3"
                         >
-                          <span className="text-sm font-semibold capitalize text-slate-700">
+                          <span className="text-sm font-semibold capitalize portal-copy">
                             {formatAccessLabel(accessKey)}
                           </span>
 
@@ -354,7 +355,7 @@ export default function EmployeeAccessPreview() {
             )}
 
             {!previewLoading && !preview && (
-              <div className="rounded-2xl border border-slate-200 bg-white p-10 text-center text-sm text-slate-500 shadow-sm">
+              <div className="rounded-2xl border portal-border portal-surface-raised p-10 text-center text-sm portal-muted shadow-sm">
                 Select an employee to inspect read-only portal access.
               </div>
             )}
@@ -367,12 +368,12 @@ export default function EmployeeAccessPreview() {
 
 function PreviewMetricCard({ icon: Icon, label, value }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="inline-flex rounded-xl bg-blue-100 p-2.5 text-blue-700">
+    <div className="rounded-2xl border portal-border portal-surface-raised p-4 shadow-sm">
+      <div className="inline-flex rounded-xl bg-[var(--portal-selected-bg)] p-2.5 text-[var(--portal-primary)]">
         <Icon className="h-5 w-5" />
       </div>
 
-      <p className="mt-3 text-xs font-bold uppercase tracking-wide text-slate-500">
+      <p className="mt-3 text-xs font-bold uppercase tracking-wide portal-muted">
         {label}
       </p>
 
@@ -385,12 +386,12 @@ function PreviewMetricCard({ icon: Icon, label, value }) {
 
 function ProfileDetail({ label, value }) {
   return (
-    <div className="rounded-xl bg-slate-50 p-3">
-      <dt className="text-xs font-bold uppercase tracking-wide text-slate-500">
+    <div className="rounded-xl portal-surface-muted p-3">
+      <dt className="text-xs font-bold uppercase tracking-wide portal-muted">
         {label}
       </dt>
 
-      <dd className="mt-1 font-semibold text-slate-900">
+      <dd className="mt-1 font-semibold portal-title">
         {value || "Not available"}
       </dd>
     </div>

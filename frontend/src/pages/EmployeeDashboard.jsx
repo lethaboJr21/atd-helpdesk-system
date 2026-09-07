@@ -1,5 +1,6 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
   Bell,
@@ -7,6 +8,12 @@ import {
   HardDrive,
   Inbox,
   Lightbulb,
+  BriefcaseBusiness,
+  FolderKanban,
+  LifeBuoy,
+  PackagePlus,
+  ShoppingCart,
+  Plus,
   RefreshCw,
   Search,
   Ticket,
@@ -15,12 +22,19 @@ import {
 
 import OperationsShell from "../components/OperationsShell";
 import BrandAtmosphere from "../components/BrandAtmosphere";
+import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
+import DashboardConfigurationPanel from "../components/dashboard/DashboardConfigurationPanel";
+import DashboardTemplate from "../components/dashboard/DashboardTemplate";
+import EmployeePinnedActions from "../components/dashboard/EmployeePinnedActions";
+
 import {
   GUIDED_INCIDENTS,
   REQUEST_MODULES,
   guidedIncidentPath,
 } from "../data/requestModules";
 import { useAuth } from "../hooks/useAuth";
+import useDashboardPreferences from "../hooks/useDashboardPreferences";
+import useEmployeePinnedActions from "../hooks/useEmployeePinnedActions";
 import {
   assetsApi,
   knowledgeApi,
@@ -62,7 +76,8 @@ function firstName(user) {
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const location = useLocation();
+  const { user } = useAuth();
 
   const [tickets, setTickets] = useState([]);
   const [assets, setAssets] = useState([]);
@@ -72,6 +87,29 @@ export default function EmployeeDashboard() {
   const [sectionErrors, setSectionErrors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
+  const [showRequestMenu, setShowRequestMenu] = useState(false);
+  const [showDashboardConfiguration, setShowDashboardConfiguration] = useState(false);
+  const {
+    templateId,
+    visibleWidgets,
+    isWidgetVisible,
+    applyTemplate,
+    toggleWidget,
+    customLayouts,
+    activeCustomLayoutId,
+    applyCustomLayout,
+    saveCustomLayout,
+    updateCustomLayout,
+    renameCustomLayout,
+    duplicateCustomLayout,
+    deleteCustomLayout,
+    resetPreferences,
+  } = useDashboardPreferences(user?.id);
+  const {
+    isPinned,
+    togglePinnedAction,
+    resetPinnedActions,
+  } = useEmployeePinnedActions(user?.id);
 
   const loadDashboard = useCallback(async () => {
     setLoading(true);
@@ -148,6 +186,13 @@ export default function EmployeeDashboard() {
     loadDashboard();
   }, [loadDashboard]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    if (params.get("configure") === "dashboard") {
+      setShowDashboardConfiguration(true);
+    }
+  }, [location.search]);
+
   const rankedModules = useMemo(() => {
     const modules = Object.values(REQUEST_MODULES);
     const order = personalization?.modules?.map((item) => item.key) || [];
@@ -196,7 +241,22 @@ export default function EmployeeDashboard() {
     });
   }, [personalization, navigate]);
 
+  const pinnableActions = useMemo(() => [
+    { key: "incident", label: "Report Incident", icon: LifeBuoy, onClick: () => navigate(REQUEST_MODULES.incident.path) },
+    { key: "service", label: "Request Service", icon: ShoppingCart, onClick: () => navigate(REQUEST_MODULES.service.path) },
+    { key: "asset", label: "Request Asset", icon: PackagePlus, onClick: () => navigate(REQUEST_MODULES.asset.path) },
+    { key: "change", label: "Request Change", icon: BriefcaseBusiness, onClick: () => navigate(REQUEST_MODULES.change.path) },
+    { key: "project", label: "Create Project", icon: FolderKanban, onClick: () => navigate(REQUEST_MODULES.project.path) },
+    ...rankedShortcuts,
+  ].filter((item, index, all) => all.findIndex((candidate) => candidate.key === item.key) === index), [navigate, rankedShortcuts]);
+
   const personalizationLabel = personalization?.label || null;
+  const recentTickets = useMemo(
+    () => [...tickets]
+      .sort((left, right) => new Date(right.created_at || right.updated_at || 0) - new Date(left.created_at || left.updated_at || 0))
+      .slice(0, 3),
+    [tickets]
+  );
 
   const openTickets = useMemo(
     () =>
@@ -298,11 +358,6 @@ export default function EmployeeDashboard() {
     };
   }, [query, knowledge, tickets, navigate]);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate("/login", { replace: true });
-  };
-
   const showSearchPanel = query.trim().length > 0;
   const greetingName = firstName(user);
 
@@ -311,14 +366,14 @@ export default function EmployeeDashboard() {
       breadcrumb="Employee Self-Service"
       title="Employee Home"
       contentOverflow="hidden"
-      contentClassName="flex min-h-0 flex-1 flex-col overflow-hidden bg-[linear-gradient(180deg,#eef2f7_0%,#f8fafc_42%,#f1f5f9_100%)] px-4 py-3 lg:px-5 lg:py-3 xl:px-6"
+      contentClassName="portal-canvas flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3 lg:px-5 lg:py-3 xl:px-6"
       actions={
         <>
           <button
             type="button"
             onClick={loadDashboard}
             disabled={loading}
-            className="inline-flex items-center rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-soft transition hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+            className="inline-flex items-center rounded-xl border border-[var(--portal-border)] bg-[var(--portal-surface-raised)] px-3.5 py-2 text-sm font-semibold text-[var(--portal-text-soft)] shadow-soft transition hover:border-slate-300 hover:bg-[var(--portal-surface-muted)] disabled:opacity-60"
           >
             <RefreshCw
               className={classNames("mr-2 h-4 w-4", loading && "animate-spin")}
@@ -327,15 +382,19 @@ export default function EmployeeDashboard() {
           </button>
           <button
             type="button"
-            onClick={handleLogout}
-            className="rounded-xl border border-slate-200/80 bg-white px-3.5 py-2 text-sm font-semibold text-slate-700 shadow-soft transition hover:border-slate-300 hover:bg-slate-50"
+            onClick={() => setShowRequestMenu(true)}
+            className="inline-flex items-center gap-2 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-4 py-2 text-sm font-bold text-white shadow-sm transition hover:opacity-90"
           >
-            Logout
+            <Plus className="h-4 w-4" />
+            New Request
           </button>
         </>
       }
     >
-      <section className="flex h-full min-h-0 flex-col gap-3 max-lg:overflow-y-auto lg:overflow-hidden">
+      <DashboardTemplate
+        templateId={templateId}
+        className="flex h-full min-h-0 flex-col gap-3 max-lg:overflow-y-auto lg:overflow-hidden"
+      >
         {sectionErrors.length > 0 && (
           <div className="shrink-0 rounded-2xl border border-amber-200/80 bg-amber-50 px-4 py-3 shadow-soft">
             <p className="font-bold text-amber-900">
@@ -353,7 +412,7 @@ export default function EmployeeDashboard() {
 
         {/* Hero — Freshservice mental model, ATD brand */}
         <div
-          className="relative z-20 shrink-0 overflow-visible rounded-[1.75rem] px-5 py-5 text-white shadow-lift sm:px-8 sm:py-6"
+          className="employee-hero relative z-10 shrink-0 overflow-visible rounded-[1.75rem] px-5 py-5 text-white shadow-lift sm:px-8 sm:py-6"
           style={{
             backgroundImage: `linear-gradient(135deg, ${BRAND} 0%, #1a3470 48%, #0f2348 100%)`,
           }}
@@ -377,20 +436,20 @@ export default function EmployeeDashboard() {
               <label className="sr-only" htmlFor="employee-home-search">
                 Search for solutions, services, and tickets
               </label>
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+              <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[var(--portal-text-muted)]" />
               <input
                 id="employee-home-search"
                 type="search"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search for solutions, services, and tickets"
-                className="w-full rounded-2xl border-0 bg-white py-3 pl-12 pr-12 text-sm text-slate-900 shadow-glow outline-none ring-0 transition placeholder:text-slate-400 focus:ring-2 focus:ring-sky-300 sm:text-[15px]"
+                className="employee-hero-search w-full rounded-2xl border py-3 pl-12 pr-12 text-sm text-[var(--portal-text)] shadow-glow outline-none ring-0 transition placeholder:text-[var(--portal-text-muted)] focus:ring-2 focus:ring-sky-300 sm:text-[15px]"
               />
               {query ? (
                 <button
                   type="button"
                   onClick={() => setQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1.5 text-[var(--portal-text-muted)] transition hover:bg-[var(--portal-surface-muted)] hover:text-[var(--portal-text-soft)]"
                   aria-label="Clear search"
                 >
                   <X className="h-4 w-4" />
@@ -398,7 +457,7 @@ export default function EmployeeDashboard() {
               ) : null}
 
               {showSearchPanel ? (
-                <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 max-h-[min(22rem,45vh)] overflow-y-auto rounded-2xl border border-slate-200/80 bg-white text-left text-slate-900 shadow-lift">
+                <div className="absolute left-0 right-0 top-[calc(100%+0.5rem)] z-30 max-h-[min(22rem,45vh)] overflow-y-auto rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface-raised)] text-left text-[var(--portal-text)] shadow-lift">
                   <SearchSection title="Actions" empty="No matching actions.">
                     {searchResults.actions.map((item) => (
                       <SearchRow
@@ -445,8 +504,8 @@ export default function EmployeeDashboard() {
           </div>
         </div>
 
-        {/* Support + knowledge */}
-        <div className="grid shrink-0 gap-3 sm:grid-cols-2">
+        {isWidgetVisible("supportActions") ? (
+          <div className="grid shrink-0 gap-3 sm:grid-cols-2">
           <IntentCard
             icon={CheckSquare}
             tone="indigo"
@@ -470,16 +529,18 @@ export default function EmployeeDashboard() {
             description="Look up policies or FAQs to fix issues on your own"
             onClick={() => navigate("/knowledge")}
           />
-        </div>
+          </div>
+        ) : null}
 
         {/* Four separate request modules — never mixed on one form */}
-        <div className="shrink-0">
-          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+        {isWidgetVisible("requestModules") ? (
+          <div className="shrink-0">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--portal-text-muted)]">
               Raise a request
             </p>
             {personalizationLabel ? (
-              <p className="text-[11px] font-semibold text-slate-400">
+              <p className="text-[11px] font-semibold text-[var(--portal-text-muted)]">
                 {personalizationLabel}
               </p>
             ) : null}
@@ -495,13 +556,24 @@ export default function EmployeeDashboard() {
                 onClick={() => navigate(module.path)}
               />
             ))}
+            </div>
           </div>
-        </div>
+        ) : null}
+
+        {isWidgetVisible("pinnedActions") ? (
+          <EmployeePinnedActions
+            actions={pinnableActions}
+            isPinned={isPinned}
+            onToggle={togglePinnedAction}
+            onReset={resetPinnedActions}
+          />
+        ) : null}
 
         {/* Compact shortcuts — ranked for this person / department */}
-        <div className="shrink-0 rounded-2xl border border-slate-200/70 bg-white/90 px-3 py-2.5 shadow-soft backdrop-blur-sm">
+        {isWidgetVisible("quickLinks") ? (
+          <div className="shrink-0 rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface)] px-3 py-2.5 shadow-soft backdrop-blur-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="mr-1 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+            <p className="mr-1 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--portal-text-muted)]">
               Quick links
             </p>
             {rankedShortcuts.map((link) => (
@@ -513,12 +585,14 @@ export default function EmployeeDashboard() {
                 onClick={link.onClick}
               />
             ))}
+            </div>
           </div>
-        </div>
+        ) : null}
 
         {/* My work — dense strip, not a second dashboard */}
-        <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border border-slate-200/70 bg-white/90 px-3.5 py-2.5 shadow-soft backdrop-blur-sm">
-          <p className="mr-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-400">
+        {isWidgetVisible("myWork") ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface)] px-3.5 py-2.5 shadow-soft backdrop-blur-sm">
+          <p className="mr-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--portal-text-muted)]">
             My work
           </p>
           <WorkChip
@@ -550,35 +624,38 @@ export default function EmployeeDashboard() {
             tone="sky"
             onClick={() => navigate("/tickets?view=mine")}
           />
-        </div>
+          </div>
+        ) : null}
 
         {/* Follow-through panels */}
-        <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-5 lg:overflow-hidden">
-          <DashboardPanel
-            title="Recent tickets"
-            count={tickets.length}
+        {isWidgetVisible("recentTickets") || isWidgetVisible("assignedAssets") ? (
+          <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-5 lg:overflow-hidden">
+          {isWidgetVisible("recentTickets") ? (
+            <DashboardPanel
+              title="Recent tickets"
+            count={recentTickets.length}
             actionLabel="View all"
             onAction={() => navigate("/tickets?view=mine")}
             className="lg:col-span-3"
           >
             {tickets.length > 0 ? (
               <div className="space-y-0.5">
-                {tickets.slice(0, 8).map((item) => (
+                {recentTickets.map((item) => (
                   <button
                     key={item.id}
                     type="button"
                     onClick={() => navigate(`/tickets/${item.id}`)}
-                    className="flex w-full items-center justify-between gap-4 rounded-xl px-2.5 py-2.5 text-left transition hover:bg-slate-50"
+                    className="flex w-full items-center justify-between gap-4 rounded-xl px-2.5 py-2.5 text-left transition hover:bg-[var(--portal-surface-muted)]"
                   >
                     <div className="min-w-0">
-                      <p className="text-[11px] font-bold tracking-wide text-blue-700">
+                      <p className="text-[11px] font-bold tracking-wide text-[var(--portal-primary)]">
                         {item.ticket_ref || `TICKET-${item.id}`}
                       </p>
-                      <p className="truncate text-sm font-semibold text-slate-950">
+                      <p className="truncate text-sm font-semibold text-[var(--portal-text)]">
                         {item.title}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-700">
+                    <span className="shrink-0 rounded-full bg-[var(--portal-surface-muted)] px-2.5 py-1 text-[11px] font-bold text-[var(--portal-text-soft)]">
                       {item.status || "Open"}
                     </span>
                   </button>
@@ -595,15 +672,17 @@ export default function EmployeeDashboard() {
                 onSecondary={() => navigate(REQUEST_MODULES.service.path)}
               />
             )}
-          </DashboardPanel>
+            </DashboardPanel>
+          ) : null}
 
-          <DashboardPanel
-            title="Your assets"
-            count={assets.length}
-            actionLabel="Manage"
-            onAction={() => navigate("/assets")}
-            className="lg:col-span-2"
-          >
+          {isWidgetVisible("assignedAssets") ? (
+            <DashboardPanel
+              title="Your assets"
+              count={assets.length}
+              actionLabel="Manage"
+              onAction={() => navigate("/assets")}
+              className="lg:col-span-2"
+            >
             {assets.length > 0 ? (
               <div className="space-y-1">
                 {assets.slice(0, 6).map((asset) => (
@@ -611,29 +690,29 @@ export default function EmployeeDashboard() {
                     key={asset.id}
                     type="button"
                     onClick={() => navigate("/assets")}
-                    className="flex w-full items-start gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-slate-50"
+                    className="flex w-full items-start gap-3 rounded-xl px-2 py-2.5 text-left transition hover:bg-[var(--portal-surface-muted)]"
                   >
-                    <div className="mt-0.5 rounded-xl bg-gradient-to-br from-slate-100 to-slate-50 p-2.5 text-slate-600 ring-1 ring-slate-200/80">
+                    <div className="mt-0.5 rounded-xl bg-gradient-to-br from-slate-100 to-slate-50 p-2.5 text-[var(--portal-text-soft)] ring-1 ring-slate-200/80">
                       <HardDrive className="h-4 w-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-950">
+                      <p className="truncate text-sm font-semibold text-[var(--portal-text)]">
                         {asset.name || "Assigned asset"}
                       </p>
                       <div className="mt-1 space-y-0.5">
-                        <p className="truncate text-[11px] text-slate-500">
-                          <span className="font-semibold text-slate-400">
+                        <p className="truncate text-[11px] text-[var(--portal-text-muted)]">
+                          <span className="font-semibold text-[var(--portal-text-muted)]">
                             Tag
                           </span>{" "}
-                          <span className="font-semibold text-blue-700">
+                          <span className="font-semibold text-[var(--portal-primary)]">
                             {asset.asset_tag || `ASSET-${asset.id}`}
                           </span>
                         </p>
-                        <p className="truncate text-[11px] text-slate-500">
-                          <span className="font-semibold text-slate-400">
+                        <p className="truncate text-[11px] text-[var(--portal-text-muted)]">
+                          <span className="font-semibold text-[var(--portal-text-muted)]">
                             Serial
                           </span>{" "}
-                          <span className="font-medium text-slate-600">
+                          <span className="font-medium text-[var(--portal-text-soft)]">
                             {asset.serial_number || "—"}
                           </span>
                         </p>
@@ -650,11 +729,41 @@ export default function EmployeeDashboard() {
                 message="When IT assigns equipment, it will show up here."
               />
             )}
-          </DashboardPanel>
+            </DashboardPanel>
+          ) : null}
         </div>
-      </section>
+        ) : null}
+      </DashboardTemplate>
+
+      <RequestEntryMenu
+        open={showRequestMenu}
+        onClose={() => setShowRequestMenu(false)}
+        onSelect={(entry) => {
+          setShowRequestMenu(false);
+          navigate(entry.path);
+        }}
+      />
+
+      <DashboardConfigurationPanel
+        open={showDashboardConfiguration}
+        onClose={() => setShowDashboardConfiguration(false)}
+        role={user?.role || "user"}
+        templateId={templateId}
+        visibleWidgets={visibleWidgets}
+        customLayouts={customLayouts}
+        activeCustomLayoutId={activeCustomLayoutId}
+        onTemplateChange={applyTemplate}
+        onApplyCustom={applyCustomLayout}
+        onSaveCustom={saveCustomLayout}
+        onUpdateCustom={updateCustomLayout}
+        onRenameCustom={renameCustomLayout}
+        onDuplicateCustom={duplicateCustomLayout}
+        onDeleteCustom={deleteCustomLayout}
+        onToggleWidget={toggleWidget}
+        onReset={resetPreferences}
+      />
     </OperationsShell>
-  );
+);
 }
 
 const TONE_STYLES = {
@@ -677,7 +786,7 @@ function IntentCard({
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-center gap-4 rounded-2xl border border-slate-200/70 bg-white/95 px-5 py-4 text-left shadow-soft transition duration-200 hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-lift"
+      className="group flex items-center gap-4 rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface)] px-5 py-4 text-left shadow-soft transition duration-200 hover:-translate-y-0.5 hover:border-[var(--portal-selected-border)] hover:shadow-lift"
     >
       <div
         className={classNames(
@@ -693,10 +802,10 @@ function IntentCard({
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="text-[15px] font-bold tracking-tight text-slate-950">
+        <h3 className="text-[15px] font-bold tracking-tight text-[var(--portal-text)]">
           {title}
         </h3>
-        <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-slate-500">
+        <p className="mt-0.5 line-clamp-2 text-sm leading-snug text-[var(--portal-text-muted)]">
           {description}
         </p>
       </div>
@@ -720,17 +829,17 @@ function WorkChip({ icon: Icon, label, value, onClick, emphasize, tone }) {
         "inline-flex items-center gap-2 rounded-xl border px-2.5 py-1.5 text-left transition duration-150",
         emphasize
           ? activeTone
-          : "border-slate-200/80 bg-slate-50/80 hover:border-blue-300 hover:bg-blue-50"
+          : "border-slate-200/80 bg-[var(--portal-surface-muted)] hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]"
       )}
     >
       <Icon
         className={classNames(
           "h-3.5 w-3.5",
-          emphasize ? activeIcon : "text-slate-500"
+          emphasize ? activeIcon : "text-[var(--portal-text-muted)]"
         )}
       />
-      <span className="text-xs font-medium text-slate-500">{label}</span>
-      <span className="text-sm font-bold tabular-nums text-slate-950">
+      <span className="text-xs font-medium text-[var(--portal-text-muted)]">{label}</span>
+      <span className="text-sm font-bold tabular-nums text-[var(--portal-text)]">
         {value}
       </span>
     </button>
@@ -743,12 +852,12 @@ function QuickLink({ icon: Icon, label, hint, onClick }) {
       type="button"
       onClick={onClick}
       title={hint ? `${label} — ${hint}` : label}
-      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-slate-50/90 px-2.5 py-1.5 text-left transition hover:border-blue-300 hover:bg-blue-50"
+      className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-[var(--portal-surface-muted)] px-2.5 py-1.5 text-left transition hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]"
     >
-      <Icon className="h-3.5 w-3.5 text-slate-500" strokeWidth={1.75} />
-      <span className="text-xs font-semibold text-slate-800">{label}</span>
+      <Icon className="h-3.5 w-3.5 text-[var(--portal-text-muted)]" strokeWidth={1.75} />
+      <span className="text-xs font-semibold text-[var(--portal-text-soft)]">{label}</span>
       {hint ? (
-        <span className="hidden text-[10px] font-medium uppercase tracking-wide text-slate-400 sm:inline">
+        <span className="hidden text-[10px] font-medium uppercase tracking-wide text-[var(--portal-text-muted)] sm:inline">
           {hint}
         </span>
       ) : null}
@@ -767,17 +876,17 @@ function DashboardPanel({
   return (
     <div
       className={classNames(
-        "flex min-h-[11rem] flex-col rounded-2xl border border-slate-200/70 bg-white/95 p-4 shadow-soft backdrop-blur-sm lg:min-h-0",
+        "flex min-h-[11rem] flex-col rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface)] p-4 shadow-soft backdrop-blur-sm lg:min-h-0",
         className
       )}
     >
       <div className="mb-2 flex shrink-0 items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h2 className="text-[15px] font-bold tracking-tight text-slate-950">
+          <h2 className="text-[15px] font-bold tracking-tight text-[var(--portal-text)]">
             {title}
           </h2>
           {typeof count === "number" ? (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold tabular-nums text-slate-600">
+            <span className="rounded-full bg-[var(--portal-surface-muted)] px-2 py-0.5 text-[11px] font-bold tabular-nums text-[var(--portal-text-soft)]">
               {count}
             </span>
           ) : null}
@@ -786,7 +895,7 @@ function DashboardPanel({
           <button
             type="button"
             onClick={onAction}
-            className="text-sm font-bold text-blue-700 transition hover:text-blue-800"
+            className="text-sm font-bold text-[var(--portal-primary)] transition hover:text-[var(--portal-primary-hover)]"
           >
             {actionLabel}
           </button>
@@ -808,13 +917,13 @@ function EmptyPanel({
 }) {
   return (
     <div className="flex h-full min-h-[9rem] flex-col items-center justify-center rounded-xl bg-[radial-gradient(ellipse_at_center,rgba(241,245,249,0.9)_0%,transparent_70%)] px-4 py-7 text-center">
-      <div className="rounded-2xl bg-gradient-to-br from-slate-100 to-white p-3.5 text-slate-500 shadow-soft ring-1 ring-slate-200/80">
+      <div className="rounded-2xl bg-gradient-to-br from-slate-100 to-white p-3.5 text-[var(--portal-text-muted)] shadow-soft ring-1 ring-slate-200/80">
         <Icon className="h-5 w-5" strokeWidth={1.75} />
       </div>
-      <p className="mt-3.5 text-sm font-bold tracking-tight text-slate-900">
+      <p className="mt-3.5 text-sm font-bold tracking-tight text-[var(--portal-text)]">
         {title}
       </p>
-      <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-slate-500">
+      <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-[var(--portal-text-muted)]">
         {message}
       </p>
       {primaryLabel || secondaryLabel ? (
@@ -823,7 +932,7 @@ function EmptyPanel({
             <button
               type="button"
               onClick={onPrimary}
-              className="rounded-xl bg-[#172b57] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-[#1f376c]"
+              className="rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-3.5 py-2 text-xs font-bold text-white shadow-sm transition hover:opacity-90"
             >
               {primaryLabel}
             </button>
@@ -832,7 +941,7 @@ function EmptyPanel({
             <button
               type="button"
               onClick={onSecondary}
-              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-[var(--portal-text-soft)] shadow-sm transition hover:bg-[var(--portal-surface-muted)]"
             >
               {secondaryLabel}
             </button>
@@ -850,13 +959,13 @@ function SearchSection({ title, children, empty }) {
 
   return (
     <div className="border-b border-slate-100 last:border-0">
-      <p className="bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+      <p className="bg-slate-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-[var(--portal-text-muted)]">
         {title}
       </p>
       {items.length > 0 ? (
         items
       ) : (
-        <p className="px-4 py-3 text-sm text-slate-500">{empty}</p>
+        <p className="px-4 py-3 text-sm text-[var(--portal-text-muted)]">{empty}</p>
       )}
     </div>
   );
@@ -867,16 +976,16 @@ function SearchRow({ title, description, meta, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50"
+      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--portal-surface-muted)]"
     >
       <div className="min-w-0">
-        <p className="truncate font-semibold text-slate-950">{title}</p>
+        <p className="truncate font-semibold text-[var(--portal-text)]">{title}</p>
         {description ? (
-          <p className="truncate text-sm text-slate-500">{description}</p>
+          <p className="truncate text-sm text-[var(--portal-text-muted)]">{description}</p>
         ) : null}
       </div>
       {meta ? (
-        <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-600">
+        <span className="shrink-0 rounded-full bg-[var(--portal-surface-muted)] px-2 py-1 text-xs font-bold text-[var(--portal-text-soft)]">
           {meta}
         </span>
       ) : (

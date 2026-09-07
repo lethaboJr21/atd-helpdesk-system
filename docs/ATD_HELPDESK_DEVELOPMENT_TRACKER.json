@@ -1,0 +1,238 @@
+{
+    "schemaVersion":  1,
+    "updatedAt":  "2026-09-01T11:26:04.8214413+02:00",
+    "project":  "ATD Helpdesk",
+    "currentMilestone":  {
+                             "id":  "post-deployment-functional-validation-and-hardening",
+                             "name":  "Post-deployment functional validation and hardening",
+                             "status":  "READY",
+                             "nextScript":  208,
+                             "milestoneValidationScript":  208,
+                             "serverPushAndReadmeScript":  207
+                         },
+    "completedThrough":  207,
+    "currentCheckpoint":  207,
+    "policies":  {
+                     "consolidatedMilestoneTesting":  true,
+                     "readmeAtMilestoneBoundary":  true,
+                     "floatingActivityPopupPriority":  true,
+                     "undoRequiresTransactionalInverse":  true,
+                     "controlledBackend":  {
+                                               "DISABLE_BACKGROUND_JOBS":  "1",
+                                               "EMAIL_ENABLED":  "false"
+                                           }
+                 },
+    "workItems":  [
+                      {
+                          "script":  184,
+                          "name":  "Ticket review before submission",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  185,
+                          "name":  "Priority SLA policy",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  186,
+                          "name":  "Governed lifecycle emails",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  187,
+                          "name":  "Email replies and recipient switching",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  188,
+                          "name":  "Acceptance cards and previews",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  189,
+                          "name":  "Sticky list shell",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  190,
+                          "name":  "Ticket activity popup",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  191,
+                          "name":  "Transactional Undo",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  192,
+                          "name":  "Consolidated infrastructure and production validation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  193,
+                          "name":  "Deployment context, server inspection and release preparation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  194,
+                          "name":  "Server deployment context inspection",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  195,
+                          "name":  "Deployment detail inspection",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  196,
+                          "name":  "Serving and restart-path inspection",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  197,
+                          "name":  "Controlled runtime release package",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  198,
+                          "name":  "Verified remote rollback backup",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  199,
+                          "name":  "Remote release staging and verification",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  200,
+                          "name":  "Activation preflight",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  201,
+                          "name":  "Migration and activation safety validation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  202,
+                          "name":  "Additive migrations and source staging",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  203,
+                          "name":  "Backend cutover and health verification",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  204,
+                          "name":  "Public frontend activation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  205,
+                          "name":  "Consolidated production validation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  206,
+                          "name":  "Milestone closure report",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  207,
+                          "name":  "Tracker and README deployment update",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  208,
+                          "name":  "Consolidated role-based functional validation",
+                          "status":  "READY"
+                      }
+                  ],
+    "latestProductionDeployment":  {
+                                       "deployedAt":  "2026-09-01T11:01:52+02:00",
+                                       "release":  "atd-helpdesk-runtime-release-20260901-090118",
+                                       "archiveSha256":  "9A6763700789CED96E030DB526CF10113B95DD938D84F79A600E274C82AD1E5D",
+                                       "publicIndexSha256":  "578A308C6FEF2BED7D7028862F348D136E0A1FF5F7C1D6FD586DC615C3E9F90D",
+                                       "rollbackPath":  "/home/atdadmin/atd-helpdesk-backups/pre-release-20260901-091236",
+                                       "productionValidation":  {
+                                                                    "passes":  18,
+                                                                    "warnings":  10,
+                                                                    "failures":  0,
+                                                                    "result":  "PASS"
+                                                                },
+                                       "pm2":  {
+                                                   "application":  "atd-helpdesk-api",
+                                                   "pid":  1164117,
+                                                   "status":  "online"
+                                               },
+                                       "migrationsCommitted":  [
+                                                                   "2026-08-assignment-acceptance-access-foundation.sql",
+                                                                   "2026-08-email-replies-and-recipient-switching.sql",
+                                                                   "2026-08-first-login-onboarding.sql",
+                                                                   "2026-08-guided-routing-foundation.sql",
+                                                                   "2026-08-priority-sla-policy.sql",
+                                                                   "2026-08-terms-governance.sql",
+                                                                   "191_transaction_safe_undo.sql"
+                                                               ],
+                                       "migrationExcluded":  "2026-08-corrected-guided-request-routing.sql",
+                                       "excludedMigrationReason":  "Contains controlled UPDATE and DELETE statements affecting support groups and routing rules; manual business-data review required.",
+                                       "openItems":  [
+                                                         "Controlled production lifecycle-email delivery validation",
+                                                         "Production inbound email-to-ticket validation",
+                                                         "Bedliner DNS resolution for atd-sql01",
+                                                         "Apache SSL private-key repair and successful configtest",
+                                                         "PM2 reboot-persistence repair",
+                                                         "Business-data review of the excluded corrected guided-routing migration",
+                                                         "Consolidated role-based functional milestone testing",
+                                                         "Syspro service-specific response SLA resolver",
+                                                         "Base-less route redirect compatibility",
+                                                         "Survey and background-job validation",
+                                                         "Expanded Undo coverage beyond status and priority",
+                                                         "Dashboard customisation, named layout templates, themes and universal UX batch",
+                                                         "Frontend bundle code splitting and chunk optimisation"
+                                                     ]
+                                   },
+    "recentMilestone":  {
+                            "id":  338,
+                            "status":  "implemented",
+                            "features":  [
+                                             "avatar-crop-fit-zoom",
+                                             "profile-media-modal-isolation",
+                                             "ticket-monitor-sticky-headings",
+                                             "ticket-workspace-list-kanban-select",
+                                             "semantic-priority-theme"
+                                         ],
+                            "deferred":  [
+                                             "governed-ticket-bulk-endpoints",
+                                             "announcement-identity-card"
+                                         ]
+                        },
+    "latestValidatedMilestone":  {
+                                     "id":  345,
+                                     "name":  "SLA Kanban and Dashboard Overdue",
+                                     "status":  "validated",
+                                     "validatedAt":  "2026-09-07T13:29:46+02:00",
+                                     "features":  [
+                                                      "ticket-workspace-theme-priority-bubbles",
+                                                      "kanban-assignee-and-ticket-due",
+                                                      "sla-countdown-green-orange-red-overdue",
+                                                      "confirmed-governed-kanban-drag-drop",
+                                                      "sticky-kanban-column-headings",
+                                                      "dashboard-overdue-tickets"
+                                                  ],
+                                     "validation":  {
+                                                        "frontendBuild":  "passed",
+                                                        "backendStatsSyntax":  "passed",
+                                                        "report":  "reports/ATD_HELPDESK_SCRIPT_348_VALIDATE_SLA_KANBAN_DASHBOARD_OVERDUE_V4_20260907-132946.txt"
+                                                    },
+                                     "deferred":  [
+                                                      "governed-dashboard-priority-queue-bulk-endpoints",
+                                                      "requestor-department-expanded-filters",
+                                                      "expanded-announcements-platform",
+                                                      "microsoft-directory-weekly-change-journal",
+                                                      "cartoon-avatar-library"
+                                                  ]
+                                 },
+    "lastUpdated":  "2026-09-07T13:29:46+02:00"
+}

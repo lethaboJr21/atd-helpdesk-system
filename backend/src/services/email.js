@@ -1,3 +1,4 @@
+
 const dns = require("dns");
 const nodemailer = require("nodemailer");
 
@@ -102,6 +103,9 @@ function categoryPreferenceKey(category) {
     account_approval: "administrative_emails",
     welcome: "administrative_emails",
     requester_update: "ticket_update_emails",
+    ticket_created: "ticket_update_emails",
+    assignment_proposed: "assignment_emails",
+    assignment_accepted: "assignment_emails",
   })[category] || null;
 }
 
@@ -357,6 +361,22 @@ async function sendTicketAssignmentEmail({ recipients, ticket, groupName }) {
   });
 }
 
+async function sendTicketCreatedEmail({ requester, ticket, attachmentCount = 0 }) {
+  const reference = ticket?.ticket_ref || `TICKET-${ticket?.id}`;
+  const ticketUrl = `${PUBLIC_PORTAL_URL}/tickets/${ticket?.id}`;
+  const myTicketsUrl = `${PUBLIC_PORTAL_URL}/tickets?view=mine`;
+  const rows = [
+    ["Request type", ticket?.ticket_type || "Request"], ["Category", [ticket?.category,ticket?.sub_category,ticket?.item_category].filter(Boolean).join(" / ") || "Not classified"],
+    ["Priority", ticket?.priority || "Medium"], ["Status", ticket?.status || "Open"], ["Workspace", ticket?.workspace || "IT"],
+    ["Support group", ticket?.assigned_group_name || "Not available"], ["Assigned agent", ticket?.assigned_to_name || "Not available"],
+    ["Attachments", String(Number(attachmentCount) || 0)], ["Created", new Date(ticket?.created_at || Date.now()).toLocaleString("en-ZA", { timeZone: "Africa/Johannesburg" })],
+  ];
+  const table = rows.map(([label,value]) => `<tr><td style="padding:7px 12px;color:#64748b">${escapeHtml(label)}</td><td style="padding:7px 12px;font-weight:600">${escapeHtml(value)}</td></tr>`).join("");
+  return sendMailSafe({ to: requester?.email || ticket?.requester_email, category:"ticket_created", subject:`Request received - ${reference}`,
+    html:`<div style="font-family:Segoe UI,Arial,sans-serif;color:#0f172a;line-height:1.55"><h2>We received your request</h2><p>Hi ${escapeHtml(requester?.name || ticket?.requester_name || "there")},</p><p>Your request was created successfully.</p><p><strong>${escapeHtml(reference)}</strong><br>${escapeHtml(ticket?.title || "Untitled request")}</p><div style="padding:12px;background:#f8fafc;border-radius:8px;white-space:pre-wrap">${escapeHtml(ticket?.description || "")}</div><table style="margin:16px 0;border-collapse:collapse">${table}</table><p><a href="${ticketUrl}" style="background:#172b57;color:white;padding:10px 16px;text-decoration:none;border-radius:8px">Open Ticket</a> &nbsp; <a href="${myTicketsUrl}">My Tickets</a></p></div>`,
+    text:`We received your request.\n${reference}\n${ticket?.title || ""}\n\n${ticket?.description || ""}\n\n${rows.map(([a,b])=>`${a}: ${b}`).join("\n")}\n\nOpen: ${ticketUrl}\nMy Tickets: ${myTicketsUrl}` });
+}
+
 module.exports = {
   EMAIL_PROVIDER,
   isEmailConfigured,
@@ -367,5 +387,6 @@ module.exports = {
   sendApprovalEmail,
   sendAccountRequestReceivedEmail,
   sendTicketAssignmentEmail,
+  sendTicketCreatedEmail,
   sendM365WelcomeEmail,
 };

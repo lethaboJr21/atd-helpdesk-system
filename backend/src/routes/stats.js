@@ -12,6 +12,7 @@ router.get('/dashboard', async (req, res) => {
         COUNT(*)::int AS total,
         COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed'))::int AS open_tickets,
         COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed') AND priority = 'Critical')::int AS critical_tickets,
+      COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed') AND due_at IS NOT NULL AND due_at <= NOW())::int AS overdue_tickets,
         COUNT(*) FILTER (
           WHERE status NOT IN ('Resolved','Closed')
             AND (priority = 'Critical' OR (due_at IS NOT NULL AND due_at < NOW()))
@@ -53,12 +54,14 @@ router.get('/dashboard', async (req, res) => {
       critical: row.critical_at_risk,
       criticalTickets: row.critical_tickets,
       slaCompliance: withDue ? `${Math.round((withinSla / withDue) * 100)}%` : 'N/A',
+      overdueTickets: Number(row.overdue_tickets) || 0,
       averageResolution,
       scope: 'all_helpdesk',
       scopeLabel: 'All Helpdesk tickets',
       definitions: {
         open: "Tickets whose status is not Resolved or Closed.",
         slaCompliance: "Due-dated tickets completed on time or not yet overdue.",
+        overdueTickets: "Unresolved tickets whose governed resolution due time has been exhausted.",
         critical: "Open tickets with Critical priority or an overdue due date.",
         averageResolution: "Average time from ticket creation to resolution or closure.",
       },

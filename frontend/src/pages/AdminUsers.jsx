@@ -21,6 +21,7 @@ import UserActionMenu from "../components/UserActionMenu";
 import UserEditDialog from "../components/UserEditDialog";
 import { useAuth } from "../hooks/useAuth";
 import { azureApi, userApi } from "../services/api";
+import AdminUniversalHeader from "../components/admin/AdminUniversalHeader";
 
 const VIEWS = [
   { id: "pending", label: "Pending Signups", icon: UserCheck, countKey: "pending" },
@@ -77,8 +78,8 @@ function PaginationBar({ pagination, loading, onPageChange }) {
   if (!pagination || pagination.total <= 0) return null;
   const pages = pageWindow(pagination.page, pagination.totalPages);
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
-      <p className="text-sm text-slate-600">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t portal-border portal-surface-muted px-4 py-3">
+      <p className="text-sm portal-copy">
         Page <span className="font-bold text-slate-950">{pagination.page}</span> of{" "}
         <span className="font-bold text-slate-950">{pagination.totalPages}</span>
         {" · "}
@@ -91,7 +92,7 @@ function PaginationBar({ pagination, loading, onPageChange }) {
           type="button"
           disabled={pagination.page <= 1 || loading}
           onClick={() => onPageChange(pagination.page - 1)}
-          className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-xl border portal-surface-raised px-3 py-2 text-sm font-bold disabled:opacity-40"
         >
           <ChevronLeft className="h-4 w-4" /> Previous
         </button>
@@ -107,8 +108,8 @@ function PaginationBar({ pagination, loading, onPageChange }) {
                 onClick={() => onPageChange(pageNumber)}
                 className={
                   pageNumber === pagination.page
-                    ? "min-w-9 rounded-xl bg-blue-600 px-3 py-2 text-sm font-bold text-white"
-                    : "min-w-9 rounded-xl border bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                    ? "min-w-9 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-3 py-2 text-sm font-bold text-white"
+                    : "min-w-9 rounded-xl border portal-surface-raised px-3 py-2 text-sm font-bold portal-copy hover:portal-surface-muted"
                 }
               >
                 {pageNumber}
@@ -120,7 +121,7 @@ function PaginationBar({ pagination, loading, onPageChange }) {
           type="button"
           disabled={pagination.page >= pagination.totalPages || loading}
           onClick={() => onPageChange(pagination.page + 1)}
-          className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-2 text-sm font-bold disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-xl border portal-surface-raised px-3 py-2 text-sm font-bold disabled:opacity-40"
         >
           Next <ChevronRight className="h-4 w-4" />
         </button>
@@ -360,27 +361,27 @@ export default function AdminUsers() {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-100 p-4 xl:p-5">
+    <div className="flex h-screen flex-col overflow-hidden portal-surface-muted p-4 xl:p-5"><AdminUniversalHeader title="User Administration" />
       <div className="mx-auto flex h-full w-full max-w-[1700px] min-h-0 flex-col">
         <header className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div>
             <button
               type="button"
               onClick={() => navigate("/admin")}
-              className="mb-2 inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              className="mb-2 inline-flex items-center gap-2 rounded-xl border portal-surface-raised px-3 py-2 text-sm font-bold portal-copy hover:portal-surface-muted"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to Admin Settings
             </button>
-            <p className="text-sm font-semibold text-blue-700">Administration</p>
+            <p className="text-sm font-semibold text-[var(--portal-primary)]">Administration</p>
             <h1 className="mt-0.5 text-2xl font-bold text-slate-950 xl:text-3xl">User Administration</h1>
-            <p className="mt-0.5 text-sm text-slate-500">Manage accounts, roles, access layouts and communication preferences.</p>
+            <p className="mt-0.5 text-sm portal-muted">Manage accounts, roles, access layouts and communication preferences.</p>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={load} disabled={loading} className="rounded-xl border bg-white px-4 py-2.5 text-sm font-bold disabled:opacity-60">
+            <button type="button" onClick={load} disabled={loading} className="rounded-xl border portal-surface-raised px-4 py-2.5 text-sm font-bold disabled:opacity-60">
               <RefreshCw className={`mr-2 inline h-4 w-4 ${loading ? "animate-spin" : ""}`} />Refresh
             </button>
-            <button type="button" onClick={syncMicrosoft} disabled={syncing} className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
+            <button type="button" onClick={syncMicrosoft} disabled={syncing} className="rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60">
               <RefreshCw className={`mr-2 inline h-4 w-4 ${syncing ? "animate-spin" : ""}`} />Sync Microsoft 365
             </button>
           </div>
@@ -401,43 +402,43 @@ export default function AdminUsers() {
                 type="button"
                 title={item.hint || item.label}
                 onClick={() => changeView(item.id)}
-                className={`rounded-xl border px-3 py-3 text-left shadow-sm ${view === item.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-white"}`}
+                className={`rounded-xl border px-3 py-3 text-left shadow-sm ${view === item.id ? "border-[var(--portal-primary)] bg-[var(--portal-selected-bg)]" : "portal-border portal-surface-raised"}`}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <Icon className="h-4 w-4 text-blue-700" />
+                  <Icon className="h-4 w-4 text-[var(--portal-primary)]" />
                   <p className="text-2xl font-bold text-slate-950">{meta.summary?.[item.countKey] || 0}</p>
                 </div>
-                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">{item.label}</p>
+                <p className="mt-1 text-[11px] font-bold uppercase tracking-wide portal-muted">{item.label}</p>
               </button>
             );
           })}
         </section>
 
         <div className="mt-3 grid min-h-0 flex-1 gap-4 lg:grid-cols-[250px_1fr]">
-          <aside className="min-h-0 overflow-y-auto rounded-2xl border bg-white p-2 shadow-sm">
+          <aside className="min-h-0 overflow-y-auto rounded-2xl border portal-surface-raised p-2 shadow-sm">
             {VIEWS.map((item) => {
               const Icon = item.icon;
               return (
-                <button key={item.id} type="button" onClick={() => changeView(item.id)} className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-bold ${view === item.id ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}>
+                <button key={item.id} type="button" onClick={() => changeView(item.id)} className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm font-bold ${view === item.id ? "portal-accent-fill bg-[var(--portal-primary)] text-white" : "portal-copy hover:portal-surface-muted"}`}>
                   <span className="flex items-center gap-2"><Icon className="h-4 w-4" />{item.label}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${view === item.id ? "bg-white/20" : "bg-slate-100"}`}>{meta.summary?.[item.countKey] || 0}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs ${view === item.id ? "portal-surface-raised/20" : "portal-surface-muted"}`}>{meta.summary?.[item.countKey] || 0}</span>
                 </button>
               );
             })}
           </aside>
 
-          <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border bg-white shadow-sm">
-            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b bg-white p-3">
+          <main className="flex min-h-0 flex-col overflow-hidden rounded-2xl border portal-surface-raised shadow-sm">
+            <div className="flex shrink-0 flex-wrap items-center gap-3 border-b portal-surface-raised p-3">
               <div className="relative min-w-[240px] flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, email, department or employee number" className="w-full rounded-xl border py-2.5 pl-10 pr-3 text-sm" />
               </div>
               {selectedIds.length > 0 && isAdmin && (
-                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-2">
-                  <span className="px-2 text-sm font-bold text-blue-800">{selectedIds.length} selected</span>
-                  <button type="button" disabled={bulkBusy} onClick={promptBulkRole} className="rounded-lg bg-white px-3 py-2 text-xs font-bold">Change role</button>
-                  <button type="button" disabled={bulkBusy} onClick={() => runBulkAction("deactivate", null, `Deactivate ${selectedIds.length} selected account(s)?`)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-amber-700">Deactivate</button>
-                  <button type="button" disabled={bulkBusy} onClick={() => runBulkAction("archive", null, `Archive ${selectedIds.length} selected account(s)?`)} className="rounded-lg bg-white px-3 py-2 text-xs font-bold text-red-700">Archive</button>
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--portal-selected-border)] bg-[var(--portal-selected-bg)] p-2">
+                  <span className="px-2 text-sm font-bold text-[var(--portal-primary-hover)]">{selectedIds.length} selected</span>
+                  <button type="button" disabled={bulkBusy} onClick={promptBulkRole} className="rounded-lg portal-surface-raised px-3 py-2 text-xs font-bold">Change role</button>
+                  <button type="button" disabled={bulkBusy} onClick={() => runBulkAction("deactivate", null, `Deactivate ${selectedIds.length} selected account(s)?`)} className="rounded-lg portal-surface-raised px-3 py-2 text-xs font-bold text-amber-700">Deactivate</button>
+                  <button type="button" disabled={bulkBusy} onClick={() => runBulkAction("archive", null, `Archive ${selectedIds.length} selected account(s)?`)} className="rounded-lg portal-surface-raised px-3 py-2 text-xs font-bold text-red-700">Archive</button>
                   <button type="button" onClick={() => setSelectedIds([])} className="rounded-lg px-3 py-2 text-xs font-bold">Clear</button>
                 </div>
               )}
@@ -445,30 +446,30 @@ export default function AdminUsers() {
 
             <div ref={tableScrollRef} className="min-h-0 flex-1 overflow-auto">
               <table className="w-full min-w-[1180px] text-left">
-                <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500 shadow-sm">
+                <thead className="sticky top-0 z-10 portal-surface-muted text-xs uppercase tracking-wide portal-muted shadow-sm">
                   <tr>
-                    <th className="w-12 bg-slate-50 p-4"><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all users on this page" /></th>
-                    <th className="bg-slate-50 p-4">Account</th>
-                    <th className="bg-slate-50 p-4">Department</th>
-                    <th className="bg-slate-50 p-4">Role</th>
-                    <th className="bg-slate-50 p-4">State</th>
-                    <th className="bg-slate-50 p-4">Last Login</th>
-                    <th className="bg-slate-50 p-4 text-right">Actions</th>
+                    <th className="w-12 portal-surface-muted p-4"><input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all users on this page" /></th>
+                    <th className="portal-surface-muted p-4">Account</th>
+                    <th className="portal-surface-muted p-4">Department</th>
+                    <th className="portal-surface-muted p-4">Role</th>
+                    <th className="portal-surface-muted p-4">State</th>
+                    <th className="portal-surface-muted p-4">Last Login</th>
+                    <th className="portal-surface-muted p-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {loading ? (
-                    <tr><td colSpan="7" className="p-10 text-center text-slate-500">Loading accounts...</td></tr>
+                    <tr><td colSpan="7" className="p-10 text-center portal-muted">Loading accounts...</td></tr>
                   ) : users.length === 0 ? (
-                    <tr><td colSpan="7" className="p-10 text-center text-slate-500">No accounts in this view.</td></tr>
+                    <tr><td colSpan="7" className="p-10 text-center portal-muted">No accounts in this view.</td></tr>
                   ) : users.map((account) => (
-                    <tr key={account.id} className="hover:bg-slate-50">
+                    <tr key={account.id} className="hover:portal-surface-muted">
                       <td className="p-4"><input type="checkbox" checked={selectedIds.includes(Number(account.id))} onChange={() => toggleUser(account.id)} aria-label={`Select ${account.name || account.email}`} /></td>
-                      <td className="p-4"><p className="font-bold text-slate-950">{account.name}</p><p className="text-sm text-slate-500">{account.email}</p><p className="mt-1 text-xs text-slate-400">{account.account_type || "person"}</p></td>
-                      <td className="p-4"><p className="font-semibold">{account.department || "Not assigned"}</p><p className="text-sm text-slate-500">{account.job_title || "No job title"}</p></td>
-                      <td className="p-4"><span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold">{ROLE_LABELS[account.role] || account.role}</span></td>
-                      <td className="p-4"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{getAccountStateLabel(account)}</span></td>
-                      <td className="p-4 text-sm text-slate-500">{account.last_login_at ? new Date(account.last_login_at).toLocaleString("en-ZA") : "Never"}</td>
+                      <td className="p-4"><p className="font-bold text-slate-950">{account.name}</p><p className="text-sm portal-muted">{account.email}</p><p className="mt-1 text-xs text-slate-400">{account.account_type || "person"}</p></td>
+                      <td className="p-4"><p className="font-semibold">{account.department || "Not assigned"}</p><p className="text-sm portal-muted">{account.job_title || "No job title"}</p></td>
+                      <td className="p-4"><span className="rounded-full portal-surface-muted px-2.5 py-1 text-xs font-bold">{ROLE_LABELS[account.role] || account.role}</span></td>
+                      <td className="p-4"><span className="rounded-full bg-[var(--portal-selected-bg)] px-2.5 py-1 text-xs font-bold text-[var(--portal-primary)]">{getAccountStateLabel(account)}</span></td>
+                      <td className="p-4 text-sm portal-muted">{account.last_login_at ? new Date(account.last_login_at).toLocaleString("en-ZA") : "Never"}</td>
                       <td className="p-4 text-right"><UserActionMenu actions={menuActions(account)} /></td>
                     </tr>
                   ))}

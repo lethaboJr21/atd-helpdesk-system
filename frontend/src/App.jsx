@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+
+import { useEffect, useState } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -16,6 +17,7 @@ import AdminHealthPage from "./pages/AdminHealthPage";
 import AdminMicrosoftDirectory from "./pages/AdminMicrosoftDirectory";
 import AdminSettings from "./pages/AdminSettings";
 import AdminUsers from "./pages/AdminUsers";
+import AccessRequestsPage from "./pages/AccessRequestsPage";
 import AssetsPage from "./pages/AssetsPage";
 import Dashboard from "./pages/Dashboard";
 import EmployeeAccessPreview from "./pages/EmployeeAccessPreview";
@@ -28,7 +30,11 @@ import TicketArchivePage from "./pages/TicketArchivePage";
 import TicketCreatePage from "./pages/TicketCreatePage";
 import TicketDetailPage from "./pages/TicketDetailPage";
 import TicketWorkspace from "./pages/TicketWorkspace";
+import TicketMonitorPage from "./pages/TicketMonitorPage";
 import WaitingApproval from "./pages/WaitingApproval";
+import TermsAcceptancePage from "./pages/TermsAcceptancePage";
+import FirstLoginOnboardingPage from "./pages/FirstLoginOnboardingPage";
+import { employeeExperienceApi, termsApi } from "./services/api";
 import GroupManagementPage from "./pages/GroupManagementPage";
 import Workspaces from "./pages/Workspaces";
 import WorkspaceDashboard from "./pages/WorkspaceDashboard";
@@ -95,26 +101,59 @@ function ExternalRedirect({ to }) {
   return <LoadingScreen message="Redirecting..." />;
 }
 
-function PrivateRoute({ children }) {
-  const {
-    isAuthenticated,
-    loading,
-    user,
-  } = useAuth();
-
-  if (loading) {
-    return <LoadingScreen />;
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return hasPortalAccess(user)
-    ? children
-    : <Navigate to="/waiting-approval" replace />;
+function GateUnavailable({ message, onRetry }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-white">
+      <div className="w-full max-w-lg rounded-3xl border border-amber-300/25 bg-[#10253a] p-7 text-center shadow-2xl">
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-300">Portal verification unavailable</p>
+        <h1 className="mt-3 text-2xl font-extrabold">Access could not be verified safely</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{message}</p>
+        <button type="button" onClick={onRetry} className="mt-5 rounded-xl bg-blue-600 px-5 py-2.5 font-bold text-white hover:bg-blue-500">Try again</button>
+      </div>
+    </div>
+  );
 }
-
+function PrivateRoute({ children }) {
+  const { isAuthenticated, loading, user } = useAuth();
+  const [gate, setGate] = useState({ loading: true, terms: null, onboarding: null, error: "" });
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!isAuthenticated) { setGate({ loading:false, terms:null, onboarding:null, error:"" }); return undefined; }
+    let active = true;
+    setGate((current) => ({ ...current, loading:true, error:"" }));
+    (async () => {
+      try {
+        const termsResponse = await termsApi.getCurrent();
+        if (!active) return;
+        if (termsResponse.data?.required) { setGate({loading:false,terms:termsResponse.data,onboarding:null,error:""}); return; }
+        const onboardingResponse = await employeeExperienceApi.getCurrent();
+        if (!active) return;
+        setGate({loading:false,terms:termsResponse.data,onboarding:onboardingResponse.data,error:""});
+      } catch (requestError) {
+        if (!active) return;
+        const status = requestError?.response?.status;
+        if (status === 401) {
+          localStorage.removeItem("token");
+          window.location.replace(`${window.location.origin}/helpdesk/login`);
+          return;
+        }
+        if (status === 428 || requestError?.response?.data?.code === "TERMS_ACCEPTANCE_REQUIRED") {
+          setGate({loading:false,terms:{required:true},onboarding:null,error:""});
+          return;
+        }
+        setGate({loading:false,terms:null,onboarding:null,error:requestError?.response?.data?.error || "The legal and first-login checks are temporarily unavailable. Portal content remains protected."});
+      }
+    })();
+    return () => { active = false; };
+  }, [isAuthenticated, retry]);
+  if (loading || gate.loading) return <LoadingScreen message="Verifying portal access..." />;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!hasPortalAccess(user)) return <Navigate to="/waiting-approval" replace />;
+  if (gate.error) return <GateUnavailable message={gate.error} onRetry={() => setRetry((value) => value + 1)} />;
+  if (gate.terms?.required) return <Navigate to="/terms" replace />;
+  if (gate.onboarding?.required) return <Navigate to="/onboarding" replace />;
+  return children;
+}
 function PublicRoute({ children }) {
   const {
     isAuthenticated,
@@ -246,10 +285,9 @@ function AppRoutes({ moduleBase }) {
         }
       />
 
-      <Route
-        path="/waiting-approval"
-        element={<WaitingApproval />}
-      />
+      <Route path="/waiting-approval" element={<WaitingApproval />} />
+      <Route path="/terms" element={<TermsAcceptancePage />} />
+      <Route path="/onboarding" element={<FirstLoginOnboardingPage />} />
 
       <Route
         path="/"
@@ -284,6 +322,17 @@ function AppRoutes({ moduleBase }) {
         path="/production"
         element={
           <ExternalRedirect to={MODULE_BASES.production} />
+        }
+      />
+
+      <Route
+        path="/ticket-monitor"
+        element={
+          <PrivateRoute>
+            <OperationsRoute>
+              <TicketMonitorPage />
+            </OperationsRoute>
+          </PrivateRoute>
         }
       />
 
@@ -415,6 +464,14 @@ function AppRoutes({ moduleBase }) {
           </PrivateRoute>
         }
       />
+      <Route
+        path="/access-requests"
+        element={
+          <PrivateRoute>
+            <AccessRequestsPage />
+          </PrivateRoute>
+        }
+      />
 
       <Route
         path="/admin"
@@ -542,5 +599,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-
-

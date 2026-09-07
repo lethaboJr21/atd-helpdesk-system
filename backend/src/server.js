@@ -30,8 +30,16 @@ const emailIntakeRoutes = require("./routes/emailIntake");
 const productionSyncRoutes = require("./routes/productionSync");
 const productionEventRoutes = require("./routes/productionEvents");
 const workspaceRoutes = require("./routes/workspaces"); // BATCH1_WORKSPACE_ROUTE_REQUIRE
-
+const companyCommunicationsRoutes = require("./routes/companyCommunications");
+const termsRoutes = require("./routes/terms");
+const employeeExperienceRoutes = require("./routes/employeeExperience");
+const requestRoutingRoutes = require("./routes/requestRouting");
+const assignmentAcceptanceRoutes = require("./routes/assignmentAcceptance");
+const operationalMonitorRoutes = require("./routes/operationalMonitor");
+const accessRequestRoutes = require("./routes/accessRequests");
+const profileMediaRoutes = require("./routes/profileMedia");
 const { startTicketReminderJob } = require("./services/ticketReminders");
+const { startCompanyCommunicationsScheduler } = require("./services/companyCommunications");
 const { startProductionSyncScheduler } = require("./services/productionSyncScheduler");
 const { EMAIL_PROVIDER, verifyEmailProvider } = require("./services/email");
 const { startEmailTicketIntakeScheduler } = require("./services/emailTicketIntake");
@@ -101,6 +109,12 @@ const apiLimiter = rateLimit({
 app.use("/api/auth/login", loginLimiter);
 app.use("/api", apiLimiter);
 app.use("/api/auth", authRoutes);
+app.use("/api/terms", termsRoutes);
+app.use("/api/employee-experience", employeeExperienceRoutes);
+app.use("/api/request-routing", requestRoutingRoutes);
+app.use("/api/assignment-acceptance", assignmentAcceptanceRoutes);
+app.use("/api/operational-monitor", operationalMonitorRoutes);
+app.use("/api/access-requests", accessRequestRoutes);
 app.use("/api/tickets", ticketRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/logs", logRoutes);
@@ -112,6 +126,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/admin-controls", adminControlsRoutes);
 app.use("/api/assets", assetRoutes);
 app.use("/api/workspaces", workspaceRoutes);
+app.use("/api/company-communications", companyCommunicationsRoutes);
 app.use("/api/catalog", catalogRoutes);
 app.use("/api/email-intake", emailIntakeRoutes);
 app.use("/api/archive", archiveRoutes);
@@ -120,6 +135,7 @@ app.use("/api/production/sync", productionSyncRoutes);
 app.use("/api/production/events", productionEventRoutes);
 
 app.use("/api/knowledge", require("./routes/knowledge"));
+app.use("/api/profile-media", auth, profileMediaRoutes);
 
 app.get("/api", (_request, response) => response.json({
   ok: true,
@@ -175,9 +191,12 @@ function startBackgroundJobs() {
   }
   try { startTicketReminderJob(); }
   catch (error) { console.error("Ticket reminder scheduler startup failed:", error.message); }
-  try { startProductionSyncScheduler();
-startEmailTicketIntakeScheduler(); }
+  try { startProductionSyncScheduler(); }
   catch (error) { console.error("Production sync scheduler startup failed:", error.message); }
+  try { startEmailTicketIntakeScheduler(); }
+  catch (error) { console.error("Email-to-ticket scheduler startup failed:", error.message); }
+  try { startCompanyCommunicationsScheduler(); }
+  catch (error) { console.error("Company communications scheduler startup failed:", error.message); }
 }
 
 server.listen(PORT, "127.0.0.1", async () => {

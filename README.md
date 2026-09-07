@@ -765,3 +765,107 @@ AdminUsers improvements:
 - Bulk approve, activate, deactivate, archive, restore, and role assignment
 - 50, 100, 200, or All employee views
 - Pagination for 50/100/200 views
+
+<!-- SCRIPT-207-PRODUCTION-STATUS-START -->
+## Production Release Status: 2026-09-01
+
+### Active release
+- Release: atd-helpdesk-runtime-release-20260901-090118
+- Archive SHA-256: 9A6763700789CED96E030DB526CF10113B95DD938D84F79A600E274C82AD1E5D
+- Public index SHA-256: 578A308C6FEF2BED7D7028862F348D136E0A1FF5F7C1D6FD586DC615C3E9F90D
+- Backend process: atd-helpdesk-api, validated online on PID 1164117
+- Production validation: 18 passes, 10 warnings, 0 failures
+- Rollback backup: /home/atdadmin/atd-helpdesk-backups/pre-release-20260901-091236
+
+### Deployment outcome
+The controlled production deployment completed successfully. The runtime package contained 327 files with zero prohibited matches. The production .env, runtime storage, existing backend dependencies, PM2 ecosystem configuration and Git metadata were preserved. Apache was not reloaded because its configuration test remains blocked by the missing SSL private key.
+
+The public frontend currently references:
+
+text
+static/index-COX_fOTs.js
+static/index-Nh_T78Qd.css
+
+
+The active public routes returned HTTP 200 during consolidated validation:
+
+text
+https://portal.atdalliance.co.za/helpdesk/
+https://portal.atdalliance.co.za/helpdesk/production
+https://portal.atdalliance.co.za/production/
+https://portal.atdalliance.co.za/helpdesk/api/health
+
+
+### Migration record
+The following additive migrations were committed in one transaction:
+
+- 2026-08-assignment-acceptance-access-foundation.sql
+- 2026-08-email-replies-and-recipient-switching.sql
+- 2026-08-first-login-onboarding.sql
+- 2026-08-guided-routing-foundation.sql
+- 2026-08-priority-sla-policy.sql
+- 2026-08-terms-governance.sql
+- 191_transaction_safe_undo.sql
+
+The migration 2026-08-corrected-guided-request-routing.sql was intentionally excluded because it contains controlled UPDATE and DELETE statements that affect Support Groups and routing rules. Do not execute it without a separate business-data review and backup plan.
+
+### Current deployment procedure
+The release used a controlled package, verified remote backup, isolated staging, additive migration allowlist, backend health cutover, public frontend activation and consolidated production validation. Do not use a blind generic migration run or a broad rsync --delete against the application root.
+
+For the current server:
+
+- Preserve /var/www/atd-helpdesk/backend/.env.
+- Preserve /var/www/atd-helpdesk/backend/storage.
+- Preserve /var/www/atd-helpdesk/backend/node_modules when dependency files are unchanged.
+- Preserve /var/www/atd-helpdesk/backend/ecosystem.config.js.
+- Restart the existing PM2 process by application name only.
+- Do not reload Apache while configuration testing fails.
+- Use /home/atdadmin/atd-helpdesk-backups/pre-release-20260901-091236 for rollback.
+
+### Known limitations and next work
+- Controlled production lifecycle-email delivery validation
+- Production inbound email-to-ticket validation
+- Bedliner DNS resolution for atd-sql01
+- Apache SSL private-key repair and successful configtest
+- PM2 reboot-persistence repair
+- Business-data review of the excluded corrected guided-routing migration
+- Consolidated role-based functional milestone testing
+- Syspro service-specific response SLA resolver
+- Base-less route redirect compatibility
+- Survey and background-job validation
+- Expanded Undo coverage beyond status and priority
+- Dashboard customisation, named layout templates, themes and universal UX batch
+- Frontend bundle code splitting and chunk optimisation
+
+### Next validation
+Script 208 will run the consolidated role-based functional milestone validation. Infrastructure, route, frontend provenance and database schema checks have passed, but full employee, agent, approver, manager and administrator workflow validation remains outstanding.
+<!-- SCRIPT-207-PRODUCTION-STATUS-END -->
+
+
+## Milestone update 2026-09-07
+- Added controlled avatar crop, fit, fill, zoom and modal isolation.
+- Added sticky Ticket Monitor headings.
+- Added Ticket Workspace List/Kanban, Select mode and current-page selection.
+- Added theme-aware semantic priority badges.
+- Governed bulk mutations remain deferred until dedicated ticket bulk endpoints exist.
+
+<!-- ATD-MILESTONE-SCRIPT-345-SLA-KANBAN-OVERDUE -->
+## Validated SLA, Kanban, and Overdue milestone
+
+- Ticket Workspace uses theme-aware Critical, High, Medium, and Low priority bubbles.
+- Kanban cards display assignee, Unassigned fallback, Ticket Due, and an SLA countdown gauge.
+- SLA gauge thresholds are green above 50% remaining, orange at or below 50%, red at or below 25%, and overdue at zero.
+- Governed Kanban drag-and-drop requires confirmation, uses the protected status endpoint, records activity, and exposes the existing Undo notification.
+- Direct drag to Resolved or Closed is blocked so governed completion requirements are not bypassed.
+- Kanban column names and ticket counts remain sticky while cards scroll.
+- Dashboard SLA Compliance has been replaced by authoritative Overdue Tickets using unresolved tickets with due_at at or before the current time.
+- Backend stats syntax and the frontend production build passed on 7 September 2026.
+- Deployment remains separate from validation. Reports, backups, release artifacts, and duplicate source files must not be committed.
+
+### Deferred after this deployment
+
+- Governed multi-ticket mutation endpoints and Dashboard Priority queue bulk operations.
+- Requestor Department and expanded reusable filters.
+- Company and Department announcement feeds, discussions, comments, checklists, email delivery, unread alerts, and persistent notification actions.
+- Microsoft Directory no-change journal and Monday 08:00 weekly report attachment.
+- Cartoon avatar library and announcement identity cards.

@@ -1,3 +1,4 @@
+
 const pool = require("../db/pool");
 
 const VALID_MODULES = new Set([
@@ -220,12 +221,18 @@ async function createTicketAssignmentNotifications({
   });
 }
 
+async function createTicketCreatedNotification({ ticket, requesterUserId, attachmentCount = 0 }) {
+  const reference = ticket.ticket_ref || `TICKET-${ticket.id}`;
+  return createNotifications({ recipientUserIds:[requesterUserId], type:"ticket_created", module:"helpdesk", message:`${reference} was created successfully.`, targetType:"ticket", targetId:ticket.id, targetUrl:`/tickets/${ticket.id}`, attachmentCount });
+}
+
 module.exports = {
   normalizeModule,
   normalizeRecipientIds,
   createNotifications,
   createAccountApprovalNotifications,
   createTicketAssignmentNotifications,
+  createTicketCreatedNotification,
   getAccountApprovalRecipientUserIds,
   getGroupMemberUserIds,
 };

@@ -73,15 +73,15 @@ export default function UserEditDialog({ account, roles, departments, onClose, o
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/60 p-4" role="dialog" aria-modal="true">
-      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+      <div className="max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-3xl portal-surface-raised shadow-2xl">
         <header className="flex items-start justify-between border-b p-6">
-          <div><p className="text-sm font-bold text-blue-700">User Administration</p><h2 className="mt-1 text-2xl font-bold">{account.name || account.email}</h2><p className="mt-1 text-sm text-slate-500">Edit identity information or assign a portal role.</p></div>
+          <div><p className="text-sm font-bold text-[var(--portal-primary)]">User Administration</p><h2 className="mt-1 text-2xl font-bold">{account.name || account.email}</h2><p className="mt-1 text-sm portal-muted">Edit identity information or assign a portal role.</p></div>
           <button type="button" onClick={onClose} className="rounded-xl border p-2" aria-label="Close"><X className="h-5 w-5" /></button>
         </header>
 
         <div className="flex gap-2 border-b p-4">
-          <button type="button" onClick={() => setSection("profile")} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold ${section === "profile" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}><UserCog className="h-4 w-4" />Profile</button>
-          <button type="button" onClick={() => setSection("role")} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold ${section === "role" ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"}`}><ShieldCheck className="h-4 w-4" />Role</button>
+          <button type="button" onClick={() => setSection("profile")} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold ${section === "profile" ? "portal-accent-fill bg-[var(--portal-primary)] text-white" : "portal-surface-muted portal-copy"}`}><UserCog className="h-4 w-4" />Profile</button>
+          <button type="button" onClick={() => setSection("role")} className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold ${section === "role" ? "portal-accent-fill bg-[var(--portal-primary)] text-white" : "portal-surface-muted portal-copy"}`}><ShieldCheck className="h-4 w-4" />Role</button>
         </div>
 
         <form onSubmit={submit} className="space-y-5 p-6">
@@ -109,14 +109,14 @@ export default function UserEditDialog({ account, roles, departments, onClose, o
                   {roles.map((role) => <option key={role} value={role}>{role}</option>)}
                 </select>
               </Field>
-              <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">{roleDescription}</div>
+              <div className="mt-4 rounded-xl border border-[var(--portal-selected-border)] bg-[var(--portal-selected-bg)] p-4 text-sm text-[var(--portal-primary-hover)]">{roleDescription}</div>
               {form.role === "superadmin" && <div className="mt-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm font-semibold text-red-700">Superadministrator is a protected role with full platform authority.</div>}
             </div>
           )}
 
           <div className="flex justify-end gap-3 border-t pt-5">
             <button type="button" onClick={onClose} disabled={busy} className="rounded-xl border px-5 py-3 text-sm font-bold">Cancel</button>
-            <button type="submit" disabled={busy || (section === "role" && !roles.length)} className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white disabled:opacity-60">{busy ? "Saving..." : approving && section === "role" ? "Approve Account" : "Save Changes"}</button>
+            <button type="submit" disabled={busy || (section === "role" && !roles.length)} className="rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-6 py-3 text-sm font-bold text-white disabled:opacity-60">{busy ? "Saving..." : approving && section === "role" ? "Approve Account" : "Save Changes"}</button>
           </div>
         </form>
       </div>
@@ -125,5 +125,5 @@ export default function UserEditDialog({ account, roles, departments, onClose, o
 }
 
 function Field({ label, children }) {
-  return <label className="block"><span className="text-sm font-bold text-slate-700">{label}</span><div className="mt-2">{children}</div></label>;
+  return <label className="block"><span className="text-sm font-bold portal-copy">{label}</span><div className="mt-2">{children}</div></label>;
 }

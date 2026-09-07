@@ -1,3 +1,4 @@
+
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
@@ -19,6 +20,9 @@ import {
 } from "lucide-react";
 
 import OperationsShell from "../components/OperationsShell";
+import AssignmentAcceptancePanel from "../components/tickets/AssignmentAcceptancePanel";
+import { useToast } from "../components/notifications/ToastProvider";
+import { showLatestTicketActivity } from "../components/notifications/ticketActivityToast";
 import { groupsApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
@@ -288,6 +292,7 @@ const inputClass =
 export default function TicketDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const { user, employeeView } = useAuth();
   const operationsUser = OPERATIONS_ROLES.has(user?.role) && !employeeView;
   const ticketsPath = operationsUser ? "/tickets" : "/tickets?view=mine";
@@ -303,7 +308,10 @@ export default function TicketDetailPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [reply, setReply] = useState("");
+  const [replyAction, setReplyAction] = useState("send");
   const [internalNote, setInternalNote] = useState(false);
+  const [emailParticipants, setEmailParticipants] = useState([]);
+  const [selectedRecipients, setSelectedRecipients] = useState([]);
   const [resolutionNote, setResolutionNote] = useState("");
   const [pendingFiles, setPendingFiles] = useState([]);
   const [edit, setEdit] = useState({
@@ -321,11 +329,12 @@ export default function TicketDetailPage() {
     setLoading(true);
     setError("");
     try {
-      const [ticketResponse, historyResponse, commentsResponse] =
+      const [ticketResponse, historyResponse, commentsResponse, participantsResponse] =
         await Promise.all([
           ticketsApi.getById(id),
           ticketsApi.getHistory(id).catch(() => ({ data: [] })),
           ticketsApi.getComments(id).catch(() => ({ data: [] })),
+          operationsUser ? ticketsApi.getEmailParticipants(id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
         ]);
       setTicket(ticketResponse.data);
       setAttachments(
@@ -339,6 +348,9 @@ export default function TicketDetailPage() {
       setComments(
         Array.isArray(commentsResponse.data) ? commentsResponse.data : []
       );
+      const participantRows = Array.isArray(participantsResponse.data) ? participantsResponse.data : [];
+      setEmailParticipants(participantRows);
+      setSelectedRecipients(participantRows.map((row) => row.email));
     } catch (requestError) {
       setError(getErrorMessage(requestError, "Ticket could not be loaded."));
       setTicket(null);
@@ -485,6 +497,7 @@ export default function TicketDetailPage() {
     try {
       await action();
       setSuccess(message);
+      await showLatestTicketActivity({toast,ticketsApi,ticketId:ticket.id,ticketRef:ticket.ticket_ref,fallback:message});
       await fetchTicket();
     } catch (requestError) {
       setError(getErrorMessage(requestError, "The ticket action failed."));
@@ -511,24 +524,14 @@ export default function TicketDetailPage() {
 
   const postReply = async () => {
     const body = reply.trim();
-    if (!body) {
-      setError("Write a message before posting.");
-      return;
-    }
-    await runAction(
-      () =>
-        ticketsApi.addComment(ticket.id, {
-          body,
-          isInternal: operationsUser && internalNote,
-        }),
-      operationsUser && internalNote
-        ? "Internal note posted."
-        : "Reply posted."
-    );
-    setReply("");
-    setInternalNote(false);
+    if (!body) { setError("Write a message before posting."); return; }
+    if (internalNote && replyAction !== "send") { setError("Internal notes cannot resolve or close a ticket."); return; }
+    await runAction(() => operationsUser
+      ? ticketsApi.replyAction(ticket.id, { body, isInternal: internalNote, action: replyAction, recipients: selectedRecipients })
+      : ticketsApi.addComment(ticket.id, { body, isInternal: false }),
+      internalNote ? "Internal note posted." : replyAction === "send_resolve" ? "Reply sent and ticket resolved." : replyAction === "send_close" ? "Reply sent and ticket closed." : "Reply posted.");
+    setReply(""); setInternalNote(false); setReplyAction("send");
   };
-
   const uploadPending = async () => {
     if (!pendingFiles.length) {
       setError("Choose at least one file to upload.");
@@ -1085,7 +1088,15 @@ export default function TicketDetailPage() {
             )}
 
             <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
-              <textarea
+              {operationsUser && !internalNote ? (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Email recipients</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {[ticket.requester_email, ticket.assigned_to_email, ...emailParticipants.map((row) => row.email)].filter(Boolean).filter((value,index,array)=>array.indexOf(value)===index).map((email)=><label key={email} className="inline-flex items-center gap-2 rounded-full border bg-white px-3 py-1.5 text-xs font-semibold"><input type="checkbox" checked={selectedRecipients.includes(email)} onChange={(event)=>setSelectedRecipients((current)=>event.target.checked?[...new Set([...current,email])]:current.filter((value)=>value!==email))}/>{email}</label>)}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">Internal notes never leave the portal. Additional recipients are governed in the People panel.</p>
+                </div>
+              ) : null}              <textarea
                 rows="3"
                 value={reply}
                 onChange={(event) => setReply(event.target.value)}
@@ -1113,16 +1124,10 @@ export default function TicketDetailPage() {
                 ) : (
                   <span />
                 )}
-                <button
-                  type="button"
-                  onClick={postReply}
-                  disabled={actionLoading || !reply.trim()}
-                  className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60"
-                  style={{ backgroundColor: BRAND }}
-                >
-                  <Send className="h-4 w-4" />
-                  Post
-                </button>
+                <div className="flex items-center gap-2">
+                  {operationsUser && !internalNote ? <select value={replyAction} onChange={(event) => setReplyAction(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700"><option value="send">Send</option><option value="send_resolve">Send and Resolve</option><option value="send_close">Send and Close</option></select> : null}
+                  <button type="button" onClick={postReply} disabled={actionLoading || !reply.trim()} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" style={{ backgroundColor: BRAND }}><Send className="h-4 w-4" />{internalNote ? "Post note" : replyAction === "send_resolve" ? "Send and Resolve" : replyAction === "send_close" ? "Send and Close" : "Send"}</button>
+                </div>
               </div>
             </div>
           </div>
@@ -1287,6 +1292,16 @@ export default function TicketDetailPage() {
         </section>
 
         <aside className="scroll-hidden space-y-4 xl:min-h-0 xl:overflow-y-auto xl:pb-2">
+          {operationsUser ? (
+            <AssignmentAcceptancePanel
+              ticketId={ticket.id}
+              ticket={ticket}
+              groups={groups}
+              currentUser={user}
+              operationsUser={operationsUser}
+              onChanged={fetchTicket}
+            />
+          ) : null}
           {operationsUser ? (
             <div className={cardClass}>
               <h2 className="text-lg font-bold text-slate-950">Actions</h2>

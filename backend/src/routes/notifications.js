@@ -54,7 +54,7 @@ router.get("/", async (request, response) => {
       `
       SELECT id, user_id, target_role, type, module, message,
              target_type, target_id, target_url, attachment_count,
-             is_read, read_at, created_at
+             is_read, read_at, action_payload, action_expires_at, created_at
       FROM notifications
       WHERE ${conditions.join(" AND ")}
       ORDER BY created_at DESC
@@ -92,6 +92,7 @@ router.patch("/read-all", async (request, response) => {
   try {
     await ensureNotificationColumns();
     const { parameters, conditions } = buildQueryContext(request);
+    conditions.push("COALESCE((action_payload->>'requiresAction')::boolean,FALSE)=FALSE");
     const result = await pool.query(
       `UPDATE notifications
        SET is_read = TRUE, read_at = COALESCE(read_at, NOW())
@@ -110,6 +111,7 @@ router.delete("/clear", async (request, response) => {
   try {
     await ensureNotificationColumns();
     const { parameters, conditions } = buildQueryContext(request);
+    conditions.push("(is_read=TRUE OR COALESCE((action_payload->>'requiresAction')::boolean,FALSE)=FALSE)");
     const result = await pool.query(
       `DELETE FROM notifications WHERE ${conditions.join(" AND ")} RETURNING id`,
       parameters

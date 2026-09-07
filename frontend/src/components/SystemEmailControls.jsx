@@ -15,6 +15,9 @@ const CATEGORY_OPTIONS = [
   ["account_approval", "Administrator approval alerts"],
   ["welcome", "Microsoft 365 welcome emails"],
   ["ticket_assignment", "Ticket assignment emails"],
+  ["ticket_created", "Requester ticket-created confirmations"],
+  ["assignment_proposed", "Proposed-assignee action emails"],
+  ["assignment_accepted", "Assignment-accepted confirmations"],
   ["ticket_update", "Ticket update emails"],
   ["reminder", "Reminder emails"],
   ["escalation", "Escalation emails"],
@@ -137,7 +140,7 @@ export default function SystemEmailControls({
 
   if (loading) {
     return (
-      <div className="rounded-2xl border bg-white p-6 text-slate-500">
+      <div className="rounded-2xl border portal-surface-raised p-6 portal-muted">
         Loading system email controls...
       </div>
     );
@@ -148,18 +151,18 @@ export default function SystemEmailControls({
       className={
         embedded
           ? "space-y-6"
-          : "rounded-2xl border bg-white p-6 shadow-sm"
+          : "rounded-2xl border portal-surface-raised p-6 shadow-sm"
       }
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm font-bold text-blue-700">
+          <p className="text-sm font-bold text-[var(--portal-primary)]">
             Communications Governance
           </p>
           <h2 className="mt-1 text-2xl font-bold text-slate-950">
             System Email Controls
           </h2>
-          <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
+          <p className="mt-2 max-w-3xl text-sm leading-6 portal-muted">
             Control whether email is delivered normally, redirected
             to testers, or disabled. In-app notifications remain
             available in every mode.
@@ -222,7 +225,7 @@ export default function SystemEmailControls({
                 setRecipientText(event.target.value)
               }
               placeholder="tester@atdalliance.co.za"
-              className="mt-3 w-full rounded-xl border border-amber-300 bg-white px-3 py-2"
+              className="mt-3 w-full rounded-xl border border-amber-300 portal-surface-raised px-3 py-2"
             />
           </label>
           <p className="mt-2 text-xs font-semibold text-amber-800">
@@ -248,7 +251,7 @@ export default function SystemEmailControls({
         <h3 className="text-lg font-bold text-slate-950">
           Email categories
         </h3>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="mt-1 text-sm portal-muted">
           Disabled categories are skipped even when the system is in
           Live or Testing mode.
         </p>
@@ -258,7 +261,7 @@ export default function SystemEmailControls({
               key={key}
               className="flex items-center justify-between gap-4 rounded-xl border p-4"
             >
-              <span className="font-semibold text-slate-800">
+              <span className="font-semibold portal-title">
                 {label}
               </span>
               <input
@@ -281,7 +284,7 @@ export default function SystemEmailControls({
           type="button"
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-bold text-white disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-6 py-3 text-sm font-bold text-white disabled:opacity-60"
         >
           <Save className="h-4 w-4" />
           {saving ? "Saving..." : "Save Email Controls"}
@@ -307,17 +310,17 @@ function ModeCard({
         active
           ? danger
             ? "border-red-500 bg-red-50"
-            : "border-blue-500 bg-blue-50"
-          : "border-slate-200 bg-white hover:border-blue-300"
+            : "border-[var(--portal-primary)] bg-[var(--portal-selected-bg)]"
+          : "portal-border portal-surface-raised hover:border-blue-300"
       }`}
     >
       <Icon
         className={`h-6 w-6 ${
-          danger ? "text-red-700" : "text-blue-700"
+          danger ? "text-red-700" : "text-[var(--portal-primary)]"
         }`}
       />
       <h3 className="mt-4 font-bold text-slate-950">{title}</h3>
-      <p className="mt-2 text-sm leading-5 text-slate-500">
+      <p className="mt-2 text-sm leading-5 portal-muted">
         {description}
       </p>
     </button>

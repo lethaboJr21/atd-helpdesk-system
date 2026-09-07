@@ -1,7 +1,9 @@
-﻿const jwt = require("jsonwebtoken");
-
+const jwt = require("jsonwebtoken");
 const pool = require("../db/pool");
-
+const OPERATIONAL_FEATURES = new Set(["operations_dashboard","ticket_workspace","asset_register","production_operations"]);
+const PROTECTED_FEATURES = new Set(["user_management","group_management","admin_settings","workspace_management"]);
+const OPERATIONAL_ROLES = new Set(["agent","operator","manager","admin","superadmin"]);
+function isItEligible(user) { const department=String(user?.department||"").trim().toLowerCase(); return OPERATIONAL_ROLES.has(user?.role)||department==="it"||department.startsWith("it ")||department.includes("information technology"); }
 const FEATURE_DEFAULTS = Object.freeze({
   employee_dashboard: true,
   my_tickets: true,
@@ -19,27 +21,34 @@ const FEATURE_DEFAULTS = Object.freeze({
   user_management: true,
   group_management: true,
   admin_settings: true,
-  workspace_management: true, // BATCH1_WORKSPACE_FEATURE
+  workspace_management: true,
 });
-
 async function getFeatureEntitlements(userId) {
   const result = await pool.query(
-    `SELECT feature_key, enabled
-       FROM user_feature_entitlements
-      WHERE user_id = $1`,
+    `SELECT feature_key, enabled, source, precedence
+       FROM (
+         SELECT feature_key, enabled, 'permanent'::text AS source, 1 AS precedence
+         FROM user_feature_entitlements
+         WHERE user_id = $1
+         UNION ALL
+         SELECT feature_key, enabled, 'temporary'::text AS source, 2 AS precedence
+         FROM temporary_feature_entitlements
+         WHERE user_id = $1
+           AND revoked_at IS NULL
+           AND starts_at <= NOW()
+           AND expires_at > NOW()
+       ) entitlement
+       ORDER BY feature_key, precedence`,
     [userId]
   );
-
-  return Object.fromEntries(
-    result.rows.map((row) => [row.feature_key, row.enabled])
-  );
+  const effective = {};
+  for (const row of result.rows) effective[row.feature_key] = row.enabled;
+  return effective;
 }
-
 function buildEffectiveFeatures(user, overrides) {
   const employee = user.role === "user";
   const operational = ["agent", "operator", "manager", "admin", "superadmin"].includes(user.role);
   const administrator = ["manager", "admin", "superadmin"].includes(user.role);
-
   const baseline = {
     ...FEATURE_DEFAULTS,
     operations_dashboard: operational,
@@ -49,9 +58,8 @@ function buildEffectiveFeatures(user, overrides) {
     user_management: administrator,
     group_management: administrator,
     admin_settings: administrator,
-    workspace_management: administrator, // BATCH1_WORKSPACE_BASELINE
+    workspace_management: administrator,
   };
-
   if (employee) {
     baseline.operations_dashboard = false;
     baseline.ticket_workspace = false;
@@ -60,144 +68,55 @@ function buildEffectiveFeatures(user, overrides) {
     baseline.user_management = false;
     baseline.group_management = false;
     baseline.admin_settings = false;
-    baseline.workspace_management = false; // BATCH1_WORKSPACE_EMPLOYEE_DISABLED
+    baseline.workspace_management = false;
   }
-
   return Object.fromEntries(
     Object.entries(baseline).map(([key, value]) => [
       key,
       Object.prototype.hasOwnProperty.call(overrides, key)
-        ? Boolean(overrides[key]) && value
-        : value,
+        ? (PROTECTED_FEATURES.has(key)
+            ? Boolean(value)
+            : OPERATIONAL_FEATURES.has(key)
+            ? Boolean(overrides[key]) && isItEligible(user)
+            : Boolean(overrides[key]))
+        : Boolean(value),
     ])
   );
 }
-
 module.exports = async function authMiddleware(request, response, next) {
   const authorizationHeader = request.headers.authorization;
-
   if (!authorizationHeader || !authorizationHeader.startsWith("Bearer ")) {
-    return response.status(401).json({
-      code: "TOKEN_REQUIRED",
-      error: "Unauthorised - token required",
-    });
+    return response.status(401).json({ code: "TOKEN_REQUIRED", error: "Unauthorised - token required" });
   }
-
   const token = authorizationHeader.slice(7).trim();
-
-  if (!token) {
-    return response.status(401).json({
-      code: "TOKEN_REQUIRED",
-      error: "Unauthorised - token required",
-    });
-  }
-
+  if (!token) return response.status(401).json({ code: "TOKEN_REQUIRED", error: "Unauthorised - token required" });
   try {
-    if (!process.env.JWT_SECRET) {
-      throw new Error("JWT_SECRET is not configured.");
-    }
-
-    const payload = jwt.verify(token, process.env.JWT_SECRET, {
-      algorithms: ["HS256"],
-    });
-
+    if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is not configured.");
+    const payload = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
     const result = await pool.query(
-      `SELECT
-         id, name, email, role, status, approved, microsoft_id,
+      `SELECT id, name, email, role, department, status, approved, microsoft_id,
          microsoft_account_enabled, archived_at, last_login_at,
          account_type, deactivated_at
-       FROM users
-       WHERE id = $1
-       LIMIT 1`,
+       FROM users WHERE id = $1 LIMIT 1`,
       [payload.id]
     );
-
     const user = result.rows[0];
-
-    if (!user) {
-      return response.status(401).json({
-        code: "ACCOUNT_NOT_FOUND",
-        error: "Unauthorised - account no longer exists",
-      });
-    }
-
-    if (user.archived_at) {
-      return response.status(403).json({
-        code: "ACCOUNT_ARCHIVED",
-        error: "This account has been archived",
-      });
-    }
-
-    if (!user.approved || user.role === "pending") {
-      return response.status(403).json({
-        code: "ACCOUNT_PENDING",
-        error: "This account is awaiting approval",
-      });
-    }
-
-    if (user.status !== "active" || user.deactivated_at) {
-      return response.status(403).json({
-        code: "ACCOUNT_DEACTIVATED",
-        error: "This account is inactive or deactivated",
-      });
-    }
-
-    if (user.microsoft_account_enabled === false) {
-      return response.status(403).json({
-        code: "MICROSOFT_ACCOUNT_DISABLED",
-        error: "The linked Microsoft account is disabled",
-      });
-    }
-
-    if (user.account_type !== "person") {
-      return response.status(403).json({
-        code: "NON_PERSON_ACCOUNT",
-        error: "This account is not permitted to sign in interactively",
-      });
-    }
-
+    if (!user) return response.status(401).json({ code: "ACCOUNT_NOT_FOUND", error: "Unauthorised - account no longer exists" });
+    if (user.archived_at) return response.status(403).json({ code: "ACCOUNT_ARCHIVED", error: "This account has been archived" });
+    if (!user.approved || user.role === "pending") return response.status(403).json({ code: "ACCOUNT_PENDING", error: "This account is awaiting approval" });
+    if (user.status !== "active" || user.deactivated_at) return response.status(403).json({ code: "ACCOUNT_DEACTIVATED", error: "This account is inactive or deactivated" });
+    if (user.microsoft_account_enabled === false) return response.status(403).json({ code: "MICROSOFT_ACCOUNT_DISABLED", error: "The linked Microsoft account is disabled" });
+    if (user.account_type !== "person") return response.status(403).json({ code: "NON_PERSON_ACCOUNT", error: "This account is not permitted to sign in interactively" });
     let overrides = {};
-
-    try {
-      overrides = await getFeatureEntitlements(user.id);
-    } catch (featureError) {
-      if (featureError.code !== "42P01") {
-        throw featureError;
-      }
-    }
-
-    request.user = {
-      ...user,
-      features: buildEffectiveFeatures(user, overrides),
-    };
+    try { overrides = await getFeatureEntitlements(user.id); }
+    catch (featureError) { if (featureError.code !== "42P01") throw featureError; }
+    request.user = { ...user, features: buildEffectiveFeatures(user, overrides) };
     request.tokenPayload = payload;
-
     return next();
   } catch (error) {
-    if (error.name === "TokenExpiredError") {
-      return response.status(401).json({
-        code: "TOKEN_EXPIRED",
-        error: "Unauthorised - token expired",
-      });
-    }
-
-    if (error.name === "JsonWebTokenError") {
-      return response.status(401).json({
-        code: "TOKEN_INVALID",
-        error: "Unauthorised - invalid token",
-      });
-    }
-
-    console.error("Authentication middleware failed:", {
-      message: error.message,
-      code: error.code || null,
-    });
-
-    return response.status(500).json({
-      error: "Authentication validation failed",
-    });
+    if (error.name === "TokenExpiredError") return response.status(401).json({ code: "TOKEN_EXPIRED", error: "Unauthorised - token expired" });
+    if (error.name === "JsonWebTokenError") return response.status(401).json({ code: "TOKEN_INVALID", error: "Unauthorised - invalid token" });
+    console.error("Authentication middleware failed:", { message: error.message, code: error.code || null });
+    return response.status(500).json({ error: "Authentication validation failed" });
   }
 };
-
-
-

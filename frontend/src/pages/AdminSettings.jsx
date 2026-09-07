@@ -13,6 +13,8 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import SystemEmailControls from "../components/SystemEmailControls";
+import CompanyCommunicationsPanel from "../components/CompanyCommunicationsPanel";
+import AdminUniversalHeader from "../components/admin/AdminUniversalHeader";
 
 const ITEMS = [
   {
@@ -56,6 +58,13 @@ const ITEMS = [
     available: true,
   },
   {
+    icon: Mail,
+    title: "Company Communications",
+    description: "Draft, preview, test, schedule and audit transition communications.",
+    action: "communications",
+    available: true,
+  },
+  {
     icon: Activity,
     title: "Audit Activity",
     description:
@@ -79,32 +88,32 @@ export default function AdminSettings() {
 
   const activateItem = (item) => {
     if (!item.available) return;
-    if (item.action === "email") {
-      setPanel("email");
+    if (item.action === "email" || item.action === "communications") {
+      setPanel(item.action);
       return;
     }
     if (item.path) navigate(item.path);
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-5 xl:p-8">
+    <div className="portal-shell min-h-screen p-5 xl:p-8"><AdminUniversalHeader title="Administration" />
       <div className="mx-auto max-w-6xl">
         <button
           type="button"
           onClick={() => navigate("/")}
-          className="mb-4 inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2 text-sm font-bold"
+          className="mb-4 inline-flex items-center gap-2 rounded-xl border portal-surface-raised px-4 py-2 text-sm font-bold"
         >
           <ArrowLeft className="h-4 w-4" />
           Back to Dashboard
         </button>
 
-        <p className="text-sm font-semibold text-blue-700">
+        <p className="text-sm font-semibold text-[var(--portal-primary)]">
           Administration
         </p>
         <h1 className="mt-1 text-3xl font-bold text-slate-950">
           Admin Settings
         </h1>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+        <p className="mt-2 max-w-2xl text-sm leading-6 portal-muted">
           Manage access, directory integration, notification delivery
           and platform governance.
         </p>
@@ -118,19 +127,19 @@ export default function AdminSettings() {
                 type="button"
                 onClick={() => activateItem(item)}
                 disabled={!item.available}
-                className="rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-2xl border portal-border portal-surface-raised p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-[var(--portal-selected-bg)] disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <div className="inline-flex rounded-xl bg-blue-100 p-3 text-blue-700">
+                <div className="inline-flex rounded-xl bg-[var(--portal-selected-bg)] p-3 text-[var(--portal-primary)]">
                   <Icon className="h-6 w-6" />
                 </div>
                 <h2 className="mt-4 font-bold text-slate-950">
                   {item.title}
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-2 text-sm leading-6 portal-muted">
                   {item.description}
                 </p>
                 {!item.available && (
-                  <span className="mt-4 inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">
+                  <span className="mt-4 inline-flex rounded-full portal-surface-muted px-2.5 py-1 text-xs font-bold portal-muted">
                     Coming soon
                   </span>
                 )}
@@ -140,20 +149,20 @@ export default function AdminSettings() {
         </section>
       </div>
 
-      {panel === "email" && (
+      {(panel === "email" || panel === "communications") && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl bg-white shadow-2xl">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl portal-surface-raised shadow-2xl">
             <header className="flex items-center justify-between border-b p-5">
               <div>
-                <p className="text-sm font-bold text-blue-700">
+                <p className="text-sm font-bold text-[var(--portal-primary)]">
                   Admin Settings
                 </p>
                 <h2 className="text-xl font-bold">
-                  Company Email Governance
+                  {panel === "email" ? "Company Email Governance" : "Company Communications"}
                 </h2>
               </div>
               <button
@@ -166,7 +175,7 @@ export default function AdminSettings() {
               </button>
             </header>
             <div className="p-6">
-              <SystemEmailControls embedded />
+              {panel === "email" ? <SystemEmailControls embedded /> : <CompanyCommunicationsPanel />}
             </div>
           </div>
         </div>

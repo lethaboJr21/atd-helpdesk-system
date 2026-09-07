@@ -41,6 +41,7 @@ export const ticketsApi = {
   getMyModules: () => api.get("/tickets/my-modules"),
   getById: (id) => api.get(`/tickets/${id}`),
   getHistory: (id) => api.get(`/tickets/${id}/history`),
+  undoHistory: (id, historyId) => api.post(`/tickets/${id}/history/${historyId}/undo`, {}),
   create: (data, files = []) => {
     if (Array.isArray(files) && files.length > 0) {
       const body = new FormData();
@@ -92,6 +93,10 @@ export const ticketsApi = {
   },
   getComments: (id) => api.get(`/tickets/${id}/comments`),
   addComment: (id, data) => api.post(`/tickets/${id}/comments`, data),
+  replyAction: (id, data) => api.post(`/tickets/${id}/reply-action`, data),
+  getEmailParticipants: (id) => api.get(`/assignment-acceptance/${id}/email-participants`),
+  addEmailParticipant: (id, data) => api.post(`/assignment-acceptance/${id}/email-participants`, data),
+  removeEmailParticipant: (id, participantId) => api.delete(`/assignment-acceptance/${id}/email-participants/${participantId}`),
 };
 
 export const groupsApi = {
@@ -123,12 +128,33 @@ export const adminControlsApi = {
     api.get("/admin-controls/health"),
 };
 
-export const settingsApi = {
-  getEmailSettings: () =>
-    api.get("/settings/email"),
+export const accessRequestsApi = {
+  getFeatures: () => api.get("/access-requests/features"),
+  getMine: () => api.get("/access-requests/mine"),
+  getPending: () => api.get("/access-requests/pending"),
+  getById: (requestId) => api.get(`/access-requests/${requestId}`),
+  submit: (data) => api.post("/access-requests", data),
+  cancel: (requestId, reason) => api.post(`/access-requests/${requestId}/cancel`, { reason }),
+  decide: (requestId, data) => api.post(`/access-requests/${requestId}/decision`, data),
+  getMyTemporaryEntitlements: () => api.get("/access-requests/temporary-entitlements/mine"),
+  getTemporaryEntitlements: () => api.get("/access-requests/temporary-entitlements"),
+  reconcileTemporaryEntitlements: () => api.post("/access-requests/temporary-entitlements/reconcile", {}),
+  revokeTemporaryEntitlement: (entitlementId, reason) => api.post(`/access-requests/temporary-entitlements/${entitlementId}/revoke`, { reason }),
+  getEffective: (userId) => api.get(`/access-requests/effective/${userId}`),
+};
 
-  updateEmailSettings: (data) =>
-    api.put("/settings/email", data),
+export const settingsApi = {
+  getEmailSettings: () => api.get("/settings/email"),
+  updateEmailSettings: (data) => api.put("/settings/email", data),
+};
+export const companyCommunicationsApi = {
+  getAll: () => api.get("/company-communications"),
+  preview: (data) => api.post("/company-communications/preview", data),
+  create: (data) => api.post("/company-communications", data),
+  test: (id, to) => api.post(`/company-communications/${id}/test`, { to }),
+  schedule: (id, scheduledAt) => api.post(`/company-communications/${id}/schedule`, { scheduledAt }),
+  cancel: (id) => api.post(`/company-communications/${id}/cancel`, {}),
+  send: (id, confirmation) => api.post(`/company-communications/${id}/send`, { confirmation }),
 };
 
 
@@ -170,6 +196,15 @@ export const archiveApi = {
   getSyncRuns: () => api.get("/archive/sync-runs"),
 };
 
+export const employeeExperienceApi = {
+  getCurrent: () => api.get("/employee-experience/current"),
+  savePreferences: (data) => api.put("/employee-experience/preferences", data),
+  complete: (data) => api.post("/employee-experience/complete", data),
+  saveMonitorView: (monitorView) => api.put("/employee-experience/monitor-view", { monitorView }),
+};export const termsApi = {
+  getCurrent: () => api.get("/terms/current"),
+  accept: (documentIds) => api.post("/terms/accept", { documentIds }),
+};
 export const authApi = {
   login: (credentials) =>
      api.post("/auth/login", credentials),
@@ -273,3 +308,24 @@ export const workspacesApi = {
 };
 export default api;
 
+export const operationalMonitorApi = {
+  summary: () => api.get("/operational-monitor/summary"),
+  digestPreview: () => api.get("/operational-monitor/digest-preview"),
+  claim: (ticketId) => api.post(`/operational-monitor/tickets/${ticketId}/claim`),
+};
+
+export const profileMediaApi = {
+  metadata: (userId, mediaType) => api.get(`/profile-media/users/${userId}/${mediaType}/metadata`),
+  download: (userId, mediaType, revision) =>
+    api.get(`/profile-media/users/${userId}/${mediaType}`, {
+      params: { v: revision || 1 },
+      responseType: "blob",
+    }),
+  upload: (userId, mediaType, file, visibility = "portal") => {
+    const data = new FormData();
+    data.append("image", file);
+    data.append("visibility", visibility);
+    return api.post(`/profile-media/users/${userId}/${mediaType}`, data, { headers: { "Content-Type": "multipart/form-data" } });
+  },
+  remove: (userId, mediaType, reason) => api.delete(`/profile-media/users/${userId}/${mediaType}`, { data: { reason } }),
+};

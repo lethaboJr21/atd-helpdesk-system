@@ -4,7 +4,6 @@ import {
   ArrowRight,
   BookOpen,
   CheckCircle2,
-  ChevronDown,
   ClipboardList,
   FileText,
   Home,
@@ -45,6 +44,12 @@ const ALLOWED = [
 
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const SLA_PREVIEW = {
+  Critical: { response: "15 minutes", resolution: "4 hours" },
+  High: { response: "30 minutes", resolution: "8 hours" },
+  Medium: { response: "4 hours", resolution: "2 days" },
+  Low: { response: "8 hours", resolution: "5 days" },
+};
 
 const formatBytes = (bytes) => {
   if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -150,7 +155,7 @@ export default function TicketCreatePage({ lockedType = null }) {
   const [created, setCreated] = useState(null);
   const [fileNote, setFileNote] = useState("");
   const [dragActive, setDragActive] = useState(false);
-  const [showRouting, setShowRouting] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
   const errorRef = useRef(null);
   const [fields, setFields] = useState(DEFAULT_FIELDS);
   const [form, setForm] = useState({
@@ -534,6 +539,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     event.preventDefault();
     setError("");
     setDuplicateTicket(null);
+    setReviewing(false);
 
     if (!form.title.trim()) {
       return setError("A short summary is required.");
@@ -541,6 +547,12 @@ export default function TicketCreatePage({ lockedType = null }) {
 
     if (!form.description.trim()) {
       return setError("A detailed description is required.");
+    }
+    if (!form.assignedToUserId) {
+      return setError("Select an eligible agent before reviewing this request.");
+    }
+    if (!form.assignedGroupId) {
+      return setError("Select a support team for the chosen agent.");
     }
 
     if (ticketType === "incident" && !form.category) {
@@ -578,6 +590,11 @@ export default function TicketCreatePage({ lockedType = null }) {
       if (new Date(form.projectEnd) < new Date(form.projectStart)) return setError("Target completion must be after the project start date.");
       if (!form.projectScope.trim()) return setError("Project scope is required.");
       if (!form.projectDeliverables.trim()) return setError("Project deliverables are required.");
+    }
+    if (!reviewing) {
+      setReviewing(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
     }
     setSubmitting(true);
 
@@ -625,7 +642,7 @@ export default function TicketCreatePage({ lockedType = null }) {
           priority: form.priority,
           workspace: form.workspace,
           assignedGroupId: form.assignedGroupId || null,
-          assignedToUserId: form.assignedToUserId || null,
+          assignedToUserId: form.assignedToUserId,
           category,
           subCategory,
           itemCategory,
@@ -642,6 +659,7 @@ export default function TicketCreatePage({ lockedType = null }) {
         files
       );
       setCreated(response.data);
+      setReviewing(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (submitError) {
       const existing = submitError?.response?.data?.ticket;
@@ -664,6 +682,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     setFileNote("");
     setError("");
     setDuplicateTicket(null);
+    setReviewing(false);
     setForm((current) => ({
       ...current,
       title: "",
@@ -724,7 +743,127 @@ export default function TicketCreatePage({ lockedType = null }) {
   const assetReasons = fields.asset.reasons?.length
     ? fields.asset.reasons
     : ASSET_REASONS;
+  const selectedRequester = requesters.find(
+    (item) => String(item.id) === String(form.requesterId)
+  );
+  const selectedGroup = groups.find(
+    (item) => String(item.id) === String(form.assignedGroupId)
+  );
+  const selectedAgent = agents.find(
+    (item) => String(item.id) === String(form.assignedToUserId)
+  );
+  const reviewRequester = selectedRequester || user;
+  const slaPreview = SLA_PREVIEW[form.priority] || SLA_PREVIEW.Medium;
+  const reviewCategory =
+    ticketType === "service_request"
+      ? catalogItem?.ticketCategory || catalogItem?.categoryName || "Service Catalog"
+      : ticketType === "asset_request"
+        ? "Hardware Provisioning"
+        : ticketType === "project"
+          ? "Project Management"
+          : form.category || "Change";
+  const reviewSubCategory =
+    ticketType === "incident"
+      ? form.subCategory || null
+      : ticketType === "service_request"
+        ? catalogItem?.ticketSubCategory || catalogItem?.name || prefillTitle || null
+        : ticketType === "asset_request"
+          ? catalogItem?.name || form.assetItem || prefillTitle || null
+          : ticketType === "project"
+            ? form.projectObjective || null
+            : form.changeType || null;
 
+  if (reviewing && !created) {
+    return (
+      <OperationsShell
+        breadcrumb={`Home > ${module.label} > Review`}
+        title={`Review ${module.shortLabel}`}
+        contentClassName="bg-[#eef2f7] px-4 py-4 lg:px-6"
+      >
+        <div className="mx-auto max-w-6xl pb-10">
+          <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-soft">
+            <header className="border-b border-slate-100 bg-gradient-to-br from-[#172b57] to-[#1f376c] px-6 py-6 text-white sm:px-8">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-white/60">Final review</p>
+              <h1 className="mt-2 text-2xl font-bold">Check the request before it is logged</h1>
+              <p className="mt-2 max-w-3xl text-sm text-white/75">
+                No ticket has been created yet. Confirm the requester, classification, routing, recipients and attachments below.
+              </p>
+            </header>
+            <div className="grid gap-5 p-6 lg:grid-cols-2 sm:p-8">
+              <ReviewSection title="Request">
+                <ReviewRow label="Request type" value={module.label} />
+                <ReviewRow label="Requested for" value={reviewRequester?.name || reviewRequester?.email || "Current account"} />
+                <ReviewRow label="Subject" value={form.title.trim()} />
+                <ReviewRow label="Priority" value={form.priority} />
+                <ReviewRow label="Workspace" value={form.workspace} />
+                <ReviewRow label="Expected first response" value={slaPreview.response} />
+                <ReviewRow label="Expected resolution" value={slaPreview.resolution} />
+                <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">Targets are calculated from the selected priority when the ticket is created. The governed backend policy remains authoritative.</p>
+              </ReviewSection>
+              <ReviewSection title="Classification and routing">
+                <ReviewRow label="Category" value={reviewCategory || "Not specified"} />
+                <ReviewRow label="Subcategory" value={reviewSubCategory || "Not specified"} />
+                {ticketType === "incident" ? <ReviewRow label="Impact / urgency" value={`${form.impact} / ${form.urgency}`} /> : null}
+                <ReviewRow label="Support group" value={selectedGroup?.name || "Not selected"} />
+                <ReviewRow label="Selected agent" value={selectedAgent?.name || "Not selected"} />
+                <p className="mt-3 rounded-xl bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+                  A selected agent is proposed only. Accepted ownership begins after the agent selects Accept and Action.
+                </p>
+              </ReviewSection>
+              <ReviewSection title="Description">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{descriptionBody}</p>
+              </ReviewSection>
+              <ReviewSection title="Communication and files">
+                <ReviewRow label="Requester" value={reviewRequester?.email || "Account notification"} />
+                <ReviewRow label="Support group" value={selectedGroup?.notification_email || selectedGroup?.name || "Not selected"} />
+                <ReviewRow label="Selected agent" value={selectedAgent?.name || "Not selected"} />
+                <ReviewRow label="Attachments" value={files.length ? `${files.length} file${files.length === 1 ? "" : "s"}` : "None"} />
+                <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                  Email remains governed by the system email mode and recipient preferences. Development email may remain disabled while in-app notifications continue.
+                </p>
+              </ReviewSection>
+              {files.length ? (
+                <ReviewSection title="Attached files" className="lg:col-span-2">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {files.map((file) => (
+                      <div key={`${file.name}-${file.size}`} className="flex items-center gap-2 rounded-xl border border-slate-200 p-3 text-sm">
+                        <FileText className="h-4 w-4 text-[#172b57]" />
+                        <span className="min-w-0 flex-1 truncate font-semibold text-slate-800">{file.name}</span>
+                        <span className="text-xs text-slate-400">{formatBytes(file.size)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </ReviewSection>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 bg-slate-50/70 px-6 py-5 sm:px-8">
+              <button
+                type="button"
+                onClick={() => {
+                  setReviewing(false);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                disabled={submitting}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back and Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => submit({ preventDefault() {} })}
+                disabled={submitting}
+                className="ml-auto inline-flex items-center gap-2 rounded-xl bg-[#172b57] px-6 py-3 text-sm font-bold text-white hover:bg-[#1f376c] disabled:opacity-60"
+              >
+                {submitting ? "Creating ticket..." : "Confirm and Submit"}
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </OperationsShell>
+    );
+  }
   return (
     <OperationsShell
       breadcrumb={`Home > ${module.label}`}
@@ -1457,116 +1596,93 @@ export default function TicketCreatePage({ lockedType = null }) {
               </Field>
             ) : null}
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50/60">
-              <button
-                type="button"
-                onClick={() => setShowRouting((current) => !current)}
-                aria-expanded={showRouting || !employee}
-                className="flex w-full items-center justify-between gap-3 px-4 py-3.5 text-left"
-              >
-                <span>
-                  <span className="block text-sm font-bold text-slate-800">
-                    Routing preferences
-                  </span>
-                  <span className="mt-0.5 block text-xs text-slate-500">
-                    Optional — automatic triage by default, or choose an agent.
-                    Recommendations come from who resolved similar issues.
-                  </span>
-                </span>
-                <ChevronDown
-                  className={
-                    showRouting || !employee
-                      ? "h-4 w-4 shrink-0 rotate-180 text-slate-400 transition"
-                      : "h-4 w-4 shrink-0 text-slate-400 transition"
-                  }
-                />
-              </button>
-
-              {showRouting || !employee ? (
-                <div className="grid gap-4 border-t border-slate-200/70 p-4 md:grid-cols-2">
-                  <Field label="Assign Agent">
-                    <select
-                      value={form.assignedToUserId}
-                      disabled={loadingAgents}
-                      onChange={(event) => selectAgent(event.target.value)}
-                      className="input bg-white disabled:bg-slate-100"
-                    >
-                      <option value="">
-                        {loadingAgents
-                          ? "Loading agents…"
-                          : "Automatic triage — assign to the team"}
+            <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
+              <div>
+                <h2 className="text-sm font-bold text-slate-800">
+                  Select an agent <span className="text-red-600">*</span>
+                </h2>
+                <p className="mt-1 text-xs text-slate-500">
+                  Choose the eligible agent who should receive this request. An agent must be selected before review or submission.
+                </p>
+              </div>
+              <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <Field label="Assigned agent">
+                  <select
+                    value={form.assignedToUserId}
+                    disabled={loadingAgents}
+                    required
+                    aria-required="true"
+                    onChange={(event) => selectAgent(event.target.value)}
+                    className="input bg-white disabled:bg-slate-100"
+                  >
+                    <option value="" disabled>
+                      {loadingAgents ? "Loading eligible agents..." : "Select an eligible agent"}
+                    </option>
+                    {recommendedAgents.length ? (
+                      <optgroup label={form.category ? `Recommended for ${form.category}` : "Recommended agents"}>
+                        {recommendedAgents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agentOptionLabel(agent)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                    {otherAgents.length ? (
+                      <optgroup label="All eligible IT agents">
+                        {otherAgents.map((agent) => (
+                          <option key={agent.id} value={agent.id}>
+                            {agentOptionLabel(agent)}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ) : null}
+                  </select>
+                  {!loadingAgents && agents.length === 0 ? (
+                    <p className="mt-1 text-xs font-semibold text-red-700">
+                      No eligible agents are available for this classification. Contact the Helpdesk before submitting.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-slate-500">
+                      Recommendations are based on similar resolved requests. IT may reassign the ticket later when operationally necessary.
+                    </p>
+                  )}
+                </Field>
+                <Field label="Support team">
+                  <select
+                    value={form.assignedGroupId}
+                    required
+                    aria-required="true"
+                    onChange={(event) => {
+                      const nextGroup = event.target.value;
+                      setForm((current) => {
+                        const agent = agents.find(
+                          (item) => String(item.id) === String(current.assignedToUserId)
+                        );
+                        const stillMember = agent?.groups?.some(
+                          (group) => String(group.id) === String(nextGroup)
+                        );
+                        return {
+                          ...current,
+                          assignedGroupId: nextGroup,
+                          assignedToUserId: stillMember ? current.assignedToUserId : "",
+                        };
+                      });
+                    }}
+                    className="input bg-white"
+                  >
+                    <option value="" disabled>Select a support team</option>
+                    {groups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}{group.is_default_triage ? " (Recommended)" : ""}
                       </option>
-                      {recommendedAgents.length ? (
-                        <optgroup
-                          label={
-                            form.category
-                              ? `Recommended for ${form.category}`
-                              : "Recommended"
-                          }
-                        >
-                          {recommendedAgents.map((agent) => (
-                            <option key={agent.id} value={agent.id}>
-                              {agentOptionLabel(agent)}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : null}
-                      {otherAgents.length ? (
-                        <optgroup label="All IT agents">
-                          {otherAgents.map((agent) => (
-                            <option key={agent.id} value={agent.id}>
-                              {agentOptionLabel(agent)}
-                            </option>
-                          ))}
-                        </optgroup>
-                      ) : null}
-                    </select>
-                    <p className="mt-1 text-xs text-slate-500">
-                      IT may reassign based on workload or specialisation.
-                    </p>
-                  </Field>
-                  <Field label="Support Team">
-                    <select
-                      value={form.assignedGroupId}
-                      onChange={(event) => {
-                        const nextGroup = event.target.value;
-                        setForm((current) => {
-                          const agent = agents.find(
-                            (item) =>
-                              String(item.id) ===
-                              String(current.assignedToUserId)
-                          );
-                          const stillMember = agent?.groups?.some(
-                            (group) => String(group.id) === String(nextGroup)
-                          );
-                          return {
-                            ...current,
-                            assignedGroupId: nextGroup,
-                            assignedToUserId: stillMember
-                              ? current.assignedToUserId
-                              : "",
-                          };
-                        });
-                      }}
-                      className="input bg-white"
-                    >
-                      <option value="">Automatic triage</option>
-                      {groups.map((group) => (
-                        <option key={group.id} value={group.id}>
-                          {group.name}
-                          {group.is_default_triage ? " (Recommended)" : ""}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Follows the agent you pick — set it only to route to a
-                      whole team.
-                    </p>
-                  </Field>
-                </div>
-              ) : null}
-            </div>
-
+                    ))}
+                  </select>
+                  <p className="mt-1 text-xs text-slate-500">
+                    The selected agent must be an active member of this team.
+                  </p>
+                </Field>
+              </div>
+            </section>
             <Field label="Attachments">
               <label
                 onDragOver={(event) => {
@@ -1649,10 +1765,10 @@ export default function TicketCreatePage({ lockedType = null }) {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !form.assignedToUserId || !form.assignedGroupId}
                 className="rounded-xl bg-[#172b57] px-6 py-3 font-bold text-white transition hover:bg-[#1f376c] disabled:opacity-60"
               >
-                {submitting ? "Submitting…" : module.submitLabel}
+                {submitting ? "Preparing review..." : "Review request"}
               </button>
             </div>
           </form>
@@ -1727,7 +1843,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                   ]
                 : ticketType === "incident"
                   ? [
-                      "IT triages your incident by impact and urgency.",
+                      "The selected agent receives your incident with its impact and urgency.",
                       "An agent picks it up and may reply with questions.",
                       "You are notified at every update by email.",
                     ]
@@ -1797,6 +1913,22 @@ export default function TicketCreatePage({ lockedType = null }) {
   );
 }
 
+function ReviewSection({ title, children, className = "" }) {
+  return (
+    <section className={`rounded-2xl border border-slate-200 bg-white p-5 ${className}`}>
+      <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">{title}</h2>
+      <div className="mt-4 space-y-3">{children}</div>
+    </section>
+  );
+}
+function ReviewRow({ label, value }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+      <span className="text-xs font-semibold text-slate-400">{label}</span>
+      <span className="max-w-[68%] text-right text-sm font-semibold text-slate-800">{value}</span>
+    </div>
+  );
+}
 function RailRow({ label, value }) {
   return (
     <div className="flex items-center justify-between gap-3">

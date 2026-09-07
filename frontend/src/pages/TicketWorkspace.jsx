@@ -3,7 +3,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   Check,
+  Columns3,
   Filter,
+  List,
+  SquareCheck,
   RotateCcw,
   X,
   ChevronLeft,
@@ -19,10 +22,13 @@ import {
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
 import OperationsShell from "../components/OperationsShell";
+import StickyListShell, { StickyListBody, StickyListFooter } from "../components/lists/StickyListShell";
 import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
 import { moduleForTicketType } from "../data/requestModules";
 import { groupsApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { useToast } from "../components/notifications/ToastProvider";
+import { showLatestTicketActivity } from "../components/notifications/ticketActivityToast";
 
 function initialsFor(name) {
   return String(name || "")
@@ -74,7 +80,20 @@ const ASSIGNMENT_SCOPES = [
 const ASSIGNMENT_SCOPE_KEYS = new Set(
   ASSIGNMENT_SCOPES.map((item) => item.key)
 );
+const LEGACY_ASSIGNMENT_SCOPE_ALIASES = {
+  "assigned-to-me": "mine",
+  "my-groups": "my-groups",
+  "my-support-groups": "my-groups",
+};
 
+function getLegacyAssignmentScope(value) {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[ _]+/g, "-");
+
+  return LEGACY_ASSIGNMENT_SCOPE_ALIASES[key] || null;
+}
 function classNames(...items) {
   return items.filter(Boolean).join(" ");
 }
@@ -96,21 +115,41 @@ function formatAge(ticket) {
 function priorityClass(value) {
   return (
     {
-      Critical: "bg-red-100 text-red-700 border-red-200",
-      High: "bg-orange-100 text-orange-700 border-orange-200",
-      Medium: "bg-amber-100 text-amber-700 border-amber-200",
-      Low: "bg-emerald-100 text-emerald-700 border-emerald-200",
+      Critical: "portal-priority-critical",
+      High: "portal-priority-high",
+      Medium: "portal-priority-medium",
+      Low: "portal-priority-low",
     }[value] || "bg-slate-100 text-slate-700 border-slate-200"
   );
+}
+
+function formatDue(value) {
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime())
+    ? parsed.toLocaleString("en-ZA", { dateStyle: "medium", timeStyle: "short" })
+    : "Not set";
+}
+
+function slaState(ticket, now = Date.now()) {
+  const started = new Date(ticket?.sla_calculated_at || ticket?.created_at).getTime();
+  const due = new Date(ticket?.due_at || ticket?.sla?.resolutionDueAt).getTime();
+  const active = !["Resolved", "Closed"].includes(ticket?.status);
+  if (!Number.isFinite(started) || !Number.isFinite(due) || due <= started) {
+    return { percent: null, tone: "normal", overdue: false, label: "SLA countdown unavailable" };
+  }
+  const percent = Math.max(0, Math.min(100, Math.round(((due - now) / (due - started)) * 100)));
+  const overdue = active && now >= due;
+  const tone = overdue ? "breached" : percent <= 25 ? "risk" : percent <= 50 ? "attention" : "normal";
+  return { percent, tone, overdue, label: overdue ? `Overdue since ${formatDue(due)}` : `${percent}% SLA time remaining` };
 }
 
 function statusClass(value) {
   return (
     {
-      Open: "bg-[#172b57]/10 text-[#172b57]",
+      Open: "portal-accent-fill bg-[var(--portal-primary)]/10 text-[var(--portal-primary)]",
       Assigned: "bg-slate-100 text-slate-700",
       Pending: "bg-amber-100 text-amber-800",
-      Investigating: "bg-[#172b57]/10 text-[#172b57]",
+      Investigating: "portal-accent-fill bg-[var(--portal-primary)]/10 text-[var(--portal-primary)]",
       "Waiting Approval": "bg-amber-100 text-amber-800",
       Resolved: "bg-emerald-100 text-emerald-700",
       Closed: "bg-slate-200 text-slate-700",
@@ -182,7 +221,7 @@ function PaginationBar({ pagination, loading, onPageChange }) {
                 onClick={() => onPageChange(pageNumber)}
                 className={
                   pageNumber === pagination.page
-                    ? "min-w-9 rounded-xl bg-[#172b57] px-3 py-1.5 text-sm font-bold text-white"
+                    ? "min-w-9 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-3 py-1.5 text-sm font-bold text-white"
                     : "min-w-9 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-bold text-slate-700 hover:bg-slate-100"
                 }
               >
@@ -221,6 +260,7 @@ function TicketRowSkeleton() {
 
 export default function TicketWorkspace() {
   const navigate = useNavigate();
+  const toast = useToast();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user, employeeView, logout } = useAuth();
@@ -233,10 +273,13 @@ export default function TicketWorkspace() {
   // Two years of imported Freshservice history shares the list with live work, so
   // staff land on unresolved tickets and reach the rest through search / Closed.
   const legacyStatus = searchParams.get("status");
+  const legacyAssignment = getLegacyAssignmentScope(legacyStatus);
   const statusQuery = searchParams.get("statuses");
   const defaultStatuses = statusQuery
     ? normalizeStatusSelection(statusQuery.split(","))
-    : legacyStatus === "All"
+    : legacyAssignment
+      ? []
+      : legacyStatus === "All"
       ? []
       : legacyStatus === "Unresolved" || (!legacyStatus && !employeeExperience)
         ? [...UNRESOLVED_STATUSES]
@@ -245,6 +288,7 @@ export default function TicketWorkspace() {
           : [];
   const requestedAssignmentScope =
     searchParams.get("assignment") ||
+    legacyAssignment ||
     (searchParams.get("view") === "mine" ? "mine" : "all");
   const defaultAssignmentScope = ASSIGNMENT_SCOPE_KEYS.has(
     requestedAssignmentScope
@@ -275,16 +319,38 @@ export default function TicketWorkspace() {
   const [groupsError, setGroupsError] = useState("");
   const [requestEntryOpen, setRequestEntryOpen] = useState(false);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState(() => localStorage.getItem("atd-ticket-workspace-view") === "kanban" ? "kanban" : "list");
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedTicketIds, setSelectedTicketIds] = useState(() => new Set());
   const [draftAssignmentScope, setDraftAssignmentScope] = useState(
     defaultAssignmentScope
   );
   const [draftStatuses, setDraftStatuses] = useState(defaultStatuses);
+  const [draggedTicket, setDraggedTicket] = useState(null);
+  const [dropTarget, setDropTarget] = useState("");
   const filterPanelRef = useRef(null);
 
   // The search term goes to the server because history reaches back to June 2024.
-  const [appliedQuery, setAppliedQuery] = useState(defaultQuery.trim());
+  const [appliedQuery, setAppliedQuery] = useState(
+    defaultQuery.trim()
+  );
 
   useEffect(() => {
+    if (!legacyAssignment) return;
+
+    const next = new URLSearchParams(searchParams);
+
+    next.delete("status");
+    next.delete("view");
+    next.delete("page");
+    next.set("assignment", legacyAssignment);
+
+    setPage(1);
+    setSearchParams(next, { replace: true });
+  }, [legacyAssignment, searchParams, setSearchParams]);
+
+  useEffect(() => {
+
     const timer = setTimeout(() => {
       const nextQuery = query.trim();
       if (nextQuery === appliedQuery) return;
@@ -359,6 +425,10 @@ export default function TicketWorkspace() {
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
+
+  useEffect(() => { localStorage.setItem("atd-ticket-workspace-view", workspaceView); }, [workspaceView]);
+  useEffect(() => { setSelectedTicketIds((current) => new Set([...current].filter((id) => tickets.some((ticket) => String(ticket.id) === String(id))))); }, [tickets]);
+  const toggleTicketSelection = (id) => setSelectedTicketIds((current) => { const next = new Set(current); const key = String(id); if (next.has(key)) next.delete(key); else next.add(key); return next; });
 
   useEffect(() => {
     if (!operationsUser || employeeExperience) return;
@@ -575,6 +645,29 @@ export default function TicketWorkspace() {
     );
   };
 
+  const moveTicketToStatus = async (ticket, nextStatus) => {
+    const previousStatus = ticket?.status || "Open";
+    if (!canOperate || !ticket?.id || !STATUS_OPTION_KEYS.has(nextStatus) || previousStatus === nextStatus) return;
+    const reference = ticket.ticket_ref || `TICKET-${ticket.id}`;
+    if (!["Resolved", "Closed"].includes(previousStatus) && ["Resolved", "Closed"].includes(nextStatus)) {
+      setError(`Open ${reference} and use the governed ${nextStatus} workflow so required resolution communication is not bypassed.`);
+      return;
+    }
+    if (!window.confirm(`Move ${reference} from ${previousStatus} to ${nextStatus}?`)) return;
+    setActionLoading(true); setError(""); setSuccess("");
+    try {
+      await ticketsApi.updateStatus(ticket.id, nextStatus);
+      setSuccess(`${reference} moved from ${previousStatus} to ${nextStatus}.`);
+      await fetchTickets();
+      await showLatestTicketActivity({ toast, ticketsApi, ticketId: ticket.id, ticketRef: reference, fallback: `Status changed from ${previousStatus} to ${nextStatus}.` });
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "The ticket status could not be changed."));
+      await fetchTickets();
+    } finally {
+      setActionLoading(false); setDraggedTicket(null); setDropTarget("");
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate("/login", { replace: true });
@@ -615,7 +708,7 @@ export default function TicketWorkspace() {
           <button
             type="button"
             onClick={() => setRequestEntryOpen(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#172b57] px-3 py-2 text-sm font-bold text-white shadow-sm hover:bg-[#1f376c] xl:px-4 xl:py-2.5"
+            className="inline-flex items-center gap-2 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-3 py-2 text-sm font-bold text-white shadow-sm hover:opacity-90 xl:px-4 xl:py-2.5"
           >
             <Plus className="h-4 w-4" />
             Create Request
@@ -646,7 +739,7 @@ export default function TicketWorkspace() {
           ) : null}
           {success ? (
             <div
-              className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm font-semibold text-emerald-700"
+              className="fixed left-1/2 top-20 z-[90] w-[min(30rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-emerald-200 bg-emerald-50/95 px-4 py-3 text-sm font-semibold text-emerald-800 shadow-2xl backdrop-blur"
               role="status"
             >
               {success}
@@ -657,7 +750,7 @@ export default function TicketWorkspace() {
 
       {/* Laptop: stacked list then preview. Monitor (xl+): side-by-side triage. */}
       <div className="grid min-h-0 flex-1 gap-3 lg:gap-4 xl:grid-cols-[minmax(0,1fr)_min(380px,32%)]">
-        <section className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm xl:min-h-0">
+        <StickyListShell label={employeeExperience ? "My tickets" : "Ticket workspace results"} className="xl:min-h-0">
           <div className="shrink-0 border-b border-slate-200 px-3 py-2.5 xl:px-4 xl:py-3">
             <div className="relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -665,7 +758,7 @@ export default function TicketWorkspace() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search tickets"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm outline-none focus:border-[#172b57]/40 focus:bg-white focus:ring-4 focus:ring-[#172b57]/15 xl:py-2.5"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm outline-none focus:border-[var(--portal-primary)]/40 focus:bg-white focus:ring-4 focus:ring-[#172b57]/15 xl:py-2.5"
               />
             </div>
           </div>
@@ -678,11 +771,11 @@ export default function TicketWorkspace() {
                   Active filters
                 </p>
                 <p className="truncate text-sm font-semibold text-slate-800">
-                  {activeStatusLabel} Â· {activeAssignmentLabel}
+                  {activeStatusLabel} | {activeAssignmentLabel}
                 </p>
               </div>
 
-              <div ref={filterPanelRef} className="relative shrink-0">
+              <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectMode((current) => !current); setSelectedTicketIds(new Set()); }} className={classNames("portal-control inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold", selectMode && "portal-selected")}><SquareCheck className="h-4 w-4"/>Select</button><div className="portal-surface-muted inline-flex rounded-xl border p-1"><button type="button" aria-pressed={workspaceView === "list"} onClick={() => setWorkspaceView("list")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "list" && "portal-selected")}><List className="mr-1 inline h-3.5 w-3.5"/>List</button><button type="button" aria-pressed={workspaceView === "kanban"} onClick={() => setWorkspaceView("kanban")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "kanban" && "portal-selected")}><Columns3 className="mr-1 inline h-3.5 w-3.5"/>Kanban</button></div><div ref={filterPanelRef} className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -695,7 +788,7 @@ export default function TicketWorkspace() {
                   className={classNames(
                     "inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold shadow-sm transition",
                     activeFilterCount
-                      ? "border-[#172b57] bg-[#172b57] text-white"
+                      ? "border-[var(--portal-primary)] portal-accent-fill bg-[var(--portal-primary)] text-white"
                       : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
                   )}
                 >
@@ -712,9 +805,9 @@ export default function TicketWorkspace() {
                   <section
                     role="dialog"
                     aria-label="Ticket filters"
-                    className="absolute right-0 z-40 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+                    className="fixed inset-x-3 bottom-3 top-3 z-50 flex flex-col overflow-hidden rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface)] text-[var(--portal-text)] shadow-2xl sm:inset-x-auto sm:left-auto sm:right-4 sm:bottom-4 sm:top-24 sm:w-[min(28rem,calc(100vw-2rem))]"
                   >
-                    <header className="flex items-start justify-between border-b border-slate-200 p-4">
+                    <header className="sticky top-0 z-10 flex shrink-0 items-start justify-between border-b border-[var(--portal-border)] bg-[var(--portal-surface)] p-4">
                       <div>
                         <p className="font-bold text-slate-950">Filter tickets</p>
                         <p className="mt-1 text-sm text-slate-500">
@@ -723,7 +816,7 @@ export default function TicketWorkspace() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setFilterPanelOpen(false)}
+                        onClick={cancelTicketFilters}
                         className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100"
                         aria-label="Close filters"
                       >
@@ -731,7 +824,7 @@ export default function TicketWorkspace() {
                       </button>
                     </header>
 
-                    <div className="max-h-[65vh] space-y-5 overflow-y-auto p-4">
+                    <div className="scroll-slim min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4">
                       <div className="space-y-3">
                         <div className="flex items-center justify-between gap-3">
                           <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -744,7 +837,7 @@ export default function TicketWorkspace() {
                               className={classNames(
                                 "rounded-lg border px-2.5 py-1 text-xs font-bold",
                                 !draftStatuses.length
-                                  ? "border-[#172b57] bg-[#172b57] text-white"
+                                  ? "border-[var(--portal-primary)] portal-accent-fill bg-[var(--portal-primary)] text-white"
                                   : "border-slate-200 bg-white text-slate-600"
                               )}
                             >
@@ -756,7 +849,7 @@ export default function TicketWorkspace() {
                               className={classNames(
                                 "rounded-lg border px-2.5 py-1 text-xs font-bold",
                                 sameStatuses(draftStatuses, UNRESOLVED_STATUSES)
-                                  ? "border-[#172b57] bg-[#172b57] text-white"
+                                  ? "border-[var(--portal-primary)] portal-accent-fill bg-[var(--portal-primary)] text-white"
                                   : "border-slate-200 bg-white text-slate-600"
                               )}
                             >
@@ -765,7 +858,7 @@ export default function TicketWorkspace() {
                           </div>
                         </div>
 
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2 min-[420px]:grid-cols-2">
                           {STATUS_OPTIONS.map((status) => {
                             const selected = draftStatuses.includes(status);
                             return (
@@ -778,7 +871,7 @@ export default function TicketWorkspace() {
                                 className={classNames(
                                   "flex items-center justify-between gap-3 rounded-xl border p-3 text-left transition",
                                   selected
-                                    ? "border-[#172b57] bg-[#172b57]/5"
+                                    ? "ticket-row-selected border-[var(--portal-selected-border)]"
                                     : "border-slate-200 hover:bg-slate-50"
                                 )}
                               >
@@ -787,13 +880,13 @@ export default function TicketWorkspace() {
                                     className={classNames(
                                       "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
                                       selected
-                                        ? "border-[#172b57] bg-[#172b57] text-white"
+                                        ? "border-[var(--portal-primary)] portal-accent-fill bg-[var(--portal-primary)] text-white"
                                         : "border-slate-300 text-transparent"
                                     )}
                                   >
                                     <Check className="h-3 w-3" />
                                   </span>
-                                  <span className="truncate text-sm font-bold text-slate-900">
+                                  <span className="min-w-0 whitespace-normal break-words text-sm font-bold leading-5 text-slate-900">
                                     {status}
                                   </span>
                                 </span>
@@ -818,7 +911,7 @@ export default function TicketWorkspace() {
                           className={classNames(
                             "flex w-full items-start gap-3 rounded-xl border p-3 text-left transition",
                             draftAssignmentScope === scope.key
-                              ? "border-[#172b57] bg-[#172b57]/5"
+                              ? "ticket-row-selected border-[var(--portal-selected-border)]"
                               : "border-slate-200 hover:bg-slate-50"
                           )}
                         >
@@ -826,7 +919,7 @@ export default function TicketWorkspace() {
                             className={classNames(
                               "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border",
                               draftAssignmentScope === scope.key
-                                ? "border-[#172b57] bg-[#172b57] text-white"
+                                ? "border-[var(--portal-primary)] portal-accent-fill bg-[var(--portal-primary)] text-white"
                                 : "border-slate-300 text-transparent"
                             )}
                           >
@@ -848,7 +941,7 @@ export default function TicketWorkspace() {
                       </div>
                     </div>
 
-                    <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 p-4">
+                    <footer className="sticky bottom-0 z-10 flex shrink-0 flex-col gap-3 border-t border-[var(--portal-border)] bg-[var(--portal-surface-muted)] p-3 min-[420px]:p-4 sm:flex-row sm:items-center sm:justify-between">
                       <button
                         type="button"
                         onClick={clearDraftTicketFilters}
@@ -856,22 +949,22 @@ export default function TicketWorkspace() {
                           draftAssignmentScope === "all" &&
                           !draftStatuses.length
                         }
-                        className="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold text-slate-600 hover:bg-white disabled:opacity-40"
+                        className="portal-control inline-flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
                       >
                         <RotateCcw className="h-4 w-4" /> Clear all
                       </button>
-                      <div className="flex items-center gap-2">
+                      <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
                         <button
                           type="button"
                           onClick={cancelTicketFilters}
-                          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-100"
+                          className="portal-control rounded-xl border px-4 py-2 text-sm font-bold"
                         >
                           Cancel
                         </button>
                         <button
                           type="button"
                           onClick={applyTicketFilters}
-                          className="rounded-xl bg-[#172b57] px-4 py-2 text-sm font-bold text-white hover:bg-[#1f376c]"
+                          className="portal-accent-fill rounded-xl bg-[var(--portal-primary)] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
                         >
                           Apply filters
                         </button>
@@ -879,21 +972,12 @@ export default function TicketWorkspace() {
                     </footer>
                   </section>
                 ) : null}
-              </div>
+              </div></div>
             </div>
           ) : null}
-          {!employeeExperience ? (
-            <div className="shrink-0">
-              <PaginationBar
-                pagination={pagination}
-                loading={loading}
-                onPageChange={changePage}
-
-              />
-            </div>
-          ) : null}
-
-          <div className="scroll-slim min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto">
+          {selectMode ? <div className="portal-surface-muted flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2 text-sm"><span className="font-bold">{selectedTicketIds.size} selected</span><div className="flex gap-2"><button type="button" onClick={() => setSelectedTicketIds(new Set(tickets.map((ticket) => String(ticket.id))))} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={() => setSelectedTicketIds(new Set())} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">Clear</button></div><p className="w-full text-xs portal-muted">Bulk status, assignment, archive and delete remain disabled until governed bulk ticket endpoints are implemented.</p></div> : null}
+          <StickyListBody label="Ticket rows" className="divide-y divide-slate-100">
+            {!employeeExperience && workspaceView === "list" && !loading && tickets.length > 0 ? <div className="portal-surface-muted sticky top-0 z-20 hidden grid-cols-[minmax(0,1fr)_140px_120px_70px] gap-3 border-l-4 border-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-wide xl:grid"><span>Ticket / Requestor</span><span>Assigned agent</span><span>Workspace</span><span className="text-right">Age</span></div> : null}
             {employeeExperience && !loading && tickets.length > 0 ? (
               <div className="sticky top-0 z-10 hidden items-center gap-3 border-l-4 border-l-transparent bg-slate-50 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-slate-400 md:flex xl:px-4">
                 <span className="hidden w-10 shrink-0 sm:block" />
@@ -904,7 +988,7 @@ export default function TicketWorkspace() {
                 </span>
               </div>
             ) : null}
-            {loading ? (
+            {workspaceView === "kanban" && !loading ? <div className="scroll-slim flex min-h-0 gap-3 overflow-x-auto p-3">{STATUS_OPTIONS.map((columnStatus) => { const columnTickets = tickets.filter((ticket) => (ticket.status || "Open") === columnStatus); return <section key={columnStatus} onDragOver={(event) => { if (!canOperate || actionLoading) return; event.preventDefault(); setDropTarget(columnStatus); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTarget(""); }} onDrop={(event) => { event.preventDefault(); const ticket=draggedTicket; setDropTarget(""); if (ticket) moveTicketToStatus(ticket,columnStatus); }} className={classNames("portal-surface-muted flex max-h-full min-w-[18rem] flex-1 flex-col rounded-xl border p-2",dropTarget===columnStatus&&"ring-2 ring-[var(--portal-primary)]")}><header className="portal-surface-muted sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-[var(--portal-border)] px-1 py-2"><h3 className="portal-title text-sm font-black">{columnStatus}</h3><span className="portal-accent-soft rounded-full px-2 py-0.5 text-xs font-black">{columnTickets.length}</span></header><div className="scroll-slim min-h-0 flex-1 space-y-2 overflow-y-auto pt-2">{columnTickets.map((item) => { const gauge=slaState(item); return <article key={item.id} draggable={canOperate&&!actionLoading&&!selectMode} onDragStart={(event)=>{setDraggedTicket(item);event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",String(item.id));}} onDragEnd={()=>{setDraggedTicket(null);setDropTarget("");}} className={classNames("portal-surface-raised rounded-xl border p-3",draggedTicket?.id===item.id&&"opacity-50")}><div className="flex items-start gap-2">{selectMode ? <input type="checkbox" checked={selectedTicketIds.has(String(item.id))} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/> : null}<button type="button" onClick={() => setSelectedTicket(item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><span className="portal-ticket-reference text-xs font-black">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={classNames("rounded-full border px-2 py-0.5 text-[11px] font-bold",priorityClass(item.priority))}>{item.priority||"Medium"}</span></div><p className="portal-title mt-2 line-clamp-2 text-sm font-bold">{item.title}</p><div className="mt-3 flex items-center gap-2"><span className="portal-avatar-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black">{initialsFor(item.assigned_to_name)||"?"}</span><div className="min-w-0"><p className="portal-title truncate text-xs font-bold">{item.assigned_to_name||"Unassigned"}</p><p className="portal-muted text-[10px]">Assignee</p></div></div><p className={classNames("mt-3 text-xs font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-copy")}>Ticket Due: {formatDue(item.due_at)}</p>{gauge.percent===null?<p className="portal-muted mt-1 text-[11px]">SLA countdown unavailable</p>:<><div className="portal-sla-bar mt-2 h-2" role="progressbar" aria-label={gauge.label} aria-valuemin="0" aria-valuemax="100" aria-valuenow={gauge.percent}><span className={`portal-sla-${gauge.tone}`} style={{width:`${gauge.percent}%`}}/></div><p className={classNames("mt-1 text-[11px] font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-muted")}>{gauge.label}</p></>}</button></div></article>})}</div></section>})}</div> : loading ? (
               Array.from({ length: 8 }, (_, index) => (
                 <TicketRowSkeleton key={index} />
               ))
@@ -935,7 +1019,7 @@ export default function TicketWorkspace() {
                 ) : null}
               </div>
             ) : (
-              tickets.map((item) => {
+              workspaceView === "list" ? tickets.map((item) => {
                 const selected =
                   String(selectedTicket?.id) === String(item.id);
 
@@ -957,11 +1041,11 @@ export default function TicketWorkspace() {
                       className={classNames(
                         "flex w-full items-center gap-3 border-l-4 px-3 py-3 text-left transition xl:px-4",
                         selected
-                          ? "border-[#172b57] bg-[#172b57]/5"
+                          ? "ticket-row-selected border-[var(--portal-selected-border)]"
                           : "border-transparent hover:bg-slate-50"
                       )}
                     >
-                      <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#172b57]/[0.06] text-[#172b57] sm:flex">
+                      <div className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-xl portal-accent-fill bg-[var(--portal-primary)]/[0.06] text-[var(--portal-primary)] sm:flex">
                         <ModuleIcon className="h-5 w-5" />
                       </div>
 
@@ -970,7 +1054,7 @@ export default function TicketWorkspace() {
                           {item.title}
                         </p>
                         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs font-semibold text-slate-500">
-                          <span className="font-bold text-[#172b57]">
+                          <span className="portal-ticket-reference font-bold">
                             {item.ticket_ref || `TICKET-${item.id}`}
                           </span>
                           <span className="text-slate-300">·</span>
@@ -983,7 +1067,7 @@ export default function TicketWorkspace() {
                       <div className="hidden w-44 min-w-0 items-center gap-2 md:flex">
                         {item.assigned_to_name ? (
                           <>
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#172b57] text-[10px] font-bold text-white">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full portal-accent-fill bg-[var(--portal-primary)] text-[10px] font-bold text-white">
                               {initialsFor(item.assigned_to_name)}
                             </span>
                             <span className="truncate text-sm font-semibold text-slate-800">
@@ -1023,8 +1107,7 @@ export default function TicketWorkspace() {
                 }
 
                 return (
-                  <button
-                    key={item.id}
+                  <div key={item.id} className="flex items-stretch">{selectMode ? <label className="portal-surface-muted flex w-10 shrink-0 items-center justify-center border-r"><input type="checkbox" checked={selectedTicketIds.has(String(item.id))} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/></label> : null}<button
                     type="button"
                     onClick={() =>
                       setSelectedTicket((current) =>
@@ -1035,13 +1118,13 @@ export default function TicketWorkspace() {
                     className={classNames(
                       "grid w-full gap-2 border-l-4 px-3 py-2 text-left transition md:grid-cols-[1fr_120px_64px] md:items-center xl:grid-cols-[1fr_140px_120px_70px] xl:gap-3 xl:px-4 xl:py-2.5",
                       selected
-                        ? "border-[#172b57] bg-[#172b57]/5"
+                        ? "ticket-row-selected border-[var(--portal-selected-border)]"
                         : "border-transparent hover:bg-slate-50"
                     )}
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-[#172b57]">
+                        <span className="portal-ticket-reference font-bold">
                           {item.ticket_ref || `TICKET-${item.id}`}
                         </span>
                         <span
@@ -1093,24 +1176,22 @@ export default function TicketWorkspace() {
                     <span className="text-xs font-bold text-slate-500 md:text-right">
                       {formatAge(item)}
                     </span>
-                  </button>
+                  </button></div>
                 );
-              })
+              }) : null
             )}
-          </div>
-
+          </StickyListBody>
           {!employeeExperience ? (
-            <div className="shrink-0">
+            <StickyListFooter>
               <PaginationBar
                 pagination={pagination}
                 loading={loading}
                 onPageChange={changePage}
 
               />
-            </div>
+            </StickyListFooter>
           ) : null}
-        </section>
-
+        </StickyListShell>
         <aside
           className={classNames(
             "min-h-0 overflow-y-auto",
@@ -1136,7 +1217,7 @@ export default function TicketWorkspace() {
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-[#172b57]">
+                  <p className="text-sm font-bold text-[var(--portal-primary)]">
                     {selectedTicket.ticket_ref}
                   </p>
                   <h2 className="mt-1 text-lg font-bold text-slate-950">
@@ -1185,7 +1266,7 @@ export default function TicketWorkspace() {
               <button
                 type="button"
                 onClick={() => navigate(`/tickets/${selectedTicket.id}`)}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#172b57] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#1f376c]"
+                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
               >
                 <ExternalLink className="h-4 w-4" />
                 Open Full Ticket
@@ -1206,7 +1287,7 @@ export default function TicketWorkspace() {
                       changeSupportGroup(event.target.value || null)
                     }
                     disabled={actionLoading || Boolean(groupsError)}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172b57]/40 focus:ring-4 focus:ring-[#172b57]/15 disabled:opacity-50"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--portal-primary)]/40 focus:ring-4 focus:ring-[#172b57]/15 disabled:opacity-50"
                   >
                     <option value="">Select support group</option>
                     {groups.map((group) => (
@@ -1226,7 +1307,7 @@ export default function TicketWorkspace() {
                       !resolvedGroupId ||
                       Boolean(groupsError)
                     }
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#172b57]/40 focus:ring-4 focus:ring-[#172b57]/15 disabled:opacity-50"
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[var(--portal-primary)]/40 focus:ring-4 focus:ring-[#172b57]/15 disabled:opacity-50"
                   >
                     <option value="">Unassigned</option>
                     {assigneeOptions.map((member) => (

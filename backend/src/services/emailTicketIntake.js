@@ -105,7 +105,7 @@ function automatedMessageReason(message = {}, settings = config()) {
 }
 
 async function findGroup(client, classification) {
-  const preferred = classification.requiresTriage ? ["Service Desk", "IT", "Infrastructure Team"] : [classification.workspace, classification.category, "IT"];
+  const preferred = ["All IT Agents", classification.requiresTriage ? "Service Desk" : classification.workspace, classification.category, "IT"].filter(Boolean);
   const result = await client.query(
     `SELECT id, name FROM support_groups
      WHERE COALESCE(is_active, TRUE)=TRUE
@@ -113,9 +113,10 @@ async function findGroup(client, classification) {
        WHEN lower(name)=lower($1) THEN 0
        WHEN lower(name)=lower($2) THEN 1
        WHEN lower(name)=lower($3) THEN 2
-       ELSE 3 END, name
+       WHEN lower(name)=lower($4) THEN 3
+       ELSE 4 END, name
      LIMIT 1`,
-    [preferred[0] || "IT", preferred[1] || "IT", preferred[2] || "IT"]
+    [preferred[0] || "All IT Agents", preferred[1] || "Service Desk", preferred[2] || "IT", preferred[3] || "IT"]
   );
   return result.rows[0] || null;
 }
@@ -174,6 +175,33 @@ async function reserveMessage(client, message, settings) {
   return result.rows[0]?.id || null;
 }
 
+function messageRecipients(message,key){return (message?.[key]||[]).map(row=>String(row?.emailAddress?.address||"").trim().toLowerCase()).filter(Boolean);}
+function referenceFromSubject(subject){const matches=Array.from(new Set((String(subject||"").toUpperCase().match(/\b(?:INC|REQ|CHG|PRJ)-\d{5,}\b/g)||[])));return {reference:matches.length===1?matches[0]:null,ambiguous:matches.length>1,matches};}
+async function ticketForReply(client,message){
+ const parsed=referenceFromSubject(message.subject);
+ if(parsed.ambiguous)return {reason:"ambiguous_reference",matches:parsed.matches};
+ if(parsed.reference){const found=await client.query("SELECT * FROM tickets WHERE UPPER(ticket_ref)=$1 LIMIT 1",[parsed.reference]);if(found.rows[0])return {ticket:found.rows[0],matchedBy:"subject_reference"};return {reason:"reference_not_found",reference:parsed.reference};}
+ if(message.conversationId){const found=await client.query(`SELECT t.* FROM email_ticket_intake e JOIN tickets t ON t.id=e.ticket_id WHERE e.conversation_id=$1 AND e.ticket_id IS NOT NULL ORDER BY e.created_at DESC LIMIT 1`,[message.conversationId]);if(found.rows[0])return {ticket:found.rows[0],matchedBy:"conversation_id"};}
+ return {reason:"new_request"};
+}
+async function authorisedReplySender(client,ticket,senderEmail){
+ const email=String(senderEmail||"").toLowerCase();if(!email)return false;
+ const result=await client.query(`SELECT EXISTS(
+ SELECT 1 FROM users u WHERE LOWER(u.email)=$1 AND (u.id=$2 OR u.id=$3 OR EXISTS(SELECT 1 FROM ticket_collaborators c WHERE c.ticket_id=$4 AND c.user_id=u.id AND c.is_active=TRUE) OR EXISTS(SELECT 1 FROM support_group_members gm WHERE gm.group_id=$5 AND gm.user_id=u.id))
+ UNION ALL SELECT 1 FROM ticket_email_participants p WHERE p.ticket_id=$4 AND LOWER(p.email)=$1 AND p.is_active=TRUE
+ ) allowed`,[email,ticket.requester_id,ticket.assigned_to_user_id,ticket.id,ticket.assigned_group_id]);return Boolean(result.rows[0]?.allowed);
+}
+async function attachReplyFromMessage(message,settings=config()){
+ const client=await pool.connect();let intakeId=null;try{await client.query("BEGIN");intakeId=await reserveMessage(client,message,settings);if(!intakeId){await client.query("ROLLBACK");return {duplicate:true,messageId:message.id};}
+ const sender=senderFrom(message);const match=await ticketForReply(client,message);if(!match.ticket){await client.query("UPDATE email_ticket_intake SET status=$1,error_message=NULL,raw_metadata=raw_metadata||$2::jsonb,updated_at=NOW() WHERE id=$3",[match.reason,JSON.stringify({reference:match.reference||null,matches:match.matches||[]}),intakeId]);await client.query("COMMIT");return {handled:match.reason!=="new_request",...match,intakeId};}
+ if(!await authorisedReplySender(client,match.ticket,sender.email)){await client.query("UPDATE email_ticket_intake SET status='unauthorised_reply',ticket_id=$1,updated_at=NOW() WHERE id=$2",[match.ticket.id,intakeId]);await client.query("COMMIT");return {handled:true,reason:"unauthorised_reply",ticketId:match.ticket.id,intakeId};}
+ const bodyText=message.body?.contentType==="html"?htmlToText(message.body.content):String(message.body?.content||"").trim();if(!bodyText)throw new Error("Incoming reply has no usable body.");
+ const externalId=`graph:${String(settings.mailbox).toLowerCase()}:${message.id}`;const to=messageRecipients(message,"toRecipients");const cc=messageRecipients(message,"ccRecipients");
+ const inserted=await client.query(`INSERT INTO ticket_comments(ticket_id,author_user_id,body,is_internal,created_at,external_id,author_name,author_email,origin,internet_message_id,conversation_id,received_at,to_recipients,cc_recipients,raw_metadata) VALUES($1,(SELECT id FROM users WHERE LOWER(email)=LOWER($2) LIMIT 1),$3,FALSE,COALESCE($4::timestamptz,NOW()),$5,$6,$2,'email',$7,$8,$4,$9::jsonb,$10::jsonb,$11::jsonb) ON CONFLICT DO NOTHING RETURNING id`,[match.ticket.id,sender.email,bodyText, message.receivedDateTime||null,externalId,sender.name||null,message.internetMessageId||null,message.conversationId||null,JSON.stringify(to),JSON.stringify(cc),JSON.stringify({graphMessageId:message.id,matchedBy:match.matchedBy,subject:message.subject||null})]);
+ await client.query("UPDATE email_ticket_intake SET status='reply_attached',ticket_id=$1,error_message=NULL,updated_at=NOW() WHERE id=$2",[match.ticket.id,intakeId]);if(inserted.rowCount){await client.query("INSERT INTO ticket_history(ticket_id,actor_user_id,action,new_value) VALUES($1,(SELECT id FROM users WHERE LOWER(email)=LOWER($2) LIMIT 1),'email_reply_received',$3)",[match.ticket.id,sender.email,JSON.stringify({sender:sender.email,receivedAt:message.receivedDateTime||null,matchedBy:match.matchedBy})]);await client.query("UPDATE tickets SET updated_at=NOW() WHERE id=$1",[match.ticket.id]);}
+ await client.query("COMMIT");return {handled:true,duplicate:!inserted.rowCount,reason:"reply_attached",ticketId:match.ticket.id,intakeId,commentId:inserted.rows[0]?.id||null};
+ }catch(error){await client.query("ROLLBACK").catch(()=>{});if(intakeId)await pool.query("UPDATE email_ticket_intake SET status='failed',error_message=$1,updated_at=NOW() WHERE id=$2",[error.message,intakeId]).catch(()=>{});throw error;}finally{client.release();}
+}
 async function createTicketFromMessage(message, settings = config()) {
   const client = await pool.connect();
   let intakeId = null;
@@ -301,7 +329,7 @@ async function createTicketFromMessage(message, settings = config()) {
 }
 
 async function listUnreadMessages(settings = config()) {
-  const select = ["id", "internetMessageId", "conversationId", "subject", "body", "from", "sender", "replyTo", "receivedDateTime", "webLink", "importance", "isRead"].join(",");
+  const select = ["id", "internetMessageId", "conversationId", "subject", "body", "from", "sender", "replyTo", "toRecipients", "ccRecipients", "receivedDateTime", "webLink", "importance", "isRead"].join(",");
   const filters = ["isRead eq false"];
   if (settings.receivedAfter) {
     const cutoff = new Date(settings.receivedAfter);
@@ -338,7 +366,8 @@ async function runEmailIntake({ includeRead = false } = {}) {
         if (!includeRead) await markRead(message.id, settings);
         continue;
       }
-      const result = await createTicketFromMessage(message, settings);
+      const replyResult = await attachReplyFromMessage(message, settings);
+      const result = replyResult.handled || replyResult.duplicate ? replyResult : await createTicketFromMessage(message, settings);
       results.push({ messageId: message.id, ok: true, ...result });
       if (!includeRead) await markRead(message.id, settings);
     } catch (error) {
@@ -371,4 +400,4 @@ function startEmailTicketIntakeScheduler() {
   return timer;
 }
 
-module.exports = { config, runEmailIntake, createTicketFromMessage, startEmailTicketIntakeScheduler };
+module.exports = { config, runEmailIntake, createTicketFromMessage, attachReplyFromMessage, referenceFromSubject, startEmailTicketIntakeScheduler };
