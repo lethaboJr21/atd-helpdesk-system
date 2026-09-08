@@ -114,7 +114,7 @@ router.get("/my-tickets",async(req,res)=>{const condition=req.user.role==='user'
 // queue counts for the full authorised set (not just the current page).
 router.get("/",async(req,res)=>{
   const values=[];
-  const conditions=[];
+  const conditions=["t.archived_at IS NULL"];
   const add=(sql,value)=>{values.push(value);conditions.push(sql.replace(/\?/g,`$${values.length}`));};
 
   if(req.user.role==="user")add("t.requester_id=?",req.user.id);
@@ -228,10 +228,17 @@ router.get("/",async(req,res)=>{
     listConditions.push(`t.priority = ANY($${listValues.length}::text[])`);
   }
 
+  const requestedWorkspace=text(req.query.workspace,100);
+  if(requestedWorkspace && requestedWorkspace.toLowerCase() !== "all"){
+    listValues.push(requestedWorkspace);
+    listConditions.push(`t.workspace = ${listValues.length}`);
+  }
+
   const listWhere=listConditions.length?`WHERE ${listConditions.join(" AND ")}`:"";
 
   const requestedLimit=Number(req.query.per_page||req.query.limit);
-  const perPage=Number.isFinite(requestedLimit)?Math.min(Math.max(Math.trunc(requestedLimit),1),200):50;
+  const allowedPageSizes=new Set([25,50,100,250,500]);
+  const perPage=Number.isFinite(requestedLimit)&&allowedPageSizes.has(Math.trunc(requestedLimit))?Math.trunc(requestedLimit):25;
   const page=Math.max(Math.trunc(Number(req.query.page)||1),1);
   const offset=(page-1)*perPage;
   const orderBy=`${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,t.created_at DESC`;
@@ -654,6 +661,65 @@ router.post("/:id/attachments",optionalAttachments,async(req,res)=>{
     cleanupFiles(files);
     return res.status(error.status||500).json({error:error.status?error.message:"Failed to upload attachments."});
   }
+});
+
+router.post("/bulk",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+ const rawIds=Array.isArray(req.body.ticketIds)?req.body.ticketIds:[];
+ const ticketIds=[...new Set(rawIds.map(Number).filter(value=>Number.isInteger(value)&&value>0))].slice(0,500);
+ const action=text(req.body.action,30).toLowerCase();
+ const reason=text(req.body.reason,1000);
+ const changes=req.body.changes&&typeof req.body.changes==="object"?req.body.changes:{};
+ if(!ticketIds.length)return res.status(400).json({code:"BULK_TICKETS_REQUIRED",error:"Select at least one ticket."});
+ if(!["modify","archive","delete"].includes(action))return res.status(400).json({code:"BULK_ACTION_INVALID",error:"Unsupported bulk ticket action."});
+ if(["archive","delete"].includes(action)&&reason.length<5)return res.status(400).json({code:"BULK_REASON_REQUIRED",error:"Provide a reason of at least 5 characters."});
+ if(action==="delete"&&!["admin","superadmin"].includes(req.user.role))return res.status(403).json({code:"BULK_DELETE_FORBIDDEN",error:"Permanent ticket deletion requires administrator authority."});
+ const allowedChangeKeys=new Set(["priority","status","workspace","assignedGroupId","assignedToUserId","dueAt"]);
+ const supplied=Object.keys(changes).filter(key=>changes[key]!==undefined);
+ if(action==="modify"&&(!supplied.length||supplied.some(key=>!allowedChangeKeys.has(key))))return res.status(400).json({code:"BULK_CHANGES_INVALID",error:"Choose one or more supported fields."});
+ if(action==="modify"&&changes.status!==undefined&&["Resolved","Closed"].includes(status(changes.status)))return res.status(409).json({code:"BULK_GOVERNED_STATUS_REQUIRED",error:"Resolve and Close must use the governed per-ticket reply workflow."});
+ const client=await pool.connect();const results=[];
+ try{
+  await client.query("BEGIN");
+  for(const ticketId of ticketIds){
+   const savepoint=`bulk_ticket_${ticketId}`;
+   try{
+    await client.query(`SAVEPOINT ${savepoint}`);
+    const found=await client.query("SELECT * FROM tickets WHERE id=$1 FOR UPDATE",[ticketId]);
+    const before=found.rows[0];
+    if(!before)throw Object.assign(new Error("Ticket not found."),{code:"TICKET_NOT_FOUND"});
+    if(action==="archive"){
+     if(before.archived_at)throw Object.assign(new Error("Ticket is already archived."),{code:"TICKET_ALREADY_ARCHIVED"});
+     await client.query("UPDATE tickets SET archived_at=NOW(),archived_by_user_id=$2,archive_reason=$3,updated_at=NOW() WHERE id=$1",[ticketId,req.user.id,reason]);
+     await history(client,ticketId,req.user.id,"bulk_archived",before.status,reason);
+    }else if(action==="delete"){
+     if(!before.archived_at)throw Object.assign(new Error("Archive the ticket before permanent deletion."),{code:"TICKET_ARCHIVE_REQUIRED"});
+     await history(client,ticketId,req.user.id,"bulk_delete_requested",JSON.stringify({ticketRef:before.ticket_ref,status:before.status}),reason);
+     await client.query("DELETE FROM tickets WHERE id=$1",[ticketId]);
+    }else{
+     const groupId=changes.assignedGroupId===undefined?before.assigned_group_id:id(changes.assignedGroupId);
+     const assigneeId=changes.assignedToUserId===undefined?before.assigned_to_user_id:id(changes.assignedToUserId);
+     await validateAssignment(client,groupId,assigneeId);
+     const nextStatus=changes.status===undefined?before.status:status(changes.status);
+     const nextPriority=changes.priority===undefined?before.priority:priority(changes.priority);
+     if(!nextStatus||!nextPriority)throw Object.assign(new Error("Invalid status or priority."),{code:"BULK_VALUE_INVALID"});
+     const nextWorkspace=changes.workspace===undefined?before.workspace:text(changes.workspace,100);
+     const nextDueAt=changes.dueAt===undefined?before.due_at:(changes.dueAt||null);
+     await client.query(`UPDATE tickets SET priority=$1,status=$2,workspace=$3,assigned_group_id=$4,assigned_to_user_id=$5,due_at=$6,updated_at=NOW(),resolved_at=CASE WHEN $2 IN ('Resolved','Closed') THEN COALESCE(resolved_at,NOW()) ELSE NULL END,closed_at=CASE WHEN $2='Closed' THEN COALESCE(closed_at,NOW()) ELSE NULL END WHERE id=$7`,[nextPriority,nextStatus,nextWorkspace,groupId,assigneeId,nextDueAt,ticketId]);
+     const after=await getTicket(ticketId,client);
+     await logAssignmentChange(client,ticketId,req.user.id,before,after);
+     await logStatusChange(client,ticketId,req.user.id,before.status,after.status);
+     if(before.priority!==after.priority)await history(client,ticketId,req.user.id,"priority_changed",before.priority,after.priority);
+     await history(client,ticketId,req.user.id,"bulk_modified",JSON.stringify({priority:before.priority,status:before.status,workspace:before.workspace,assignedGroupId:before.assigned_group_id,assignedToUserId:before.assigned_to_user_id,dueAt:before.due_at}),JSON.stringify({changes:supplied,reason:reason||null,batchSize:ticketIds.length}));
+    }
+    await client.query(`RELEASE SAVEPOINT ${savepoint}`);
+    results.push({ticketId,ok:true,action});
+   }catch(error){await client.query(`ROLLBACK TO SAVEPOINT ${savepoint}`).catch(()=>{});results.push({ticketId,ok:false,code:error.code||"BULK_TICKET_FAILED",error:error.message||"Ticket action failed."});}
+  }
+  await client.query("COMMIT");
+  const updated=results.filter(item=>item.ok).length;const failed=results.length-updated;
+  return res.status(failed&&updated?207:failed?409:200).json({message:`Bulk ${action} completed: ${updated} succeeded, ${failed} failed.`,action,total:results.length,updated,failed,results});
+ }catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(500).json({code:"BULK_TICKET_ERROR",error:"The bulk ticket operation could not be completed."});}
+ finally{client.release();}
 });
 
 router.put("/:id",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{

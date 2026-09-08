@@ -24,10 +24,12 @@ import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import OperationsShell from "../components/OperationsShell";
 import StickyListShell, { StickyListBody, StickyListFooter } from "../components/lists/StickyListShell";
 import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
+import BulkTicketActions from "../components/tickets/BulkTicketActions";
 import { moduleForTicketType } from "../data/requestModules";
 import { groupsApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../components/notifications/ToastProvider";
+import useCrossPageTicketSelection from "../hooks/useCrossPageTicketSelection";
 import { showLatestTicketActivity } from "../components/notifications/ticketActivityToast";
 
 function initialsFor(name) {
@@ -61,7 +63,8 @@ const UNRESOLVED_STATUSES = STATUS_OPTIONS.filter(
   (status) => !["Resolved", "Closed"].includes(status)
 );
 const STATUS_OPTION_KEYS = new Set(STATUS_OPTIONS);
-const PAGE_SIZE = 30;
+const PAGE_SIZES = [25, 50, 100, 250, 500];
+const DEFAULT_PAGE_SIZE = 25;
 
 function normalizeStatusSelection(values, fallback = []) {
   const clean = [...new Set(values)].filter((value) => STATUS_OPTION_KEYS.has(value));
@@ -181,7 +184,7 @@ function pageWindow(current, total) {
     .sort((a, b) => a - b);
 }
 
-function PaginationBar({ pagination, loading, onPageChange }) {
+function PaginationBar({ pagination, loading, onPageChange, pageSize, onPageSizeChange }) {
   if (!pagination || pagination.total <= 0) return null;
   const pages = pageWindow(pagination.page, pagination.totalPages);
   return (
@@ -201,6 +204,7 @@ function PaginationBar({ pagination, loading, onPageChange }) {
         {pagination.perPage} per page
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
+        <label className="mr-2 text-xs font-bold text-slate-600">Rows <select value={pageSize} disabled={loading} onChange={(event)=>onPageSizeChange(Number(event.target.value))} className="ml-1 rounded-lg border border-slate-200 bg-white px-2 py-1.5">{PAGE_SIZES.map((size)=><option key={size} value={size}>{size}</option>)}</select></label>
         <button
           type="button"
           disabled={pagination.page <= 1 || loading}
@@ -321,7 +325,8 @@ export default function TicketWorkspace() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [workspaceView, setWorkspaceView] = useState(() => localStorage.getItem("atd-ticket-workspace-view") === "kanban" ? "kanban" : "list");
   const [selectMode, setSelectMode] = useState(false);
-  const [selectedTicketIds, setSelectedTicketIds] = useState(() => new Set());
+  const selection = useCrossPageTicketSelection();
+  const [pageSize,setPageSize]=useState(()=>{const value=Number(localStorage.getItem("atd-ticket-workspace-page-size"));return PAGE_SIZES.includes(value)?value:DEFAULT_PAGE_SIZE;});
   const [draftAssignmentScope, setDraftAssignmentScope] = useState(
     defaultAssignmentScope
   );
@@ -391,7 +396,7 @@ export default function TicketWorkspace() {
 
       const response = await ticketsApi.getAll({
         page,
-        per_page: PAGE_SIZE,
+        per_page: pageSize,
         ...(selectedStatuses.length
           ? { statuses: selectedStatuses.join(",") }
           : {}),
@@ -420,15 +425,14 @@ export default function TicketWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [appliedQuery, assignmentScope, employeeExperience, page, selectedPriority, selectedStatuses]);
+  }, [appliedQuery, assignmentScope, employeeExperience, page, pageSize, selectedPriority, selectedStatuses]);
 
   useEffect(() => {
     fetchTickets();
   }, [fetchTickets]);
 
   useEffect(() => { localStorage.setItem("atd-ticket-workspace-view", workspaceView); }, [workspaceView]);
-  useEffect(() => { setSelectedTicketIds((current) => new Set([...current].filter((id) => tickets.some((ticket) => String(ticket.id) === String(id))))); }, [tickets]);
-  const toggleTicketSelection = (id) => setSelectedTicketIds((current) => { const next = new Set(current); const key = String(id); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+  const toggleTicketSelection=(id)=>{const ticket=tickets.find((item)=>String(item.id)===String(id));if(ticket)selection.toggle(ticket);};
 
   useEffect(() => {
     if (!operationsUser || employeeExperience) return;
@@ -606,6 +610,7 @@ export default function TicketWorkspace() {
   const resolvedGroupId =
     selectedTicket?.assigned_group_id || selectedGroup?.id || null;
   const canOperate = operationsUser && !employeeExperience;
+  const canDeleteTickets = ["admin", "superadmin"].includes(user?.role);
   const canAssignToSelf = Boolean(resolvedGroupId);
 
   const assignTicket = (assigneeId, groupId = resolvedGroupId) =>
@@ -775,7 +780,7 @@ export default function TicketWorkspace() {
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectMode((current) => !current); setSelectedTicketIds(new Set()); }} className={classNames("portal-control inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold", selectMode && "portal-selected")}><SquareCheck className="h-4 w-4"/>Select</button><div className="portal-surface-muted inline-flex rounded-xl border p-1"><button type="button" aria-pressed={workspaceView === "list"} onClick={() => setWorkspaceView("list")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "list" && "portal-selected")}><List className="mr-1 inline h-3.5 w-3.5"/>List</button><button type="button" aria-pressed={workspaceView === "kanban"} onClick={() => setWorkspaceView("kanban")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "kanban" && "portal-selected")}><Columns3 className="mr-1 inline h-3.5 w-3.5"/>Kanban</button></div><div ref={filterPanelRef} className="relative shrink-0">
+              <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectMode((current) => !current); selection.clear(); }} className={classNames("portal-control inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold", selectMode && "portal-selected")}><SquareCheck className="h-4 w-4"/>Select</button><div className="portal-surface-muted inline-flex rounded-xl border p-1"><button type="button" aria-pressed={workspaceView === "list"} onClick={() => setWorkspaceView("list")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "list" && "portal-selected")}><List className="mr-1 inline h-3.5 w-3.5"/>List</button><button type="button" aria-pressed={workspaceView === "kanban"} onClick={() => setWorkspaceView("kanban")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "kanban" && "portal-selected")}><Columns3 className="mr-1 inline h-3.5 w-3.5"/>Kanban</button></div><div ref={filterPanelRef} className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -975,7 +980,7 @@ export default function TicketWorkspace() {
               </div></div>
             </div>
           ) : null}
-          {selectMode ? <div className="portal-surface-muted flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2 text-sm"><span className="font-bold">{selectedTicketIds.size} selected</span><div className="flex gap-2"><button type="button" onClick={() => setSelectedTicketIds(new Set(tickets.map((ticket) => String(ticket.id))))} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={() => setSelectedTicketIds(new Set())} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">Clear</button></div><p className="w-full text-xs portal-muted">Bulk status, assignment, archive and delete remain disabled until governed bulk ticket endpoints are implemented.</p></div> : null}
+          {selectMode ? <div className="portal-surface-muted flex shrink-0 flex-wrap items-center justify-between gap-2 border-b px-3 py-2 text-sm"><span className="font-bold">{selection.count} selected across pages</span><div className="flex gap-2"><button type="button" onClick={() => selection.selectPage(tickets)} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={() => selection.clearPage(tickets)} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">Clear current page</button><button type="button" onClick={selection.clear} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">Clear all</button></div></div> : null}
           <StickyListBody label="Ticket rows" className="divide-y divide-slate-100">
             {!employeeExperience && workspaceView === "list" && !loading && tickets.length > 0 ? <div className="portal-surface-muted sticky top-0 z-20 hidden grid-cols-[minmax(0,1fr)_140px_120px_70px] gap-3 border-l-4 border-transparent px-4 py-2 text-[11px] font-bold uppercase tracking-wide xl:grid"><span>Ticket / Requestor</span><span>Assigned agent</span><span>Workspace</span><span className="text-right">Age</span></div> : null}
             {employeeExperience && !loading && tickets.length > 0 ? (
@@ -988,7 +993,7 @@ export default function TicketWorkspace() {
                 </span>
               </div>
             ) : null}
-            {workspaceView === "kanban" && !loading ? <div className="scroll-slim flex min-h-0 gap-3 overflow-x-auto p-3">{STATUS_OPTIONS.map((columnStatus) => { const columnTickets = tickets.filter((ticket) => (ticket.status || "Open") === columnStatus); return <section key={columnStatus} onDragOver={(event) => { if (!canOperate || actionLoading) return; event.preventDefault(); setDropTarget(columnStatus); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTarget(""); }} onDrop={(event) => { event.preventDefault(); const ticket=draggedTicket; setDropTarget(""); if (ticket) moveTicketToStatus(ticket,columnStatus); }} className={classNames("portal-surface-muted flex max-h-full min-w-[18rem] flex-1 flex-col rounded-xl border p-2",dropTarget===columnStatus&&"ring-2 ring-[var(--portal-primary)]")}><header className="portal-surface-muted sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-[var(--portal-border)] px-1 py-2"><h3 className="portal-title text-sm font-black">{columnStatus}</h3><span className="portal-accent-soft rounded-full px-2 py-0.5 text-xs font-black">{columnTickets.length}</span></header><div className="scroll-slim min-h-0 flex-1 space-y-2 overflow-y-auto pt-2">{columnTickets.map((item) => { const gauge=slaState(item); return <article key={item.id} draggable={canOperate&&!actionLoading&&!selectMode} onDragStart={(event)=>{setDraggedTicket(item);event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",String(item.id));}} onDragEnd={()=>{setDraggedTicket(null);setDropTarget("");}} className={classNames("portal-surface-raised rounded-xl border p-3",draggedTicket?.id===item.id&&"opacity-50")}><div className="flex items-start gap-2">{selectMode ? <input type="checkbox" checked={selectedTicketIds.has(String(item.id))} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/> : null}<button type="button" onClick={() => setSelectedTicket(item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><span className="portal-ticket-reference text-xs font-black">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={classNames("rounded-full border px-2 py-0.5 text-[11px] font-bold",priorityClass(item.priority))}>{item.priority||"Medium"}</span></div><p className="portal-title mt-2 line-clamp-2 text-sm font-bold">{item.title}</p><div className="mt-3 flex items-center gap-2"><span className="portal-avatar-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black">{initialsFor(item.assigned_to_name)||"?"}</span><div className="min-w-0"><p className="portal-title truncate text-xs font-bold">{item.assigned_to_name||"Unassigned"}</p><p className="portal-muted text-[10px]">Assignee</p></div></div><p className={classNames("mt-3 text-xs font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-copy")}>Ticket Due: {formatDue(item.due_at)}</p>{gauge.percent===null?<p className="portal-muted mt-1 text-[11px]">SLA countdown unavailable</p>:<><div className="portal-sla-bar mt-2 h-2" role="progressbar" aria-label={gauge.label} aria-valuemin="0" aria-valuemax="100" aria-valuenow={gauge.percent}><span className={`portal-sla-${gauge.tone}`} style={{width:`${gauge.percent}%`}}/></div><p className={classNames("mt-1 text-[11px] font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-muted")}>{gauge.label}</p></>}</button></div></article>})}</div></section>})}</div> : loading ? (
+            {workspaceView === "kanban" && !loading ? <div className="scroll-slim flex min-h-0 gap-3 overflow-x-auto p-3">{STATUS_OPTIONS.map((columnStatus) => { const columnTickets = tickets.filter((ticket) => (ticket.status || "Open") === columnStatus); return <section key={columnStatus} onDragOver={(event) => { if (!canOperate || actionLoading) return; event.preventDefault(); setDropTarget(columnStatus); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTarget(""); }} onDrop={(event) => { event.preventDefault(); const ticket=draggedTicket; setDropTarget(""); if (ticket) moveTicketToStatus(ticket,columnStatus); }} className={classNames("portal-surface-muted flex max-h-full min-w-[18rem] flex-1 flex-col rounded-xl border p-2",dropTarget===columnStatus&&"ring-2 ring-[var(--portal-primary)]")}><header className="portal-surface-muted sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-[var(--portal-border)] px-1 py-2"><h3 className="portal-title text-sm font-black">{columnStatus}</h3><span className="portal-accent-soft rounded-full px-2 py-0.5 text-xs font-black">{columnTickets.length}</span></header><div className="scroll-slim min-h-0 flex-1 space-y-2 overflow-y-auto pt-2">{columnTickets.map((item) => { const gauge=slaState(item); return <article key={item.id} draggable={canOperate&&!actionLoading&&!selectMode} onDragStart={(event)=>{setDraggedTicket(item);event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",String(item.id));}} onDragEnd={()=>{setDraggedTicket(null);setDropTarget("");}} className={classNames("portal-surface-raised rounded-xl border p-3",draggedTicket?.id===item.id&&"opacity-50")}><div className="flex items-start gap-2">{selectMode ? <input type="checkbox" checked={selection.has(item.id)} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/> : null}<button type="button" onClick={() => setSelectedTicket(item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><span className="portal-ticket-reference text-xs font-black">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={classNames("rounded-full border px-2 py-0.5 text-[11px] font-bold",priorityClass(item.priority))}>{item.priority||"Medium"}</span></div><p className="portal-title mt-2 line-clamp-2 text-sm font-bold">{item.title}</p><div className="mt-3 flex items-center gap-2"><span className="portal-avatar-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black">{initialsFor(item.assigned_to_name)||"?"}</span><div className="min-w-0"><p className="portal-title truncate text-xs font-bold">{item.assigned_to_name||"Unassigned"}</p><p className="portal-muted text-[10px]">Assignee</p></div></div><p className={classNames("mt-3 text-xs font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-copy")}>Ticket Due: {formatDue(item.due_at)}</p>{gauge.percent===null?<p className="portal-muted mt-1 text-[11px]">SLA countdown unavailable</p>:<><div className="portal-sla-bar mt-2 h-2" role="progressbar" aria-label={gauge.label} aria-valuemin="0" aria-valuemax="100" aria-valuenow={gauge.percent}><span className={`portal-sla-${gauge.tone}`} style={{width:`${gauge.percent}%`}}/></div><p className={classNames("mt-1 text-[11px] font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-muted")}>{gauge.label}</p></>}</button></div></article>})}</div></section>})}</div> : loading ? (
               Array.from({ length: 8 }, (_, index) => (
                 <TicketRowSkeleton key={index} />
               ))
@@ -1107,7 +1112,7 @@ export default function TicketWorkspace() {
                 }
 
                 return (
-                  <div key={item.id} className="flex items-stretch">{selectMode ? <label className="portal-surface-muted flex w-10 shrink-0 items-center justify-center border-r"><input type="checkbox" checked={selectedTicketIds.has(String(item.id))} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/></label> : null}<button
+                  <div key={item.id} className="flex items-stretch">{selectMode ? <label className="portal-surface-muted flex w-10 shrink-0 items-center justify-center border-r"><input type="checkbox" checked={selection.has(item.id)} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/></label> : null}<button
                     type="button"
                     onClick={() =>
                       setSelectedTicket((current) =>
@@ -1187,7 +1192,8 @@ export default function TicketWorkspace() {
                 pagination={pagination}
                 loading={loading}
                 onPageChange={changePage}
-
+                pageSize={pageSize}
+                onPageSizeChange={(value)=>{localStorage.setItem("atd-ticket-workspace-page-size",String(value));setPageSize(value);setPage(1);}}
               />
             </StickyListFooter>
           ) : null}
@@ -1374,6 +1380,8 @@ export default function TicketWorkspace() {
           )}
         </aside>
       </div>
+
+      {selectMode ? <BulkTicketActions ticketIds={selection.ids} tickets={selection.tickets} groups={groups} busy={actionLoading} onBusyChange={setActionLoading} canDelete={canDeleteTickets} onClear={selection.clear} onComplete={async (result) => { toast.success(result.message, { title: "Bulk ticket operation" }); selection.clear(); await fetchTickets(); }} /> : null}
 
       <RequestEntryMenu
         open={requestEntryOpen}

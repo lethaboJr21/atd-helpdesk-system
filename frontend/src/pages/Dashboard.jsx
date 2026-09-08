@@ -49,6 +49,8 @@ import Sidebar from "../components/Sidebar";
 import { useToast } from "../components/notifications/ToastProvider";
 import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
 import PendingAcceptanceCards from "../components/tickets/PendingAcceptanceCards";
+import BulkTicketActions from "../components/tickets/BulkTicketActions";
+import useCrossPageTicketSelection from "../hooks/useCrossPageTicketSelection";
 import { REQUEST_MODULES, formPathForType } from "../data/requestModules";
 import useSidebarCollapsed from "../hooks/useSidebarCollapsed";
 import { useAuth } from "../hooks/useAuth";
@@ -64,7 +66,8 @@ import {
 import assignmentAcceptanceApi from "../services/assignmentAcceptanceApi";
 import useAppearance from "../hooks/useAppearance";
 
-const DASHBOARD_TICKET_LIMIT = 100;
+const DASHBOARD_PAGE_SIZES = [25, 50, 100, 250, 500];
+const DASHBOARD_PAGE_SIZE_KEY = "atd-helpdesk-dashboard-priority-page-size";
 const NOTIFICATION_MODULES = ["admin", "helpdesk"];
 const SEARCH_DEBOUNCE_MS = 300;
 const ADMIN_ROLES = new Set(["manager", "admin", "superadmin"]);
@@ -204,6 +207,7 @@ export default function Dashboard() {
   const toast = useToast();
   const { logout, user } = useAuth();
   const adminUser = ADMIN_ROLES.has(user?.role);
+  const canDeleteTickets = ["admin", "superadmin"].includes(user?.role);
   const { appearance, setMode } = useAppearance();
 
   const [tickets, setTickets] = useState([]);
@@ -216,6 +220,14 @@ export default function Dashboard() {
   const [groups, setGroups] = useState([]);
 
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const ticketSelection = useCrossPageTicketSelection();
+  const [ticketPage, setTicketPage] = useState(1);
+  const [ticketPageSize, setTicketPageSize] = useState(() => {
+    const stored = Number(localStorage.getItem(DASHBOARD_PAGE_SIZE_KEY));
+    return DASHBOARD_PAGE_SIZES.includes(stored) ? stored : 25;
+  });
+  const [ticketPagination, setTicketPagination] = useState({ page: 1, perPage: 25, total: 0, totalPages: 1 });
+  const [knownWorkspaces, setKnownWorkspaces] = useState(["All"]);
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [workspaceFilter, setWorkspaceFilter] = useState("All");
@@ -390,9 +402,11 @@ export default function Dashboard() {
 
     try {
       const response = await ticketsApi.getAll({
-        limit: DASHBOARD_TICKET_LIMIT,
+        page: ticketPage,
+        per_page: ticketPageSize,
         status: "Unresolved",
         search: debouncedQuery || undefined,
+        workspace: workspaceFilter === "All" ? undefined : workspaceFilter,
       });
       const payload = response.data;
       const ticketData = Array.isArray(payload)
@@ -402,6 +416,14 @@ export default function Dashboard() {
           : [];
 
       setTickets(ticketData);
+      const pagination = !Array.isArray(payload) && payload?.pagination ? payload.pagination : { page: ticketPage, perPage: ticketPageSize, total: ticketData.length, totalPages: 1 };
+      setTicketPagination(pagination);
+      setKnownWorkspaces((current) => {
+        const next = new Set(current);
+        ticketData.map((item) => item.workspace).filter(Boolean).forEach((workspace) => next.add(workspace));
+        return ["All", ...Array.from(next).filter((item) => item !== "All").sort()];
+      });
+      if (ticketPage > pagination.totalPages) setTicketPage(Math.max(1, pagination.totalPages));
       setSectionErrors((currentErrors) => {
         const nextErrors = { ...currentErrors };
         delete nextErrors.tickets;
@@ -419,7 +441,7 @@ export default function Dashboard() {
     } finally {
       setTicketLoading(false);
     }
-  }, [debouncedQuery]);
+  }, [debouncedQuery, ticketPage, ticketPageSize, workspaceFilter]);
 
   const refreshDashboard = useCallback(async () => {
     await Promise.all([
@@ -450,14 +472,7 @@ export default function Dashboard() {
     }).length;
   }, [notifications]);
 
-  const filteredTickets = useMemo(() => {
-    return tickets.filter((ticketItem) => {
-      return (
-        workspaceFilter === "All" ||
-        ticketItem.workspace === workspaceFilter
-      );
-    });
-  }, [tickets, workspaceFilter]);
+  const filteredTickets = tickets;
 
   const volumeData = useMemo(() => {
     return Array.isArray(volumeStats)
@@ -489,21 +504,9 @@ export default function Dashboard() {
       : [];
   }, [serviceMixStats]);
 
-  const workspaces = useMemo(() => {
-    const uniqueWorkspaces = new Set(
-      tickets
-        .map((ticketItem) => ticketItem.workspace)
-        .filter(Boolean)
-    );
+  const workspaces = knownWorkspaces;
 
-    return ["All", ...Array.from(uniqueWorkspaces)];
-  }, [tickets]);
-
-  useEffect(() => {
-    if (!workspaces.includes(workspaceFilter)) {
-      setWorkspaceFilter("All");
-    }
-  }, [workspaceFilter, workspaces]);
+  useEffect(() => { setTicketPage(1); }, [debouncedQuery, workspaceFilter]);
 
   const selectedGroup = useMemo(() => {
     return groups.find((group) => {
@@ -1069,7 +1072,7 @@ export default function Dashboard() {
           <div className="grid items-stretch gap-4 xl:grid-cols-3">
             <div className="flex flex-col gap-4 xl:col-span-2">
               <TicketQueue
-                tickets={filteredTickets.slice(0, 12)}
+                tickets={filteredTickets}
                 selectedTicketId={selectedTicket?.id}
                 workspaceFilter={workspaceFilter}
                 workspaces={workspaces}
@@ -1078,6 +1081,14 @@ export default function Dashboard() {
                 onOpenWorkspace={() => navigate("/tickets?status=Unresolved")}
                 loading={ticketLoading}
                 error={sectionErrors.tickets}
+                selectedTicketIds={new Set(ticketSelection.ids)}
+                onToggleTicket={(id) => { const ticket = filteredTickets.find((item) => String(item.id) === String(id)); if (ticket) ticketSelection.toggle(ticket); }}
+                onSelectVisible={() => ticketSelection.selectPage(filteredTickets)}
+                onClearVisible={() => ticketSelection.clearPage(filteredTickets)}
+                pagination={ticketPagination}
+                pageSize={ticketPageSize}
+                onPageChange={setTicketPage}
+                onPageSizeChange={(value) => { localStorage.setItem(DASHBOARD_PAGE_SIZE_KEY, String(value)); setTicketPageSize(value); setTicketPage(1); }}
               />
 
               <KnowledgePanel
@@ -1112,6 +1123,8 @@ export default function Dashboard() {
           </div>
         </section>
       </main>
+
+      <BulkTicketActions ticketIds={ticketSelection.ids} tickets={ticketSelection.tickets} groups={groups} busy={actionLoading} onBusyChange={setActionLoading} source="Dashboard Priority Queue" canDelete={canDeleteTickets} onClear={ticketSelection.clear} onComplete={async (result) => { toast.success(result.message, { title: "Bulk ticket operation" }); ticketSelection.clear(); await refreshDashboard(); }} />
 
       <RequestEntryMenu
         open={showCreateMenu}
@@ -1704,6 +1717,14 @@ function TicketQueue({
   onOpenWorkspace,
   loading,
   error,
+  selectedTicketIds,
+  onToggleTicket,
+  onSelectVisible,
+  onClearVisible,
+  pagination,
+  pageSize,
+  onPageChange,
+  onPageSizeChange,
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -1719,7 +1740,7 @@ function TicketQueue({
             </p>
           </div>
 
-          <select
+          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={onSelectVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={onClearVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Clear current page</button><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold">{DASHBOARD_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} rows</option>)}</select><select
             value={workspaceFilter}
             onChange={(event) => onWorkspaceChange(event.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
@@ -1727,7 +1748,7 @@ function TicketQueue({
             {workspaces.map((workspace) => (
               <option key={workspace}>{workspace}</option>
             ))}
-          </select>
+          </select></div>
         </div>
       </div>
 
@@ -1758,8 +1779,7 @@ function TicketQueue({
             const slaPercent = getSlaPercent(ticketItem);
 
             return (
-              <button
-                key={ticketItem.id}
+              <div key={ticketItem.id} className="flex items-stretch"><label className="flex w-11 shrink-0 items-center justify-center border-r border-slate-100"><input type="checkbox" checked={selectedTicketIds.has(String(ticketItem.id))} onChange={() => onToggleTicket(ticketItem.id)} aria-label={`Select ${ticketItem.ticket_ref || ticketItem.id}`}/></label><button
                 type="button"
                 onClick={() => onSelectTicket(ticketItem)}
                 className={classNames(
@@ -1830,20 +1850,19 @@ function TicketQueue({
                     SLA {slaPercent}% · {getTicketAge(ticketItem)}
                   </p>
                 </div>
-              </button>
+              </button></div>
             );
           })
         )}
       </div>
 
-      <div className="border-t border-slate-200 px-4 py-3">
-        <button
-          type="button"
-          onClick={onOpenWorkspace}
-          className="w-full rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]"
-        >
-          View all in Ticket Workspace →
-        </button>
+      <div className="flex flex-col gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-2">
+          <button type="button" disabled={loading || pagination.page <= 1} onClick={() => onPageChange(pagination.page - 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-40">Previous</button>
+          <span className="text-xs font-bold text-slate-500">Page {pagination.page} of {pagination.totalPages} | {pagination.total} tickets</span>
+          <button type="button" disabled={loading || pagination.page >= pagination.totalPages} onClick={() => onPageChange(pagination.page + 1)} className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold disabled:opacity-40">Next</button>
+        </div>
+        <button type="button" onClick={onOpenWorkspace} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-bold text-slate-700 hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]">View all in Ticket Workspace</button>
       </div>
     </div>
   );

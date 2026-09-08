@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   Cloud,
   HeartPulse,
+  Archive,
   Mail,
   ShieldCheck,
   Users,
@@ -15,6 +16,7 @@ import { useNavigate } from "react-router-dom";
 import SystemEmailControls from "../components/SystemEmailControls";
 import CompanyCommunicationsPanel from "../components/CompanyCommunicationsPanel";
 import AdminUniversalHeader from "../components/admin/AdminUniversalHeader";
+import ArchiveRulesPanel from "../components/admin/ArchiveRulesPanel";
 
 const ITEMS = [
   {
@@ -64,6 +66,7 @@ const ITEMS = [
     action: "communications",
     available: true,
   },
+  { icon: Archive, title: "Ticket Archive Rules", description: "Configure disabled-by-default requester non-response governance.", action: "archive-rules", available: true },
   {
     icon: Activity,
     title: "Audit Activity",
@@ -88,7 +91,7 @@ export default function AdminSettings() {
 
   const activateItem = (item) => {
     if (!item.available) return;
-    if (item.action === "email" || item.action === "communications") {
+    if (["email","communications","archive-rules"].includes(item.action)) {
       setPanel(item.action);
       return;
     }
@@ -149,7 +152,7 @@ export default function AdminSettings() {
         </section>
       </div>
 
-      {(panel === "email" || panel === "communications") && (
+      {["email","communications","archive-rules"].includes(panel) && (
         <div
           className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4"
           role="dialog"
@@ -162,7 +165,7 @@ export default function AdminSettings() {
                   Admin Settings
                 </p>
                 <h2 className="text-xl font-bold">
-                  {panel === "email" ? "Company Email Governance" : "Company Communications"}
+                  {panel === "email" ? "Company Email Governance" : panel === "communications" ? "Company Communications" : "Ticket Archive Rules"}
                 </h2>
               </div>
               <button
@@ -175,7 +178,7 @@ export default function AdminSettings() {
               </button>
             </header>
             <div className="p-6">
-              {panel === "email" ? <SystemEmailControls embedded /> : <CompanyCommunicationsPanel />}
+              {panel === "email" ? <SystemEmailControls embedded /> : panel === "communications" ? <CompanyCommunicationsPanel /> : <ArchiveRulesPanel />}
             </div>
           </div>
         </div>

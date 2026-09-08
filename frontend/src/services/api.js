@@ -67,6 +67,7 @@ export const ticketsApi = {
     return api.post("/tickets", data);
   },
   update: (id, data) => api.put(`/tickets/${id}`, data),
+  bulkAction: (data) => api.post("/tickets/bulk", data),
   updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),
   resolve: (id) => api.patch(`/tickets/${id}/resolve`, {}),
   close: (id) => api.patch(`/tickets/${id}/close`, {}),
@@ -147,6 +148,7 @@ export const settingsApi = {
   getEmailSettings: () => api.get("/settings/email"),
   updateEmailSettings: (data) => api.put("/settings/email", data),
 };
+export const archiveRulesApi = { getAll:()=>api.get("/archive-rules"), create:(data)=>api.post("/archive-rules",data) };
 export const companyCommunicationsApi = {
   getAll: () => api.get("/company-communications"),
   preview: (data) => api.post("/company-communications/preview", data),

@@ -43,8 +43,8 @@ function parsePage(value, fallback = 1) {
 
 function parsePerPage(value) {
   const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0) return 25;
-  return Math.min(parsed, 200);
+  if (!Number.isFinite(parsed) || ![25,50,100,250,500].includes(parsed)) return 25;
+  return parsed;
 }
 
 const SORT_COLUMNS = {
