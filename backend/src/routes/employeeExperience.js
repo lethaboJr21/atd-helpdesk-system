@@ -74,14 +74,24 @@ function permittedActions(request,policy) {
   const features=request.user.features || {};
   return policy.allowedActions.filter((id)=>features[FEATURE_BY_ACTION[id]]!==false).map((id)=>({id,...ACTION_DETAILS[id]}));
 }
+function onboardingEligibility(user) {
+  if (!user?.approved) return { eligible:false, reason:"account_not_approved" };
+  if (user?.status !== "active" || user?.deactivated_at) return { eligible:false, reason:"account_inactive" };
+  if (user?.archived_at) return { eligible:false, reason:"account_archived" };
+  if (user?.microsoft_account_enabled === false) return { eligible:false, reason:"microsoft_account_disabled" };
+  if (String(user?.account_type || "person").toLowerCase() !== "person") return { eligible:false, reason:"non_person_account" };
+  return { eligible:true, reason:null };
+}
 async function state(request,database=pool) {
   const [mode,policy,preference]=await Promise.all([getMode(database),getPolicy(database),getPreference(request.user.id,database)]);
   const actions=permittedActions(request,policy);
   const actionIds=new Set(actions.map((item)=>item.id));
   const selected=allowed(preference?.selected_action_ids,policy.allowedActions).filter((id)=>actionIds.has(id));
+  const eligibility=onboardingEligibility(request.user);
   const completed=preference?.onboarding_status==="completed" && Number(preference?.onboarding_version)===policy.onboardingVersion;
-  const required=mode==="enforced" && policy.onboardingRequired && !completed;
-  return {mode,required,previewRequired:mode==="preview"&&policy.onboardingRequired&&!completed,completed,policy,actions,preference:preference?{
+  const required=eligibility.eligible && mode==="enforced" && policy.onboardingRequired && !completed;
+  const previewRequired=eligibility.eligible && mode==="preview" && policy.onboardingRequired && !completed;
+  return {mode,required,previewRequired,completed,eligible:eligibility.eligible,exemptionReason:eligibility.reason,policy,actions,preference:preference?{
     selectedTemplate:preference.selected_template,
     theme:preference.theme,
     appearanceStyle:preference.appearance_style || "solid",
@@ -125,6 +135,8 @@ router.put("/preferences",async(request,response,next)=>{
   } catch(e) { await client.query("ROLLBACK").catch(()=>{}); return next(e); } finally { client.release(); }
 });
 router.post("/complete",async(request,response,next)=>{
+  const eligibility=onboardingEligibility(request.user);
+  if (!eligibility.eligible) return next(error(403,"This account is exempt from employee onboarding.","ONBOARDING_ACCOUNT_EXEMPT"));
   const client=await pool.connect();
   try {
     await client.query("BEGIN");

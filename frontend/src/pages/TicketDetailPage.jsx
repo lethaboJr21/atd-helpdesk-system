@@ -21,6 +21,9 @@ import {
 
 import OperationsShell from "../components/OperationsShell";
 import AssignmentAcceptancePanel from "../components/tickets/AssignmentAcceptancePanel";
+import TicketActivityTable from "../components/tickets/TicketActivityTable";
+import RequesterIdentityCard from "../components/tickets/RequesterIdentityCard";
+import TicketAttachmentPreview, { canPreviewTicketAttachment } from "../components/tickets/TicketAttachmentPreview";
 import { useToast } from "../components/notifications/ToastProvider";
 import { showLatestTicketActivity } from "../components/notifications/ticketActivityToast";
 import { groupsApi, ticketsApi } from "../services/api";
@@ -125,7 +128,7 @@ function formatAssignmentSnapshot(value) {
   const group = parsed.assigned_group_id
     ? `Group #${parsed.assigned_group_id}`
     : "No group";
-  return `${agent} · ${group}`;
+  return `${agent} | ${group}`;
 }
 
 function formatHistoryValue(value, action) {
@@ -154,18 +157,18 @@ function describeHistoryEntry(entry) {
     };
   }
   if (action === "assigned") {
-    if (from && to) return { title: "Reassigned", detail: `${from} → ${to}`, actor };
+    if (from && to) return { title: "Reassigned", detail: `${from} -> ${to}`, actor };
     if (to) return { title: "Assigned", detail: `Assigned to ${to}`, actor };
     return { title: "Assignment updated", detail: "Assignment changed.", actor };
   }
   if (action === "status_changed" || action === "status") {
     if (from && to)
-      return { title: "Status changed", detail: `${from} → ${to}`, actor };
+      return { title: "Status changed", detail: `${from} -> ${to}`, actor };
     return { title: "Status changed", detail: to || "Status updated.", actor };
   }
   if (action === "priority_changed") {
     if (from && to)
-      return { title: "Priority changed", detail: `${from} → ${to}`, actor };
+      return { title: "Priority changed", detail: `${from} -> ${to}`, actor };
     return {
       title: "Priority changed",
       detail: to || "Priority updated.",
@@ -175,14 +178,14 @@ function describeHistoryEntry(entry) {
   if (action === "resolve" || action === "resolved") {
     return {
       title: "Resolved",
-      detail: from && to ? `${from} → ${to}` : "Ticket marked resolved.",
+      detail: from && to ? `${from}  ->  ${to}` : "Ticket marked resolved.",
       actor,
     };
   }
   if (action === "closed" || action === "close") {
     return {
       title: "Closed",
-      detail: from && to ? `${from} → ${to}` : "Ticket closed.",
+      detail: from && to ? `${from}  ->  ${to}` : "Ticket closed.",
       actor,
     };
   }
@@ -251,7 +254,7 @@ function describeHistoryEntry(entry) {
     title:
       action.replaceAll("_", " ").replace(/^\w/, (char) => char.toUpperCase()) ||
       "Activity",
-    detail: from && to ? `${from} → ${to}` : to || from || "Change recorded.",
+    detail: from && to ? `${from}  ->  ${to}` : to || from || "Change recorded.",
     actor,
   };
 }
@@ -299,6 +302,7 @@ export default function TicketDetailPage() {
 
   const [ticket, setTicket] = useState(null);
   const [history, setHistory] = useState([]);
+  const [activityExpanded, setActivityExpanded] = useState(false);
   const [comments, setComments] = useState([]);
   const [attachments, setAttachments] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -313,7 +317,11 @@ export default function TicketDetailPage() {
   const [emailParticipants, setEmailParticipants] = useState([]);
   const [selectedRecipients, setSelectedRecipients] = useState([]);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [reopenReason, setReopenReason] = useState("");
   const [pendingFiles, setPendingFiles] = useState([]);
+  const attachmentInputRef = useRef(null);
+  const [previewAttachment, setPreviewAttachment] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState("");
   const [edit, setEdit] = useState({
     title: "",
     description: "",
@@ -425,10 +433,11 @@ export default function TicketDetailPage() {
       .slice()
       .sort((a, b) => String(a.name).localeCompare(String(b.name)));
   }, [agentDirectory, recommendedAgents]);
-
+//
   const selectedGroup = groups.find(
     (group) => String(group.id) === String(edit.assignedGroupId)
   );
+  // Show the group name and agent name if available, otherwise show the user ID or "Unassigned"
   const assignmentText = useMemo(
     () =>
       ticket?.assigned_to_name ||
@@ -441,6 +450,11 @@ export default function TicketDetailPage() {
     () => history.map((entry) => ({ ...entry, ...describeHistoryEntry(entry) })),
     [history]
   );
+  // Show all history entries if expanded, otherwise show the first 3 entries
+  const visibleActivity = useMemo(
+  () => (activityExpanded ? history : history.slice(0, 3)),
+  [activityExpanded, history]
+  );
   const details = useMemo(() => {
     const raw = ticket?.request_details;
     if (!raw) return {};
@@ -452,6 +466,28 @@ export default function TicketDetailPage() {
     }
   }, [ticket]);
   const module = useMemo(() => moduleMeta(ticket, details), [ticket, details]);
+
+  const closeAttachmentPreview = () => {
+    setPreviewUrl((currentUrl) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      return "";
+    });
+    setPreviewAttachment(null);
+  };
+
+  const openAttachmentPreview = async (attachment) => {
+    try {
+      const response = await ticketsApi.previewAttachment(ticket.id, attachment.id);
+      const nextUrl = URL.createObjectURL(response.data);
+      setPreviewUrl((currentUrl) => {
+        if (currentUrl) URL.revokeObjectURL(currentUrl);
+        return nextUrl;
+      });
+      setPreviewAttachment(attachment);
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "Attachment preview could not be opened."));
+    }
+  };
 
   const downloadAttachment = async (attachment) => {
     try {
@@ -471,6 +507,27 @@ export default function TicketDetailPage() {
       setError(
         getErrorMessage(requestError, "Attachment could not be downloaded.")
       );
+    }
+  };
+
+  const reopenTicket = async () => {
+    const reason = reopenReason.trim();
+    if (reason.length < 10) {
+      setError("Describe how the issue reappeared using at least 10 characters.");
+      return;
+    }
+    setActionLoading(true);
+    setError("");
+    try {
+      await ticketsApi.reopen(ticket.id, reason);
+      setReopenReason("");
+      setSuccess("Ticket reopened and returned to the active support queue.");
+      toast.success("Ticket reopened", "The repeat issue has been recorded in ticket statistics.");
+      await fetchTicket();
+    } catch (requestError) {
+      setError(getErrorMessage(requestError, "Ticket could not be reopened."));
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -542,6 +599,9 @@ export default function TicketDetailPage() {
       `${pendingFiles.length} file(s) uploaded.`
     );
     setPendingFiles([]);
+    if (attachmentInputRef.current) {
+      attachmentInputRef.current.value = "";
+    }
   };
 
   const resolveTicket = async () => {
@@ -606,10 +666,10 @@ export default function TicketDetailPage() {
           operationsUser ? "Helpdesk / Tickets" : "Helpdesk / My Tickets"
         }
         title="Ticket"
-        subtitle="Loading…"
+        subtitle="Loading..."
         actions={shellActions}
       >
-        <p className="text-sm text-slate-500">Loading ticket…</p>
+        <p className="text-sm text-slate-500">Loading ticket...</p>
       </OperationsShell>
     );
   }
@@ -640,7 +700,7 @@ export default function TicketDetailPage() {
           : `Helpdesk / My Tickets / ${ticketRef}`
       }
       title={ticket.title}
-      subtitle={`${module.label} · Created ${formatDateTime(ticket.created_at)} · Updated ${formatDateTime(ticket.updated_at)}`}
+      subtitle={`${module.label} | Created ${formatDateTime(ticket.created_at)}  |  Updated ${formatDateTime(ticket.updated_at)}`}
       actions={shellActions}
       contentOverflow="hidden"
       contentClassName="flex min-h-0 flex-1 flex-col px-4 py-3 lg:px-5 lg:py-4 xl:px-6"
@@ -660,7 +720,7 @@ export default function TicketDetailPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,22rem)]">
         <section className="scroll-slim space-y-5 xl:min-h-0 xl:overflow-y-auto xl:pb-2 xl:pr-1">
           {!operationsUser ? <StatusJourney ticket={ticket} /> : null}
 
@@ -1102,8 +1162,8 @@ export default function TicketDetailPage() {
                 onChange={(event) => setReply(event.target.value)}
                 placeholder={
                   operationsUser
-                    ? "Write a reply to the requester, or an internal note…"
-                    : "Add an update or ask a follow-up…"
+                    ? "Write a reply to the requester, or an internal note..."
+                    : "Add an update or ask a follow-up..."
                 }
                 className={inputClass}
               />
@@ -1125,8 +1185,8 @@ export default function TicketDetailPage() {
                   <span />
                 )}
                 <div className="flex items-center gap-2">
-                  {operationsUser && !internalNote ? <select value={replyAction} onChange={(event) => setReplyAction(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700"><option value="send">Send</option><option value="send_resolve">Send and Resolve</option><option value="send_close">Send and Close</option></select> : null}
-                  <button type="button" onClick={postReply} disabled={actionLoading || !reply.trim()} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" style={{ backgroundColor: BRAND }}><Send className="h-4 w-4" />{internalNote ? "Post note" : replyAction === "send_resolve" ? "Send and Resolve" : replyAction === "send_close" ? "Send and Close" : "Send"}</button>
+                  {operationsUser && !internalNote ? <select value={replyAction} onChange={(event) => setReplyAction(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-bold text-slate-700"><option value="send">Reply</option><option value="send_resolve">Reply and Resolve</option>{["manager","superadmin"].includes(user?.role)?<option value="send_close">Reply and Close</option>:null}</select> : null}
+                  <button type="button" onClick={postReply} disabled={actionLoading || !reply.trim()} className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold text-white disabled:opacity-60" style={{ backgroundColor: BRAND }}><Send className="h-4 w-4" />{internalNote ? "Add Internal Note" : replyAction === "send_resolve" ? "Reply and Resolve" : replyAction === "send_close" ? "Reply and Close" : "Reply"}</button>
                 </div>
               </div>
             </div>
@@ -1165,18 +1225,29 @@ export default function TicketDetailPage() {
                             attachment.uploaded_by_name,
                           ]
                             .filter(Boolean)
-                            .join(" · ")}
+                            .join(" | ")}
                         </p>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => downloadAttachment(attachment)}
-                      className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Download
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {canPreviewTicketAttachment(attachment) ? (
+                        <button
+                          type="button"
+                          onClick={() => openAttachmentPreview(attachment)}
+                          className="inline-flex items-center gap-2 rounded-xl bg-[#172b57] px-3 py-2 text-xs font-bold text-white"
+                        >
+                          Open Preview
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => downloadAttachment(attachment)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Download
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -1191,17 +1262,19 @@ export default function TicketDetailPage() {
                 Add evidence or screenshots
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                PNG, JPG, WebP, or PDF — up to 5 files.
+                PNG, JPG, WebP, or PDF  -  up to 5 files.
               </p>
-              <input
+              <input id="ticket-attachment-picker" ref={attachmentInputRef}
                 type="file"
                 multiple
                 accept={ALLOWED_ATTACH.join(",")}
-                onChange={(event) =>
-                  setPendingFiles(
-                    Array.from(event.target.files || []).slice(0, 5)
-                  )
-                }
+                onChange={(event) => {
+                  const selectedFiles = Array.from(event.target.files || [])
+                    .filter((file) => ALLOWED_ATTACH.includes(file.type))
+                    .slice(0, 5);
+                  setPendingFiles(selectedFiles);
+                  event.target.value = "";
+                }}
                 className="hidden"
               />
             </label>
@@ -1248,51 +1321,47 @@ export default function TicketDetailPage() {
             <p className="mt-1 text-sm text-slate-500">
               Audit trail of assignments, status changes, and updates.
             </p>
-            {timeline.length === 0 ? (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
-                No activity recorded yet.
-              </div>
-            ) : (
-              <ol className="mt-4 space-y-0">
-                {timeline.map((entry, index) => (
-                  <li
-                    key={entry.id || `${entry.created_at}-${index}`}
-                    className="relative flex gap-4 pb-5 last:pb-0"
-                  >
-                    <div className="flex flex-col items-center">
-                      <span
-                        className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full ring-4 ring-[#172b57]/10"
-                        style={{ backgroundColor: BRAND }}
-                      />
-                      {index < timeline.length - 1 ? (
-                        <span className="mt-1 w-px flex-1 bg-slate-200" />
-                      ) : null}
-                    </div>
-                    <div className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                      <div className="flex flex-wrap items-baseline justify-between gap-2">
-                        <p className="text-sm font-bold text-slate-900">
-                          {entry.title}
-                        </p>
-                        <p className="text-xs font-semibold text-slate-500">
-                          {formatDateTime(entry.created_at)}
-                        </p>
-                      </div>
-                      <p className="mt-1 text-sm text-slate-700">
-                        {entry.detail}
-                      </p>
-                      <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        By {entry.actor}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
+            <TicketActivityTable rows={visibleActivity} />
+
+               {history.length > 3 ? (
+          <div className="mt-3 flex justify-center">
+            <button
+              type="button"
+              onClick={() => setActivityExpanded((current) => !current)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:border-[#172b57]/30 hover:bg-slate-50"
+              aria-expanded={activityExpanded}
+            >
+              {activityExpanded
+                ? "View less"
+                : `View more (${history.length - 3} more)`}
+            </button>
           </div>
+             ) : null}
+
+          </div>
+
+
         </section>
 
         <aside className="scroll-hidden space-y-4 xl:min-h-0 xl:overflow-y-auto xl:pb-2">
+          {!operationsUser && ["Resolved", "Closed"].includes(ticket.status) ? (
+            <div className={cardClass}>
+              <h2 className="text-lg font-bold text-slate-950">Issue reappeared?</h2>
+              <p className="mt-1 text-sm text-slate-600">Reopen this ticket so the same issue remains linked to its original resolution and is counted as a repeat issue.</p>
+              <textarea
+                value={reopenReason}
+                onChange={(event) => setReopenReason(event.target.value)}
+                placeholder="Describe how the issue reappeared..."
+                className={`${inputClass} mt-4 min-h-24`}
+              />
+              <button type="button" onClick={reopenTicket} disabled={actionLoading || reopenReason.trim().length < 10} className="mt-3 inline-flex items-center justify-center rounded-xl bg-amber-600 px-4 py-3 text-sm font-bold text-white disabled:opacity-50">
+                Reopen ticket
+              </button>
+            </div>
+          ) : null}
+
           {operationsUser ? (
+
             <AssignmentAcceptancePanel
               ticketId={ticket.id}
               ticket={ticket}
@@ -1329,7 +1398,7 @@ export default function TicketDetailPage() {
                   rows="2"
                   value={resolutionNote}
                   onChange={(event) => setResolutionNote(event.target.value)}
-                  placeholder="Optional resolution / close note…"
+                  placeholder="Optional resolution / close note..."
                   className={inputClass}
                 />
                 <button
@@ -1341,7 +1410,7 @@ export default function TicketDetailPage() {
                   <CheckCircle2 className="h-4 w-4" />
                   Resolve
                 </button>
-                <button
+                {["manager","superadmin"].includes(user?.role) ? <button
                   type="button"
                   onClick={closeTicket}
                   disabled={actionLoading}
@@ -1349,7 +1418,7 @@ export default function TicketDetailPage() {
                 >
                   <XCircle className="h-4 w-4" />
                   Close
-                </button>
+                </button> : null}
               </div>
             </div>
           ) : null}
@@ -1369,10 +1438,7 @@ export default function TicketDetailPage() {
           <div className={cardClass}>
             <h2 className="text-lg font-bold text-slate-950">People</h2>
             <div className="mt-4 space-y-3">
-              <Info
-                label="Requester"
-                value={ticket.requester_name || ticket.requester_email}
-              />
+              <RequesterIdentityCard ticket={ticket} canEditAvatar={Number(ticket.requester_id) === Number(user?.id)} onEditAvatar={() => navigate("/account?section=profile-media")} />
               {(ticket.created_by_name || ticket.created_by_email) &&
               (ticket.created_by_name || ticket.created_by_email) !==
                 (ticket.requester_name || ticket.requester_email) ? (
@@ -1395,13 +1461,13 @@ export default function TicketDetailPage() {
                       runAction(
                         () => ticketsApi.assignAgent(ticket.id, value || null),
                         value
-                          ? "Agent assigned — they have been notified."
+                          ? "Agent assigned  -  they have been notified."
                           : "Returned to the team for triage."
                       );
                     }}
                     className={`${inputClass} mt-2`}
                   >
-                    <option value="">Team triage — no specific agent</option>
+                    <option value="">Team triage  -  no specific agent</option>
                     {recommendedAgents.length ? (
                       <optgroup
                         label={
@@ -1413,7 +1479,7 @@ export default function TicketDetailPage() {
                         {recommendedAgents.map((agent) => (
                           <option key={agent.id} value={agent.id}>
                             {agent.name}
-                            {agent.job_title ? ` — ${agent.job_title}` : ""}
+                            {agent.job_title ? `  -  ${agent.job_title}` : ""}
                             {agent.onShift === true && agent.shiftLabel
                               ? ` (on ${agent.shiftLabel.toLowerCase()})`
                               : ""}
@@ -1426,7 +1492,7 @@ export default function TicketDetailPage() {
                         {otherDirectoryAgents.map((agent) => (
                           <option key={agent.id} value={agent.id}>
                             {agent.name}
-                            {agent.job_title ? ` — ${agent.job_title}` : ""}
+                            {agent.job_title ? `  -  ${agent.job_title}` : ""}
                             {agent.onShift === false ? " (off shift)" : ""}
                           </option>
                         ))}
@@ -1461,6 +1527,14 @@ export default function TicketDetailPage() {
         </aside>
       </div>
       </div>
+      <TicketAttachmentPreview
+        attachment={previewAttachment}
+        url={previewUrl}
+        onClose={closeAttachmentPreview}
+        onDownload={() =>
+          previewAttachment && downloadAttachment(previewAttachment)
+        }
+      />
     </OperationsShell>
   );
 }
@@ -1475,8 +1549,8 @@ function Field({ label, children }) {
 }
 
 /**
- * Employee "where is my ticket" tracker — order-tracking mental model.
- * Submitted → Assigned → In progress → Resolved, with waiting states surfaced.
+ * Employee "where is my ticket" tracker  -  order-tracking mental model.
+ * Submitted  ->  Assigned  ->  In progress  ->  Resolved, with waiting states surfaced.
  */
 function StatusJourney({ ticket }) {
   const status = ticket.status;

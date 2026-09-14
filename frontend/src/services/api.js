@@ -6,7 +6,7 @@ function getModuleBase() {
     : "/helpdesk";
 }
 
-// Dev uses a relative path so the Vite proxy forwards /api to the backend —
+// Dev uses a relative path so the Vite proxy forwards /api to the backend ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
 // works from any machine, not just the server itself.
 const API_BASE = import.meta.env.MODE === "production"
   ? `${window.location.origin}${getModuleBase()}/api`
@@ -71,8 +71,14 @@ export const ticketsApi = {
   updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),
   resolve: (id) => api.patch(`/tickets/${id}/resolve`, {}),
   close: (id) => api.patch(`/tickets/${id}/close`, {}),
+  reopen: (id, reason) => api.post(`/tickets/${id}/reopen`, { reason }),
+  getResolutionCycles: (id) => api.get(`/tickets/${id}/resolution-cycles`),
   assign: (id, assignedToUserId, assignedGroupId) => api.post(`/tickets/${id}/assign`, { assignedToUserId, assignedGroupId }),
   getAttachments: (id) => api.get(`/tickets/${id}/attachments`),
+  previewAttachment: (ticketId, attachmentId) =>
+    api.get(`/tickets/${ticketId}/attachments/${attachmentId}/preview`, {
+      responseType: "blob",
+    }),
   downloadAttachment: (ticketId, attachmentId) =>
     api.get(`/tickets/${ticketId}/attachments/${attachmentId}/download`, {
       responseType: "blob",
@@ -152,11 +158,22 @@ export const archiveRulesApi = { getAll:()=>api.get("/archive-rules"), create:(d
 export const companyCommunicationsApi = {
   getAll: () => api.get("/company-communications"),
   preview: (data) => api.post("/company-communications/preview", data),
-  create: (data) => api.post("/company-communications", data),
+  audienceOptions: () => api.get("/company-communications/audience-options"),
+  create: (data, files = []) => { const body = new FormData(); Object.entries(data || {}).forEach(([key,value]) => body.append(key, typeof value === "object" ? JSON.stringify(value) : String(value))); files.forEach((file) => body.append("attachments", file)); return api.post("/company-communications", body, { headers: { "Content-Type": undefined }, transformRequest: [(payload,headers) => { if (payload instanceof FormData && headers) delete headers["Content-Type"]; return payload; }] }); },
+  attachments: (id) => api.get(`/company-communications/${id}/attachments`),
+  downloadAttachment: (id, attachmentId) => api.get(`/company-communications/${id}/attachments/${attachmentId}/download`, { responseType: "blob" }),
+  removeAttachment: (id, attachmentId) => api.delete(`/company-communications/${id}/attachments/${attachmentId}`),
+  deliveries: (id) => api.get(`/company-communications/${id}/deliveries`),
   test: (id, to) => api.post(`/company-communications/${id}/test`, { to }),
-  schedule: (id, scheduledAt) => api.post(`/company-communications/${id}/schedule`, { scheduledAt }),
+  schedule: (id, scheduledAt, approved) => api.post(`/company-communications/${id}/schedule`, { scheduledAt, approved }),
   cancel: (id) => api.post(`/company-communications/${id}/cancel`, {}),
-  send: (id, confirmation) => api.post(`/company-communications/${id}/send`, { confirmation }),
+  send: (id, approved) => api.post(`/company-communications/${id}/send`, { approved }),
+  feed: () => api.get("/company-communications/feed/mine"),
+  markRead: (id) => api.post(`/company-communications/${id}/read`, {}),
+  comments: (id) => api.get(`/company-communications/${id}/comments`),
+  addComment: (id, body) => api.post(`/company-communications/${id}/comments`, { body }),
+  editComment: (id, commentId, body) => api.patch(`/company-communications/${id}/comments/${commentId}`, { body }),
+  hideComment: (id, commentId) => api.patch(`/company-communications/${id}/comments/${commentId}/hide`, {}),
 };
 
 
@@ -184,6 +201,13 @@ export const catalogApi = {
 };
 
 export const knowledgeApi = { getAll: (params) => api.get("/knowledge", { params }) };
+
+export const currentTicketArchiveApi = {
+  list: (params) => api.get("/current-ticket-archive", { params }),
+  get: (id) => api.get(`/current-ticket-archive/${id}`),
+  restore: (id, reason) => api.post(`/current-ticket-archive/${id}/restore`, { reason }),
+  remove: (id, data) => api.delete(`/current-ticket-archive/${id}`, { data }),
+};
 
 export const archiveApi = {
   getSummary: () => api.get("/archive/summary"),
@@ -276,6 +300,7 @@ export const logsApi = {
 export const notificationApi = {
   getAll: (params) => api.get("/notifications", { params }),
   markRead: (id) => api.patch(`/notifications/${id}/read`, {}),
+  markUnread: (id) => api.patch(`/notifications/${id}/unread`, {}),
   getUnreadCount: (params) => api.get("/notifications/unread-count", { params }),
   markAllRead: (module) => api.patch("/notifications/read-all", {}, { params: { module } }),
   clearAll: (module) => api.delete("/notifications/clear", { params: { module } }),
@@ -311,9 +336,10 @@ export const workspacesApi = {
 export default api;
 
 export const operationalMonitorApi = {
-  summary: () => api.get("/operational-monitor/summary"),
+  summary: (params) => api.get("/operational-monitor/summary", { params }),
   digestPreview: () => api.get("/operational-monitor/digest-preview"),
   claim: (ticketId) => api.post(`/operational-monitor/tickets/${ticketId}/claim`),
+  proposeAssignee: (ticketId, data) => api.post(`/assignment-acceptance/${ticketId}/propose`, data),
 };
 
 export const profileMediaApi = {

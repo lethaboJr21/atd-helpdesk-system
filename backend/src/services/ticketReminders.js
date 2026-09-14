@@ -38,6 +38,8 @@ async function runTicketReminderJob() {
 
   jobRunning = true;
   try {
+    const autoClosed=await pool.query(`UPDATE tickets SET status='Closed',closed_at=NOW(),updated_at=NOW() WHERE status='Resolved' AND resolved_at<=NOW()-INTERVAL '7 days' AND archived_at IS NULL RETURNING id`);
+    for(const row of autoClosed.rows){await pool.query("INSERT INTO ticket_history(ticket_id,actor_user_id,action,old_value,new_value) VALUES($1,NULL,'auto_closed_after_7_days','Resolved','Closed')",[row.id]).catch(()=>{});}
     const result = await pool.query(`
       SELECT
         u.id AS user_id,
@@ -130,7 +132,7 @@ async function runTicketReminderJob() {
       else failed += 1;
     }
 
-    return { recipients: recipients.size, sent, skipped, failed };
+    return { recipients: recipients.size, sent, skipped, failed, autoClosed: autoClosed.rowCount };
   } catch (error) {
     console.error("Ticket reminder job failed:", error.message);
     return { failed: true, error: error.message };

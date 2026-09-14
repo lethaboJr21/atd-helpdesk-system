@@ -2,12 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ✅ Global box sizing */
+/* âœ… Global box sizing */
 * {
   box-sizing: border-box;
 }
 
-/* ✅ App body styling */
+/* âœ… App body styling */
 body {
   margin: 0;
   font-family: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
@@ -16,7 +16,7 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ✅ Reusable Tailwind component classes */
+/* âœ… Reusable Tailwind component classes */
 @layer components {
   .input {
     @apply w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 disabled:bg-slate-100 disabled:cursor-not-allowed;
@@ -352,3 +352,14 @@ body { background: var(--portal-page); color: var(--portal-text); }
 .portal-priority-high{background:color-mix(in srgb,var(--portal-sla-risk) 18%,var(--portal-surface));color:var(--portal-sla-risk);border-color:color-mix(in srgb,var(--portal-sla-risk) 55%,var(--portal-border));}
 .portal-priority-medium{background:color-mix(in srgb,var(--portal-warning) 18%,var(--portal-surface));color:var(--portal-warning);border-color:color-mix(in srgb,var(--portal-warning) 58%,var(--portal-border));}
 .portal-priority-low{background:color-mix(in srgb,var(--portal-success) 18%,var(--portal-surface));color:var(--portal-success);border-color:color-mix(in srgb,var(--portal-success) 55%,var(--portal-border));}
+
+/* SCRIPT-435-SELECTED-TICKET-OVERLAY */
+.portal-selected-ticket-overlay{isolation:isolate;max-height:min(14rem,calc(100vh - 7rem));overflow:auto;}
+@media(max-width:639px){.portal-selected-ticket-overlay{top:max(5.25rem,env(safe-area-inset-top));left:.75rem;right:.75rem;width:auto;transform:none;}}
+/* SCRIPT-492-TRUE-EMPLOYEE-DASHBOARD-SNAPSHOT */
+.employee-dashboard-snapshot { position:relative; overflow:hidden; border:1px solid var(--portal-border); border-radius:1rem; background:var(--portal-page); box-shadow:var(--portal-shadow); }
+.employee-dashboard-snapshot iframe { position:absolute; left:0; top:0; width:1440px; height:1000px; border:0; transform:scale(.28); transform-origin:top left; background:var(--portal-page); pointer-events:none; }
+.employee-dashboard-snapshot-shield { position:absolute; inset:0; z-index:2; cursor:default; }
+.employee-dashboard-snapshot-selected { border-color:var(--portal-primary); box-shadow:0 0 0 3px var(--portal-focus),var(--portal-shadow); }
+@media (min-width:640px) { .employee-dashboard-snapshot iframe { transform:scale(.34); } }
+@media (min-width:1024px) { .employee-dashboard-snapshot iframe { transform:scale(.42); } }

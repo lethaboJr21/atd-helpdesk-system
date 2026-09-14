@@ -1,8 +1,24 @@
-import { LayoutDashboard, Star, Ticket, Wrench } from "lucide-react";
-export default function OnboardingDashboardPreview({template,visibleWidgets=[],appearance,actions=[]}){
- const widgets=(visibleWidgets?.length?visibleWidgets:template?.widgets||[]).slice(0,6);
- return <section className="mt-6 overflow-hidden rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-page-bg)] shadow-2xl" aria-label="Live dashboard layout preview">
-  <header className="flex items-center justify-between border-b border-[var(--portal-border)] bg-[var(--portal-surface-raised)] px-4 py-3"><div><p className="text-xs font-bold uppercase tracking-wider text-[var(--portal-primary)]">Live preview</p><p className="portal-title font-black">{template?.label||"Dashboard"}</p></div><LayoutDashboard className="h-5 w-5 text-[var(--portal-primary)]"/></header>
-  <div className="grid gap-3 p-4 lg:grid-cols-[1fr_15rem]"><div><div className="grid grid-cols-3 gap-2">{["Open tickets","Due today","My requests"].map((label,i)=><div key={label} className="portal-surface-muted rounded-xl border p-3"><p className="portal-muted text-[10px] uppercase">{label}</p><p className="portal-title mt-1 text-xl font-black">{[12,3,5][i]}</p></div>)}</div><div className="mt-3 grid gap-2 sm:grid-cols-2">{widgets.map((id,i)=><div key={id} className={`portal-surface-raised rounded-xl border p-3 ${i===0?"sm:col-span-2":""}`}><div className="flex items-center gap-2"><span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--portal-selected-bg)] text-[var(--portal-primary)]">{i%2?<Wrench className="h-4 w-4"/>:<Ticket className="h-4 w-4"/>}</span><div><p className="portal-title text-xs font-bold">{String(id).replaceAll("-"," ")}</p><p className="portal-muted text-[10px]">Preview widget content</p></div></div></div>)}</div></div><aside className="portal-surface-muted rounded-xl border p-3"><p className="portal-title text-xs font-black">Action boxes</p><div className="mt-2 space-y-2">{(actions.length?actions:["Create request","My tickets","Knowledge"]).slice(0,4).map((id)=><div key={id} className="portal-accent-fill flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-white"><Star className="h-3.5 w-3.5"/>{String(id).replaceAll("-"," ")}</div>)}</div><p className="portal-muted mt-3 text-[10px]">{appearance?.mode} · {appearance?.style} · {appearance?.accent}</p></aside></div>
- </section>;
+import EmployeeDashboardSnapshot from "../dashboard/EmployeeDashboardSnapshot";
+
+export default function OnboardingDashboardPreview({ template, visibleWidgets = [], appearance, actions = [] }) {
+  const widgets = visibleWidgets.length ? visibleWidgets : (template?.widgets || []);
+  return (
+    <section className="mt-6" aria-label="Exact Employee Dashboard preview">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-[var(--portal-primary)]">Exact dashboard preview</p>
+          <p className="portal-title font-black">{template?.label || "Employee Dashboard"}</p>
+        </div>
+        <span className="portal-muted text-xs font-semibold">Scaled snapshot of the applied result</span>
+      </div>
+      <EmployeeDashboardSnapshot
+        templateId={template?.id || "employee"}
+        visibleWidgets={widgets}
+        appearance={appearance}
+        actions={actions}
+        label={`${template?.label || "Employee"} onboarding dashboard snapshot`}
+        height={430}
+      />
+    </section>
+  );
 }

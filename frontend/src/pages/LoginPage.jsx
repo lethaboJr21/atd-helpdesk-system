@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { AlertCircle } from "lucide-react";
 
 import { useAuth } from "../hooks/useAuth";
@@ -18,6 +18,12 @@ function MicrosoftLogo({ className = "h-5 w-5" }) {
 export default function LoginPage() {
   const { login, completeSso, loginWithMicrosoft, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const storedReturnTo = sessionStorage.getItem("atd.helpdesk.returnTo");
+  const candidateReturnTo = location.state?.returnTo || storedReturnTo || "/";
+  const returnTo = candidateReturnTo.startsWith("/") && !candidateReturnTo.startsWith("//")
+    ? candidateReturnTo
+    : "/";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -36,6 +42,7 @@ export default function LoginPage() {
     }
 
     if (!token) return;
+    sessionStorage.setItem("atd.helpdesk.returnTo", returnTo);
 
     setSubmitting(true);
     setError("");
@@ -43,7 +50,8 @@ export default function LoginPage() {
     completeSso(token)
       .then(() => {
         window.history.replaceState({}, document.title, window.location.pathname);
-        navigate("/", { replace: true });
+        sessionStorage.removeItem("atd.helpdesk.returnTo");
+        navigate(returnTo, { replace: true });
       })
       .catch((err) => {
         console.error("Microsoft SSO completion failed:", err);
@@ -56,10 +64,10 @@ export default function LoginPage() {
       .finally(() => {
         setSubmitting(false);
       });
-  }, [completeSso, navigate]);
+  }, [completeSso, navigate, returnTo]);
 
   if (!loading && isAuthenticated) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={returnTo} replace />;
   }
 
   const handleSubmit = async (event) => {
@@ -69,7 +77,8 @@ export default function LoginPage() {
 
     try {
       await login(email, password);
-      navigate("/");
+      sessionStorage.removeItem("atd.helpdesk.returnTo");
+      navigate(returnTo, { replace: true });
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
@@ -111,7 +120,10 @@ export default function LoginPage() {
 
         <button
           type="button"
-          onClick={loginWithMicrosoft}
+          onClick={() => {
+            sessionStorage.setItem("atd.helpdesk.returnTo", returnTo);
+            loginWithMicrosoft();
+          }}
           disabled={submitting}
           className="mb-4 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
         >

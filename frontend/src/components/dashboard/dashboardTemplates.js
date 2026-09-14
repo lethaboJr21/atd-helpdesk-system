@@ -7,7 +7,7 @@ export const DASHBOARD_WIDGETS = Object.freeze({
   assignedAssets:{id:"assignedAssets",label:"Assigned assets",description:"Equipment currently assigned to the signed-in person."},
   pinnedActions:{id:"pinnedActions",label:"Favourites",description:"Favourite request and support shortcuts you can remove or restore."},
 });
-const ROLES=["user","agent","operator","manager","admin","superadmin"];
+const ROLES=["user","hod","agent","operator","manager","admin","superadmin"];
 const ALL=Object.freeze(Object.keys(DASHBOARD_WIDGETS));
 const preview=(accent,secondary,blocks)=>({accent,secondary,blocks});
 export const DASHBOARD_TEMPLATES=Object.freeze({
@@ -18,7 +18,9 @@ export const DASHBOARD_TEMPLATES=Object.freeze({
  knowledgeFirst:{id:"knowledgeFirst",label:"Knowledge First",description:"Promotes self-service solutions before raising a request.",roles:ROLES,experience:"employee",route:"/employee",widgets:["supportActions","quickLinks","pinnedActions","recentTickets"],preview:preview("#d97706","#facc15",["hero","knowledge","tickets"])},
  minimal:{id:"minimal",label:"Minimal Home",description:"A calm lightweight home for requests and current work.",roles:ROLES,experience:"employee",route:"/employee",widgets:["pinnedActions","requestModules","myWork"],preview:preview("#475569","#94a3b8",["hero","requests"])},
  operations:{id:"operations",label:"Helpdesk Operations",description:"Operational ticket, SLA and alert monitoring.",roles:ROLES.slice(1),experience:"operations",route:"/",widgets:[],preview:preview("#1d4ed8","#f97316",["metrics","chart","tickets"])},
- manager:{id:"manager",label:"Manager Overview",description:"Management-oriented operational visibility.",roles:["manager","admin","superadmin"],experience:"operations",route:"/",widgets:[],preview:preview("#6d28d9","#0ea5e9",["metrics","chart","teams"])},
+ manager:{id:"manager",label:"Manager Overview",description:"Department, service performance, approvals and escalation oversight.",roles:["manager"],experience:"management",route:"/",widgets:[],preview:preview("#6d28d9","#0ea5e9",["metrics","chart","teams"])},
+ admin:{id:"admin",label:"Administration Overview",description:"Users, groups, directory, communications and system governance.",roles:["admin"],experience:"administration",route:"/admin",widgets:[],preview:preview("#0f766e","#2563eb",["users","groups","health"])},
+ superadmin:{id:"superadmin",label:"Platform Governance",description:"Global audited governance, emergency controls and platform health.",roles:["superadmin"],experience:"governance",route:"/admin",widgets:[],preview:preview("#991b1b","#7c3aed",["governance","audit","health"])},
  assets:{id:"assets",label:"Assets and CMDB",description:"Asset inventory and ownership workspace.",roles:ROLES.slice(1),experience:"operations",route:"/assets",widgets:[],preview:preview("#047857","#06b6d4",["metrics","assets","owners"])},
  projects:{id:"projects",label:"Projects and Tasks",description:"Separate Project Management experience coming later.",roles:ROLES.slice(1),experience:"operations",route:"/projects",widgets:[],available:false,preview:preview("#64748b","#94a3b8",["disabled"])},
 });

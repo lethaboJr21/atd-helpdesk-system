@@ -13,6 +13,6 @@ export default function useAppearance() {
   const setStyle = useCallback((style) => setAppearance(updateAppearance({ style })), []);
   const setAccent = useCallback((accent) => setAppearance(updateAppearance({ accent })), []);
   const reset = useCallback(() => setAppearance(applyAppearance({ mode: "system", style: "solid", accent: "atd-blue" })), []);
-  const toggleMode = useCallback(() => setAppearance((current) => updateAppearance({ mode: current.mode === "dark" ? "light" : "dark" })), []);
+  const toggleMode = useCallback(() => { const current=readAppearance(); updateAppearance({ mode: current.mode === "dark" ? "light" : "dark" }); }, []);
   return { appearance, setMode, setStyle, setAccent, toggleMode, reset };
 }

@@ -3,6 +3,7 @@ const crypto = require("crypto");
 
 const pool = require("../db/pool");
 const { sendMailSafe } = require("./email");
+const communicationAttachments = require("./companyCommunicationAttachments");
 
 const COMPANY_DOMAIN = String(
   process.env.MICROSOFT_ALLOWED_DOMAIN || "atdalliance.co.za"
@@ -15,7 +16,7 @@ const PORTAL_URL = String(
 ).replace(/\/$/, "");
 
 const CAMPAIGN_TIMEZONE = "Africa/Johannesburg";
-const ALLOWED_AUDIENCE_TYPES = new Set(["all", "departments", "users"]);
+const ALLOWED_AUDIENCE_TYPES = new Set(["all", "departments", "users", "combined"]);
 const SENDABLE_STATUSES = ["draft", "scheduled", "failed", "skipped"];
 
 let schedulerProcessing = false;
@@ -30,74 +31,250 @@ function createIdempotencyKey(value) {
   return cleanText(value, 200) || crypto.randomUUID();
 }
 
-function normalizeAudience(input = {}) {
-  const requestedType = cleanText(input.type, 40).toLowerCase();
-  const type = ALLOWED_AUDIENCE_TYPES.has(requestedType)
-    ? requestedType
-    : "all";
-
-  const values = Array.from(
-    new Set(
-      (Array.isArray(input.values) ? input.values : [])
-        .map((value) => String(value).trim())
-        .filter(Boolean)
-    )
-  );
-
-  return { type, values };
+function uniqueText(values) {
+  return Array.from(new Set(
+    (Array.isArray(values) ? values : [])
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+  ));
 }
 
-async function getEligibleRecipients(audienceInput, database = pool) {
-  const selectedAudience = normalizeAudience(audienceInput);
-  const queryValues = [`%@${COMPANY_DOMAIN}`];
-  const conditions = [
-    "u.approved = TRUE",
-    "u.status = 'active'",
-    "u.archived_at IS NULL",
-    "u.deactivated_at IS NULL",
-    "COALESCE(u.account_type, 'person') = 'person'",
-    "COALESCE(u.microsoft_account_enabled, TRUE) = TRUE",
-    "LOWER(u.email) LIKE $1",
-  ];
+function integerIds(values) {
+  return uniqueText(values)
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0);
+}
 
-  if (selectedAudience.type === "departments") {
-    queryValues.push(selectedAudience.values);
-    conditions.push(`u.department = ANY($${queryValues.length}::text[])`);
+function normalizeAudience(input = {}) {
+  const requestedType = String(input.type || "all").trim().toLowerCase();
+
+  if (requestedType !== "combined") {
+    const type = ALLOWED_AUDIENCE_TYPES.has(requestedType) ? requestedType : "all";
+    const values = uniqueText(input.values);
+    return {
+      type,
+      values,
+      include: {
+        wholeCompany: type === "all",
+        departments: type === "departments" ? values : [],
+        roles: [],
+        positions: [],
+        users: type === "users" ? values : [],
+        supportGroups: [],
+        workspaces: [],
+        headsOfDepartment: false,
+      },
+      exclude: {
+        roles: [],
+        departments: [],
+        positions: [],
+        users: [],
+        supportGroups: [],
+        workspaces: [],
+        headsOfDepartment: false,
+      },
+      externalEmails: [],
+    };
   }
 
-  if (selectedAudience.type === "users") {
-    const userIds = selectedAudience.values
-      .map(Number)
-      .filter((value) => Number.isInteger(value) && value > 0);
+  const include = input.include && typeof input.include === "object" ? input.include : {};
+  const exclude = input.exclude && typeof input.exclude === "object" ? input.exclude : {};
 
-    if (userIds.length === 0) {
-      return [];
+  return {
+    type: "combined",
+    values: [],
+    include: {
+      wholeCompany: include.wholeCompany === true,
+      departments: uniqueText(include.departments),
+      roles: uniqueText(include.roles).map((value) => value.toLowerCase()),
+      positions: uniqueText(include.positions),
+      users: uniqueText(include.users),
+      supportGroups: uniqueText(include.supportGroups),
+      workspaces: uniqueText(include.workspaces),
+      headsOfDepartment: include.headsOfDepartment === true,
+    },
+    exclude: {
+      roles: uniqueText(exclude.roles).map((value) => value.toLowerCase()),
+      departments: uniqueText(exclude.departments),
+      positions: uniqueText(exclude.positions),
+      users: uniqueText(exclude.users),
+      supportGroups: uniqueText(exclude.supportGroups),
+      workspaces: uniqueText(exclude.workspaces),
+      headsOfDepartment: exclude.headsOfDepartment === true,
+    },
+    externalEmails: uniqueText(input.externalEmails)
+      .map((value) => value.toLowerCase())
+      .filter((value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+      .slice(0, 100),
+  };
+}
+
+async function getEligibleRecipients(input, database = pool) {
+  const audience = normalizeAudience(input);
+  const values = [`%@${COMPANY_DOMAIN}`];
+  const includeConditions = [];
+  const excludeConditions = [];
+
+  const addValue = (value) => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+
+  const eligibleInternalAccount = `
+    u.approved = TRUE
+    AND u.status = 'active'
+    AND u.archived_at IS NULL
+    AND u.deactivated_at IS NULL
+    AND COALESCE(u.account_type, 'person') = 'person'
+    AND COALESCE(u.microsoft_account_enabled, TRUE) = TRUE
+    AND LOWER(u.email) LIKE $1
+  `;
+
+  if (audience.type === "all") includeConditions.push("TRUE");
+
+  if (audience.type === "departments" && audience.values.length) {
+    includeConditions.push(`u.department = ANY(${addValue(audience.values)}::text[])`);
+  }
+
+  if (audience.type === "users") {
+    const ids = integerIds(audience.values);
+    if (ids.length) includeConditions.push(`u.id = ANY(${addValue(ids)}::integer[])`);
+  }
+
+  if (audience.type === "combined") {
+    if (audience.include.wholeCompany) includeConditions.push("TRUE");
+
+    if (audience.include.departments.length) {
+      includeConditions.push(`u.department = ANY(${addValue(audience.include.departments)}::text[])`);
     }
 
-    queryValues.push(userIds);
-    conditions.push(`u.id = ANY($${queryValues.length}::integer[])`);
+    if (audience.include.roles.length) {
+      includeConditions.push(`LOWER(u.role) = ANY(${addValue(audience.include.roles)}::text[])`);
+    }
+
+    if (audience.include.positions.length) {
+      includeConditions.push(`u.job_title = ANY(${addValue(audience.include.positions)}::text[])`);
+    }
+
+    const userIds = integerIds(audience.include.users);
+    if (userIds.length) {
+      includeConditions.push(`u.id = ANY(${addValue(userIds)}::integer[])`);
+    }
+
+    const groupIds = integerIds(audience.include.supportGroups);
+    if (groupIds.length) {
+      includeConditions.push(`EXISTS (
+        SELECT 1
+        FROM support_group_members included_group
+        WHERE included_group.user_id = u.id
+          AND included_group.group_id = ANY(${addValue(groupIds)}::integer[])
+      )`);
+    }
+
+    const workspaceIds = integerIds(audience.include.workspaces);
+    if (workspaceIds.length) {
+      includeConditions.push(`EXISTS (
+        SELECT 1
+        FROM workspace_members included_workspace
+        WHERE included_workspace.user_id = u.id
+          AND included_workspace.is_active = TRUE
+          AND included_workspace.workspace_id = ANY(${addValue(workspaceIds)}::integer[])
+      )`);
+    }
+
+    if (audience.include.headsOfDepartment) {
+      throw httpError(
+        409,
+        "HOD audience selection is unavailable until an authoritative HOD entitlement is configured.",
+        "COMMUNICATION_HOD_MAPPING_REQUIRED"
+      );
+    }
+
+    if (audience.exclude.roles.length) {
+      excludeConditions.push(`NOT (LOWER(u.role) = ANY(${addValue(audience.exclude.roles)}::text[]))`);
+    }
+
+    if (audience.exclude.departments.length) {
+      excludeConditions.push(`NOT (u.department = ANY(${addValue(audience.exclude.departments)}::text[]))`);
+    }
+
+    if (audience.exclude.positions.length) {
+      excludeConditions.push(`NOT (u.job_title = ANY(${addValue(audience.exclude.positions)}::text[]))`);
+    }
+
+    const excludedUserIds = integerIds(audience.exclude.users);
+    if (excludedUserIds.length) {
+      excludeConditions.push(`NOT (u.id = ANY(${addValue(excludedUserIds)}::integer[]))`);
+    }
+
+    const excludedGroupIds = integerIds(audience.exclude.supportGroups);
+    if (excludedGroupIds.length) {
+      excludeConditions.push(`NOT EXISTS (
+        SELECT 1
+        FROM support_group_members excluded_group
+        WHERE excluded_group.user_id = u.id
+          AND excluded_group.group_id = ANY(${addValue(excludedGroupIds)}::integer[])
+      )`);
+    }
+
+    const excludedWorkspaceIds = integerIds(audience.exclude.workspaces);
+    if (excludedWorkspaceIds.length) {
+      excludeConditions.push(`NOT EXISTS (
+        SELECT 1
+        FROM workspace_members excluded_workspace
+        WHERE excluded_workspace.user_id = u.id
+          AND excluded_workspace.is_active = TRUE
+          AND excluded_workspace.workspace_id = ANY(${addValue(excludedWorkspaceIds)}::integer[])
+      )`);
+    }
+
+    if (audience.exclude.headsOfDepartment) {
+      throw httpError(
+        409,
+        "HOD exclusions are unavailable until an authoritative HOD entitlement is configured.",
+        "COMMUNICATION_HOD_MAPPING_REQUIRED"
+      );
+    }
   }
 
-  const result = await database.query(
-    `
-      SELECT
-        u.id,
-        u.name,
-        LOWER(u.email) AS email,
-        u.department
-      FROM users u
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY
-        u.department NULLS LAST,
-        u.name,
-        u.email
-    `,
-    queryValues
+  const internalRecipients = includeConditions.length
+    ? (await database.query(
+        `SELECT
+           u.id,
+           u.name,
+           LOWER(u.email) AS email,
+           u.department,
+           u.job_title,
+           u.role
+         FROM users u
+         WHERE ${eligibleInternalAccount}
+           AND (${includeConditions.join(" OR ")})
+           ${excludeConditions.length ? `AND ${excludeConditions.join(" AND ")}` : ""}
+         ORDER BY u.department NULLS LAST, u.name, u.email`,
+        values
+      )).rows.map((recipient) => ({ ...recipient, external: false }))
+    : [];
+
+  const recipientsByEmail = new Map(
+    internalRecipients.map((recipient) => [recipient.email, recipient])
   );
 
-  return result.rows;
-}
+  for (const email of audience.externalEmails) {
+    if (!recipientsByEmail.has(email)) {
+      recipientsByEmail.set(email, {
+        id: null,
+        name: "External recipient",
+        email,
+        department: null,
+        job_title: null,
+        role: null,
+        external: true,
+      });
+    }
+  }
 
+  return Array.from(recipientsByEmail.values());
+}
 function renderCampaign(campaign, recipient) {
   const signInUrl = `${PORTAL_URL}/login`;
   const recipientName = cleanText(recipient.name, 200) || "ATD colleague";
@@ -157,6 +334,7 @@ async function sendCampaign(campaignId, actorId = null) {
   const client = await pool.connect();
   let campaign;
   let recipients;
+  let attachments = [];
 
   try {
     await client.query("BEGIN");
@@ -179,11 +357,11 @@ async function sendCampaign(campaignId, actorId = null) {
       throw error;
     }
 
+    attachments = await communicationAttachments.emailAttachments(client, campaign.id);
     recipients = await getEligibleRecipients(
-      {
-        type: campaign.audience_type,
-        values: campaign.audience_values,
-      },
+      campaign.audience_definition && typeof campaign.audience_definition === "object"
+        ? campaign.audience_definition
+        : { type: campaign.audience_type, values: campaign.audience_values },
       client
     );
 
@@ -249,6 +427,7 @@ async function sendCampaign(campaignId, actorId = null) {
       html: body.html,
       text: body.text,
       category: "welcome",
+      attachments,
     });
 
     const deliveryStatus = result.sent
@@ -296,6 +475,10 @@ async function sendCampaign(campaignId, actorId = null) {
           WHEN $2 IN ('sent', 'partially_sent') THEN NOW()
           ELSE sent_at
         END,
+        published_at = CASE
+          WHEN $2 IN ('sent', 'partially_sent') THEN COALESCE(published_at,NOW())
+          ELSE published_at
+        END,
         last_error = $3,
         updated_at = NOW()
       WHERE id = $1
@@ -310,6 +493,7 @@ async function sendCampaign(campaignId, actorId = null) {
     skipped,
     failed,
     status: finalStatus,
+    attachmentCount: attachments.length,
   };
 }
 

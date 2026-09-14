@@ -56,55 +56,55 @@ Expected response:
 
 ```txt
 atd-helpdesk/
-├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── main.jsx
-│   │   ├── pages/
-│   │   │   ├── Dashboard.jsx
-│   │   │   ├── LoginPage.jsx
-│   │   │   ├── SignupPage.jsx
-│   │   │   ├── TicketWorkspace.jsx
-│   │   │   ├── TicketDetailPage.jsx
-│   │   │   ├── AdminUsers.jsx
-│   │   │   └── ProductionDashboard.jsx
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx
-│   │   └── services/
-│   │       └── api.js
-│   ├── vite.config.js
-│   └── package.json
-│
-├── backend/
-│   ├── src/
-│   │   ├── server.js
-│   │   ├── db/
-│   │   │   ├── pool.js
-│   │   │   └── migrate.js
-│   │   ├── middleware/
-│   │   │   ├── auth.js
-│   │   │   └── roles.js
-│   │   ├── routes/
-│   │   │   ├── auth.js
-│   │   │   ├── users.js
-│   │   │   ├── groups.js
-│   │   │   ├── tickets.js
-│   │   │   ├── notifications.js
-│   │   │   ├── production.js
-│   │   │   ├── productionEvents.js
-│   │   │   └── productionSync.js
-│   │   └── services/
-│   │       ├── email.js
-│   │       ├── ticketReminders.js
-│   │       ├── productionSyncScheduler.js
-│   │       └── syncBedlinerDailyProduction.js
-│   ├── .env
-│   └── package.json
-│
-├── database/
-├── .github/workflows/
-│   └── ci.yml
-└── README.md
+frontend/
+ src/
+App.jsx
+main.jsx
+pages/
+Dashboard.jsx
+LoginPage.jsx
+SignupPage.jsx
+TicketWorkspace.jsx
+TicketDetailPage.jsx
+AdminUsers.jsx
+ProductionDashboard.jsx
+context/
+AuthContext.jsx
+services/
+Ã¢â€â€š   Ã¢â€â€š       Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ api.js
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ vite.config.js
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ package.json
+Ã¢â€â€š
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ backend/
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ src/
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ server.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ db/
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ pool.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ migrate.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ middleware/
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ auth.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ roles.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ routes/
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ auth.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ users.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ groups.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ tickets.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ notifications.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ production.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ productionEvents.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ productionSync.js
+Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ services/
+Ã¢â€â€š   Ã¢â€â€š       Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ email.js
+Ã¢â€â€š   Ã¢â€â€š       Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ ticketReminders.js
+Ã¢â€â€š   Ã¢â€â€š       Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ productionSyncScheduler.js
+Ã¢â€â€š   Ã¢â€â€š       Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ syncBedlinerDailyProduction.js
+Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ .env
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ package.json
+Ã¢â€â€š
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ database/
+Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ .github/workflows/
+Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ ci.yml
+Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ README.md
 ```
 
 ---
@@ -734,12 +734,12 @@ The GitLab hostname may resolve through Cloudflare and SSH port 22 may be blocke
 
 ## Maintainer
 
-**Jeffrey Motepe**  
+**Jeffrey Motepe**
 ATD Alliance IT Helpdesk / Production Portal
 
 ---
 
-© ATD Alliance · portal.atdalliance.co.za
+Ã‚Â© ATD Alliance Ã‚Â· portal.atdalliance.co.za
 
 
 
@@ -869,3 +869,55 @@ Script 208 will run the consolidated role-based functional milestone validation.
 - Company and Department announcement feeds, discussions, comments, checklists, email delivery, unread alerts, and persistent notification actions.
 - Microsoft Directory no-change journal and Monday 08:00 weekly report attachment.
 - Cartoon avatar library and announcement identity cards.
+<!-- BEGIN 514 TICKET WORKSPACE ATTACHMENT HOD -->
+## Ticket Workspace, Preview, Attachment, and HOD Role Update
+
+**Recorded:** 2026-09-14
+**Status:** Source discovery and implementation preparation
+
+### Approved requirements
+
+- Expand the Ticket Workspace panel to use the complete available content area after the sidebar and application header.
+- Selecting a ticket must automatically open the ticket preview and load the selected ticket.
+- A second separate single click on the same selected ticket must show a compact instruction: **Double-click the ticket to open the full ticket.**
+- A true double-click must immediately open the full ticket without a conflicting instructional popup.
+- Restore attachment selection through the file picker in addition to existing drag-and-drop behavior.
+- Use one shared attachment validation and upload path for dropped and browsed files.
+- Reset the file input after processing so the same file can be selected again.
+- Add **HOD** to user-role selection and carry the role through frontend typing, validation, API validation, backend role handling, authorization, audit history, filtering, and database constraints or reference data where applicable.
+
+### Guardrails
+
+- Preserve existing ticket routing, filters, List/Kanban behavior, bulk actions, pagination, and ticket access controls.
+- Do not assign HOD permissions by assumption. Use the repository's existing role-permission model.
+- Back up every modified application file before implementation.
+- Validate frontend build, backend build, migrations, attachment selection, drag-and-drop, single-click preview, double-click navigation, and HOD user create/edit flows before deployment.
+- Produce one consolidated UTF-8 TXT implementation report in the repository
+eports folder.
+
+### Source collection
+
+Run from the repository root:
+
+`powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\514_collect_ticket_workspace_attachment_hod_sources.ps1
+`
+
+The script writes complete source contents to:
+
+`	ext
+reports\514_ticket_workspace_attachment_hod_source_collection.txt
+`
+<!-- END 514 TICKET WORKSPACE ATTACHMENT HOD -->
+<!-- BEGIN 515 TICKET WORKSPACE ATTACHMENT HOD IMPLEMENTATION -->
+## Ticket Workspace, Attachment Picker, and HOD Role Implementation
+
+- Ticket Workspace now consumes the complete available content width when no ticket is selected.
+- Selecting a ticket automatically opens and refreshes the preview panel.
+- A second separate single click on the same ticket shows guidance to double-click for the full ticket.
+- A true double-click opens the full ticket and clears the guidance message.
+- Attachment browse/select is explicitly connected to the native file input and resets after upload; existing drag-and-drop behavior is preserved.
+- HOD is available as a selectable user role using stored value `hod` and display label `HOD`.
+- HOD is not automatically treated as a Helpdesk operations role. Existing governed permissions continue to control access.
+- Script 515 creates backups and one consolidated implementation report under `reports`.
+<!-- END 515 TICKET WORKSPACE ATTACHMENT HOD IMPLEMENTATION -->

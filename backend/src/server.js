@@ -25,6 +25,7 @@ const settingsRoutes = require("./routes/settings");
 const adminControlsRoutes = require("./routes/adminControls");
 const assetRoutes = require("./routes/assets");
 const archiveRoutes = require("./routes/archive");
+const currentTicketArchiveRoutes = require("./routes/currentTicketArchive");
 const catalogRoutes = require("./routes/catalog");
 const emailIntakeRoutes = require("./routes/emailIntake");
 const productionSyncRoutes = require("./routes/productionSync");
@@ -131,6 +132,7 @@ app.use("/api/company-communications", companyCommunicationsRoutes);
 app.use("/api/catalog", catalogRoutes);
 app.use("/api/email-intake", emailIntakeRoutes);
 app.use("/api/archive", archiveRoutes);
+app.use("/api/current-ticket-archive", currentTicketArchiveRoutes);
 app.use("/api/archive-rules", archiveRuleRoutes);
 app.use("/api/production", productionRoutes);
 app.use("/api/production/sync", productionSyncRoutes);
@@ -182,6 +184,16 @@ app.use((error, request, response, next) => {
 
 if (process.env.NODE_ENV === "production" && process.env.SERVE_FRONTEND_FROM_NODE === "true") {
   const distPath = path.join(__dirname, "../../frontend/dist");
+  app.get("/helpdesk", (request, response) => {
+    const queryIndex = request.originalUrl.indexOf("?");
+    const query = queryIndex >= 0 ? request.originalUrl.slice(queryIndex) : "";
+    response.redirect(308, `/helpdesk/${query}`);
+  });
+  app.use("/helpdesk", express.static(distPath));
+  app.get("/helpdesk/*", (request, response, next) => {
+    if (request.path.startsWith("/helpdesk/api/")) return next();
+    return response.sendFile(path.join(distPath, "index.html"));
+  });
   app.use(express.static(distPath));
   app.get("*", (_request, response) => response.sendFile(path.join(distPath, "index.html")));
 }

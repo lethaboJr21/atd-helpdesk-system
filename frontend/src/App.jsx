@@ -5,6 +5,7 @@ import {
   Navigate,
   Route,
   Routes,
+  useLocation,
   useSearchParams,
 } from "react-router-dom";
 
@@ -27,6 +28,7 @@ import OperationsHubEmbed from "./pages/OperationsHubEmbed";
 import ProductionDashboard from "./pages/ProductionDashboard";
 import SignupPage from "./pages/SignupPage.jsx";
 import TicketArchivePage from "./pages/TicketArchivePage";
+import CurrentTicketArchivePage from "./pages/CurrentTicketArchivePage";
 import TicketCreatePage from "./pages/TicketCreatePage";
 import TicketDetailPage from "./pages/TicketDetailPage";
 import TicketWorkspace from "./pages/TicketWorkspace";
@@ -115,6 +117,8 @@ function GateUnavailable({ message, onRetry }) {
 }
 function PrivateRoute({ children }) {
   const { isAuthenticated, loading, user } = useAuth();
+  const location = useLocation();
+  const requestedRoute = `${location.pathname}${location.search}${location.hash}`;
   const [gate, setGate] = useState({ loading: true, terms: null, onboarding: null, error: "" });
   const [retry, setRetry] = useState(0);
   useEffect(() => {
@@ -147,10 +151,10 @@ function PrivateRoute({ children }) {
     return () => { active = false; };
   }, [isAuthenticated, retry]);
   if (loading || gate.loading) return <LoadingScreen message="Verifying portal access..." />;
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ returnTo: requestedRoute }} />;
   if (!hasPortalAccess(user)) return <Navigate to="/waiting-approval" replace />;
   if (gate.error) return <GateUnavailable message={gate.error} onRetry={() => setRetry((value) => value + 1)} />;
-  if (gate.terms?.required) return <Navigate to="/terms" replace />;
+  if (gate.terms?.required) return <Navigate to="/terms" replace state={{ returnTo: requestedRoute }} />;
   if (gate.onboarding?.required) return <Navigate to="/onboarding" replace />;
   return children;
 }
@@ -237,7 +241,7 @@ function EmployeeRoute({ children }) {
   return children;
 }
 
-/** Redirect legacy /tickets/new?type=â€¦ to dedicated module routes */
+/** Redirect legacy /tickets/new?type=Ã¢â‚¬Â¦ to dedicated module routes */
 function LegacyTicketCreateRedirect() {
   const [params] = useSearchParams();
   const type = params.get("type") || "incident";
@@ -442,6 +446,8 @@ function AppRoutes({ moduleBase }) {
           </PrivateRoute>
         }
       />
+
+      <Route path="/ticket-archive" element={<PrivateRoute><OperationsRoute><CurrentTicketArchivePage /></OperationsRoute></PrivateRoute>} />
 
       <Route
         path="/archive"

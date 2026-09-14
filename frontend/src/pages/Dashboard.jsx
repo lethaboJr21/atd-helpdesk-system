@@ -46,7 +46,11 @@ import {
 } from "recharts";
 
 import Sidebar from "../components/Sidebar";
+import CompanyAnnouncements from "../components/dashboard/CompanyAnnouncements";
 import { useToast } from "../components/notifications/ToastProvider";
+import NotificationCenter from "../components/notifications/NotificationCenter";
+import ProfileAvatar from "../components/account/ProfileAvatar";
+
 import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
 import PendingAcceptanceCards from "../components/tickets/PendingAcceptanceCards";
 import BulkTicketActions from "../components/tickets/BulkTicketActions";
@@ -231,6 +235,9 @@ export default function Dashboard() {
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [workspaceFilter, setWorkspaceFilter] = useState("All");
+  const [requesterFilter, setRequesterFilter] = useState("");
+  const [departmentFilter, setDepartmentFilter] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("");
   const [rangeDays, setRangeDays] = useState(7);
 
   const [loading, setLoading] = useState(true);
@@ -407,6 +414,11 @@ export default function Dashboard() {
         status: "Unresolved",
         search: debouncedQuery || undefined,
         workspace: workspaceFilter === "All" ? undefined : workspaceFilter,
+        requester: requesterFilter || undefined,
+        department: departmentFilter || undefined,
+        priority: priorityFilter || undefined,
+        sort: "created_at",
+        direction: "desc",
       });
       const payload = response.data;
       const ticketData = Array.isArray(payload)
@@ -441,7 +453,7 @@ export default function Dashboard() {
     } finally {
       setTicketLoading(false);
     }
-  }, [debouncedQuery, ticketPage, ticketPageSize, workspaceFilter]);
+  }, [debouncedQuery, ticketPage, ticketPageSize, workspaceFilter, requesterFilter, departmentFilter, priorityFilter]);
 
   const refreshDashboard = useCallback(async () => {
     await Promise.all([
@@ -506,7 +518,7 @@ export default function Dashboard() {
 
   const workspaces = knownWorkspaces;
 
-  useEffect(() => { setTicketPage(1); }, [debouncedQuery, workspaceFilter]);
+  useEffect(() => { setTicketPage(1); }, [debouncedQuery, workspaceFilter, requesterFilter, departmentFilter, priorityFilter]);
 
   const selectedGroup = useMemo(() => {
     return groups.find((group) => {
@@ -543,44 +555,52 @@ export default function Dashboard() {
     }
   };
 
-  const handleOpenNotifications = async () => {
-    const shouldOpen = !showNotifications;
+  const handleOpenNotifications = () => {
     setShowAccountMenu(false);
-    setShowNotifications(shouldOpen);
+    setShowNotifications((current) => !current);
+  };
 
-    if (!shouldOpen || unreadCount === 0) {
-      return;
-    }
-    const hasActionRequired = notifications.some((item) => {
-      const payload = item?.action_payload || {};
-      return !item.is_read && Boolean(payload.requiresAction || payload.requires_action);
-    });
-    if (hasActionRequired) {
-      return;
-    }
-
+  const handleNotificationReadState = async (notification, nextReadState) => {
+    setActionLoading(true);
+    setError("");
     try {
-      await Promise.all(
-        NOTIFICATION_MODULES.map((module) => notificationApi.markAllRead(module))
-      );
-
-      setNotifications((currentNotifications) => {
-        return currentNotifications.map((notification) => ({
-          ...notification,
-          is_read: true,
-          read_at: notification.read_at || new Date().toISOString(),
-        }));
-      });
+      const response = nextReadState
+        ? await notificationApi.markRead(notification.id)
+        : await notificationApi.markUnread(notification.id);
+      setNotifications((current) => current.map((item) =>
+        item.id === notification.id
+          ? { ...item, ...(response.data || {}), is_read: nextReadState }
+          : item
+      ));
     } catch (requestError) {
-      setError(
-        getErrorMessage(
-          requestError,
-          "Failed to mark notifications as read."
-        )
-      );
+      const message = getErrorMessage(requestError, "Notification read state could not be updated.");
+      setError(message);
+      toast.error(message, { title: "Notification not updated" });
+    } finally {
+      setActionLoading(false);
     }
   };
 
+  const handleMarkAllNotificationsRead = async () => {
+    setActionLoading(true);
+    setError("");
+    try {
+      await Promise.all(NOTIFICATION_MODULES.map((module) => notificationApi.markAllRead(module)));
+      setNotifications((current) => current.map((item) => {
+        const payload = item?.action_payload || {};
+        const requiresAction = Boolean(payload.requiresAction || payload.requires_action);
+        return requiresAction
+          ? item
+          : { ...item, is_read: true, read_at: item.read_at || new Date().toISOString() };
+      }));
+    } catch (requestError) {
+      const message = getErrorMessage(requestError, "Notifications could not be marked as read.");
+      setError(message);
+      toast.error(message, { title: "Notification update failed" });
+    } finally {
+      setActionLoading(false);
+    }
+  };
   const handleNotificationAction = async (notification, action) => {
     const payload = notification?.action_payload || {};
     const requestId = Number(payload.requestId || payload.request_id);
@@ -685,7 +705,7 @@ export default function Dashboard() {
   const handleClearNotifications = async () => {
     const protectedActions = notifications.filter((item) => {
       const payload = item?.action_payload || {};
-      return !item.is_read && Boolean(payload.requiresAction || payload.requires_action);
+      return Boolean(payload.requiresAction || payload.requires_action);
     });
     if (protectedActions.length > 0) {
       setError(
@@ -840,15 +860,14 @@ export default function Dashboard() {
                 onToggle={handleOpenNotifications}
                 onClear={handleClearNotifications}
                 onAction={handleNotificationAction}
-                actionLoading={actionLoading}
-                onOpenNotification={(notification) => {
+                onReadState={handleNotificationReadState}
+                onMarkAllRead={handleMarkAllNotificationsRead}
+                onSettings={() => {
                   setShowNotifications(false);
-                  if (notification.target_url) {
-                    navigate(notification.target_url);
-                  }
+                  navigate("/account?section=notifications");
                 }}
+                actionLoading={actionLoading}
               />
-
               <button
                 type="button"
                 onClick={refreshDashboard}
@@ -937,6 +956,8 @@ export default function Dashboard() {
                 .join(" ")}
             </div>
           )}
+
+          <CompanyAnnouncements />
 
           {sectionErrors.pendingAcceptances ? <SectionError message={sectionErrors.pendingAcceptances} /> : null}
           <PendingAcceptanceCards items={pendingAcceptances} busy={actionLoading} onAccept={async(item)=>{setActionLoading(true);try{await assignmentAcceptanceApi.accept(item.ticket_id,{});toast.success("Assignment accepted.",{title:"Ticket activity recorded",duration:5000});await refreshDashboard();navigate(`/tickets/${item.ticket_id}`);}catch(requestError){toast.error(getErrorMessage(requestError,"Assignment could not be accepted."),{title:"Action not completed"});}finally{setActionLoading(false);}}} onReturn={async(item)=>{setActionLoading(true);try{await assignmentAcceptanceApi.returnToQueue(item.ticket_id,{});toast.success("Ticket returned to the group queue.",{title:"Ticket activity recorded",duration:5000});await refreshDashboard();}catch(requestError){toast.error(getErrorMessage(requestError,"Assignment could not be returned."),{title:"Action not completed"});}finally{setActionLoading(false);}}} onReadMore={(item)=>navigate(`/tickets/${item.ticket_id}`)} />          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1089,6 +1110,12 @@ export default function Dashboard() {
                 pageSize={ticketPageSize}
                 onPageChange={setTicketPage}
                 onPageSizeChange={(value) => { localStorage.setItem(DASHBOARD_PAGE_SIZE_KEY, String(value)); setTicketPageSize(value); setTicketPage(1); }}
+                requesterFilter={requesterFilter}
+                departmentFilter={departmentFilter}
+                priorityFilter={priorityFilter}
+                onRequesterChange={setRequesterFilter}
+                onDepartmentChange={setDepartmentFilter}
+                onPriorityChange={setPriorityFilter}
               />
 
               <KnowledgePanel
@@ -1101,7 +1128,7 @@ export default function Dashboard() {
             <div className="flex flex-col gap-4">
               <TicketPreview
                 ticket={selectedTicket}
-                onOpenCase={() => {
+                onViewTicket={() => {
                   if (selectedTicket) {
                     navigate(`/tickets/${selectedTicket.id}`);
                   }
@@ -1334,9 +1361,7 @@ function AccountMenu({
         aria-haspopup="menu"
         className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm hover:bg-slate-50"
       >
-        <span className="flex h-8 w-8 items-center justify-center rounded-full portal-accent-fill bg-[var(--portal-primary)] text-xs font-bold text-white">
-          {initials || <UserCircle className="h-5 w-5" />}
-        </span>
+        <ProfileAvatar user={user} className="h-8 w-8" />
         <span className="hidden max-w-36 truncate text-left text-sm font-semibold text-slate-800 2xl:block">
           {user?.name || "My account"}
         </span>
@@ -1402,8 +1427,10 @@ function NotificationMenu({
   onToggle,
   onClear,
   onAction,
+  onReadState,
+  onMarkAllRead,
+  onSettings,
   actionLoading,
-  onOpenNotification,
 }) {
   return (
     <div ref={menuRef} className="relative">
@@ -1416,148 +1443,28 @@ function NotificationMenu({
       >
         <Bell className="h-4 w-4" />
         Alerts
-
-        {unreadCount > 0 && (
+        {unreadCount > 0 ? (
           <span className="absolute -right-2 -top-2 rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold text-white">
             {unreadCount}
           </span>
-        )}
+        ) : null}
       </button>
-
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Notifications"
-          className="absolute right-0 z-50 mt-2 w-[min(92vw,26rem)] rounded-xl border border-slate-200 bg-white p-4 shadow-xl"
-        >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="font-bold text-slate-950">Notifications</h3>
-
-            <button
-              type="button"
-              onClick={onClear}
-              className="text-xs font-semibold text-red-600 hover:text-red-700"
-            >
-              Clear all
-            </button>
-          </div>
-
-          <div className="max-h-80 space-y-2 overflow-y-auto">
-            {notifications.length === 0 ? (
-              <p className="p-3 text-sm text-slate-500">
-                No notifications
-              </p>
-            ) : (
-              notifications.map((notification) => {
-                const payload = notification.action_payload || {};
-                const requiresAction = Boolean(
-                  payload.requiresAction || payload.requires_action
-                );
-                const requestId = Number(payload.requestId || payload.request_id);
-                const isAccessRequest =
-                  notification.target_type === "access_request" ||
-                  notification.type === "access_request_approval" ||
-                  (Number.isInteger(requestId) && requestId > 0);
-
-                return (
-                  <article
-                    key={notification.id}
-                    className={classNames(
-                      "w-full rounded-xl border p-3 text-left text-sm transition hover:brightness-95",
-                      notification.is_read
-                        ? "border-slate-200 bg-slate-50"
-                        : notification.type === "critical"
-                        ? "border-red-300 bg-red-50"
-                        : notification.type === "warning"
-                        ? "border-amber-300 bg-amber-50"
-                        : "border-[var(--portal-selected-border)] bg-blue-50"
-                    )}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onOpenNotification(notification)}
-                      className="block w-full text-left"
-                    >
-                      <p className="font-semibold text-slate-800">
-                        {notification.message}
-                      </p>
-                      {notification.created_at && (
-                        <p className="mt-1 text-xs text-slate-500">
-                          {new Date(notification.created_at).toLocaleString()}
-                        </p>
-                      )}
-                    </button>
-
-                    {requiresAction ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        {isAccessRequest ? (
-                          <>
-                            <button
-                              type="button"
-                              disabled={actionLoading}
-                              onClick={() => onAction(notification, "approve")}
-                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actionLoading}
-                              onClick={() => onAction(notification, "reject")}
-                              className="rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-700 disabled:opacity-50"
-                            >
-                              Reject
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onAction(notification, "view")}
-                              className="rounded-lg border border-[var(--portal-selected-border)] bg-white px-3 py-1.5 text-xs font-bold text-[var(--portal-primary)]"
-                            >
-                              View Request
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              disabled={actionLoading}
-                              onClick={() => onAction(notification, "accept")}
-                              className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
-                            >
-                              Accept and Action
-                            </button>
-                            <button
-                              type="button"
-                              disabled={actionLoading}
-                              onClick={() => onAction(notification, "return_to_queue")}
-                              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 disabled:opacity-50"
-                            >
-                              Return to Queue
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onAction(notification, "view")}
-                              className="rounded-lg border border-[var(--portal-selected-border)] bg-white px-3 py-1.5 text-xs font-bold text-[var(--portal-primary)]"
-                            >
-                              View Ticket
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    ) : null}
-                  </article>
-                );
-              })
-            )}
-          </div>
+      {open ? (
+        <div className="absolute right-0 z-50 mt-2">
+          <NotificationCenter
+            notifications={notifications}
+            actionLoading={actionLoading}
+            onAction={onAction}
+            onReadState={onReadState}
+            onClear={onClear}
+            onMarkAllRead={onMarkAllRead}
+            onSettings={onSettings}
+          />
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
-
-
-
 function RangeSelector({
   rangeDays,
   open,
@@ -1725,6 +1632,12 @@ function TicketQueue({
   pageSize,
   onPageChange,
   onPageSizeChange,
+  requesterFilter,
+  departmentFilter,
+  priorityFilter,
+  onRequesterChange,
+  onDepartmentChange,
+  onPriorityChange,
 }) {
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -1740,7 +1653,7 @@ function TicketQueue({
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={onSelectVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={onClearVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Clear current page</button><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold">{DASHBOARD_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} rows</option>)}</select><select
+          <div className="flex flex-wrap items-center gap-2"><input value={requesterFilter} onChange={(event)=>onRequesterChange(event.target.value)} placeholder="Requester" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><input value={departmentFilter} onChange={(event)=>onDepartmentChange(event.target.value)} placeholder="Department" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><select value={priorityFilter} onChange={(event)=>onPriorityChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold"><option value="">All priorities</option><option value="Critical">Critical</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select><button type="button" onClick={onSelectVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={onClearVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Clear current page</button><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold">{DASHBOARD_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} rows</option>)}</select><select
             value={workspaceFilter}
             onChange={(event) => onWorkspaceChange(event.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
@@ -1870,7 +1783,7 @@ function TicketQueue({
 
 function TicketPreview({
   ticket,
-  onOpenCase,
+  onViewTicket,
   onAssign,
   onEscalate,
 }) {
@@ -1925,10 +1838,10 @@ function TicketPreview({
       <div className="mt-3 grid gap-2 sm:grid-cols-3">
         <button
           type="button"
-          onClick={onOpenCase}
+          onClick={onViewTicket}
           className="rounded-xl bg-slate-950 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-800"
         >
-          Open Case
+          View Ticket
         </button>
 
         <button

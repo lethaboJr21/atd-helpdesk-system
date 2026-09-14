@@ -111,7 +111,7 @@ router.delete("/clear", async (request, response) => {
   try {
     await ensureNotificationColumns();
     const { parameters, conditions } = buildQueryContext(request);
-    conditions.push("(is_read=TRUE OR COALESCE((action_payload->>'requiresAction')::boolean,FALSE)=FALSE)");
+    conditions.push("COALESCE((action_payload->>'requiresAction')::boolean,FALSE)=FALSE");
     const result = await pool.query(
       `DELETE FROM notifications WHERE ${conditions.join(" AND ")} RETURNING id`,
       parameters
@@ -120,6 +120,21 @@ router.delete("/clear", async (request, response) => {
   } catch (error) {
     console.error("Clear notifications failed:", error);
     return response.status(500).json({ error: "Failed to clear notifications" });
+  }
+});
+
+router.patch("/:id/unread", async (request, response) => {
+  try {
+    await ensureNotificationColumns();
+    const result = await pool.query(
+      `UPDATE notifications SET is_read=FALSE, read_at=NULL WHERE id=$1 AND ${visibility(2)} RETURNING *`,
+      [request.params.id, request.user.id, request.user.role]
+    );
+    if (!result.rows[0]) return response.status(404).json({ error: "Notification not found" });
+    return response.json(result.rows[0]);
+  } catch (error) {
+    console.error("Mark notification unread failed:", error);
+    return response.status(500).json({ error: "Failed to mark notification as unread" });
   }
 });
 

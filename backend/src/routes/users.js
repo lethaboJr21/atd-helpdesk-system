@@ -13,7 +13,7 @@ const COMPANY_DOMAIN = String(process.env.MICROSOFT_ALLOWED_DOMAIN || "atdallian
 const MAX_PAGE_SIZE = 1000;
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_BULK_USERS = 200;
-const ALLOWED_ROLES = ["user", "agent", "operator", "manager", "admin", "superadmin"];
+const ALLOWED_ROLES = ["user", "hod", "agent", "operator", "manager", "admin", "superadmin"];
 const ALLOWED_PORTAL_STATUSES = ["active", "inactive"];
 const ALLOWED_EMPLOYMENT_STATUSES = ["active", "resigned", "transferred", "contractor", "suspended"];
 const ALLOWED_ACCOUNT_VIEWS = ["pending", "active", "deactivated", "archived", "external", "non-person", "all"];
@@ -287,7 +287,9 @@ router.post("/bulk", allowRoles("admin", "superadmin"), async (request, response
     .map(Number).filter(Number.isInteger))).slice(0, MAX_BULK_USERS);
   const action = String(request.body.action || "").trim();
   const value = request.body.value;
+  const reason = String(request.body.reason || "").trim();
   if (!userIds.length) return response.status(400).json({ error: "Select at least one user" });
+  if (action === "set_role" && reason.length < 5) return response.status(400).json({ error: "Provide a role-change reason of at least 5 characters" });
   const result = { requested: userIds.length, updated: 0, skipped: 0, failed: 0, results: [] };
   for (const userId of userIds) {
     const client = await pool.connect();
@@ -328,7 +330,7 @@ router.post("/bulk", allowRoles("admin", "superadmin"), async (request, response
         return response.status(400).json({ error: "Unsupported bulk action" });
       }
       if (sql) await client.query(sql, params);
-      await writeAudit(client, request, userId, `bulk_${action}`, target, { value });
+      await writeAudit(client, request, userId, `bulk_${action}`, target, { value, reason }, { reason });
       await client.query("COMMIT");
       result.updated += 1; result.results.push({ id: userId, status: "updated" });
     } catch (error) {

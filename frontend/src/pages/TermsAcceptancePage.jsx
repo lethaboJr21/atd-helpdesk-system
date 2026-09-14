@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { CheckCircle2, Download, FileText, LogOut, ShieldCheck } from "lucide-react";
 import LegalDocumentViewer from "../components/legal/LegalDocumentViewer";
 import { termsApi } from "../services/api";
@@ -10,6 +10,13 @@ const LEGAL_PACK_URL = "/helpdesk/legal/ATD_Alliance_IT_Helpdesk_Legal_and_Priva
 export default function TermsAcceptancePage() {
   const { isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const storedReturnTo = sessionStorage.getItem("atd.helpdesk.returnTo");
+  const candidateReturnTo = location.state?.returnTo || storedReturnTo || "/";
+  const returnTo = candidateReturnTo.startsWith("/") && !candidateReturnTo.startsWith("//")
+    ? candidateReturnTo
+    : "/";
+  sessionStorage.setItem("atd.helpdesk.returnTo", returnTo);
   const [state, setState] = useState(null);
   const [checked, setChecked] = useState({});
   const [error, setError] = useState("");
@@ -31,14 +38,14 @@ export default function TermsAcceptancePage() {
     return () => { active = false; };
   }, []);
 
-  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (!isAuthenticated) return <Navigate to="/login" replace state={{ returnTo }} />;
   if (busy) return <div className="flex min-h-screen items-center justify-center bg-[#07111f] px-4 text-white"><div className="rounded-2xl border border-white/15 bg-white/10 px-6 py-4 font-semibold shadow-2xl backdrop-blur">Loading legal documents...</div></div>;
 
   const documents = state?.outstanding || [];
   const allAccepted = documents.length > 0 && documents.every((document) => checked[document.id]);
   const accept = async () => {
     setBusy(true); setError("");
-    try { await termsApi.accept(documents.map((document) => document.id)); navigate("/", { replace: true }); }
+    try { await termsApi.accept(documents.map((document) => document.id)); sessionStorage.removeItem("atd.helpdesk.returnTo"); navigate(returnTo, { replace: true }); }
     catch (requestError) { setError(requestError?.response?.data?.error || "Acceptance could not be recorded."); setBusy(false); }
   };
 
@@ -53,7 +60,7 @@ export default function TermsAcceptancePage() {
       </header>
 
       {error ? <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-950/60 p-4 text-rose-100">{error}</div> : null}
-      {!documents.length && !error ? <div className="mt-5 rounded-2xl border border-emerald-400/25 bg-[#10253a] p-6"><CheckCircle2 className="h-7 w-7 text-emerald-400" /><p className="mt-2 font-bold">No outstanding legal documents.</p><button onClick={() => navigate("/", { replace: true })} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 font-bold text-white hover:bg-blue-500">Continue</button></div> : null}
+      {!documents.length && !error ? <div className="mt-5 rounded-2xl border border-emerald-400/25 bg-[#10253a] p-6"><CheckCircle2 className="h-7 w-7 text-emerald-400" /><p className="mt-2 font-bold">No outstanding legal documents.</p><button onClick={() => { sessionStorage.removeItem("atd.helpdesk.returnTo"); navigate(returnTo, { replace: true }); }} className="mt-4 rounded-xl bg-blue-600 px-4 py-2 font-bold text-white hover:bg-blue-500">Continue</button></div> : null}
 
       {documents.length ? <div className="mt-5 space-y-5">{documents.map((document) => <article key={document.id} className="overflow-hidden rounded-2xl border border-slate-700 bg-[#0f1d2e] shadow-xl"><div className="flex items-center gap-2 border-b border-slate-700 bg-[#13253a] px-5 py-3 text-sm font-bold"><FileText className="h-4 w-4 text-sky-300" />{document.title}<span className="ml-auto rounded-full bg-blue-500/15 px-2.5 py-1 text-xs text-blue-200">Version {document.version}</span></div><div className="bg-white text-slate-900"><LegalDocumentViewer document={document} /></div><label className="flex cursor-pointer gap-3 border-t border-slate-700 p-4 font-semibold text-slate-100 hover:bg-white/5"><input type="checkbox" checked={Boolean(checked[document.id])} onChange={(event) => setChecked((current) => ({ ...current, [document.id]: event.target.checked }))} className="mt-1 h-4 w-4 rounded border-slate-500 text-blue-600 focus:ring-blue-500" /><span>I have read and accept <strong>{document.title}</strong>, version {document.version}.</span></label></article>)}</div> : null}
 

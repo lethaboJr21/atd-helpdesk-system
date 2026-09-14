@@ -99,8 +99,8 @@ export default function AdminSettings() {
   };
 
   return (
-    <div className="portal-shell min-h-screen p-5 xl:p-8"><AdminUniversalHeader title="Administration" />
-      <div className="mx-auto max-w-6xl">
+    <div className="portal-shell min-h-screen p-3 sm:p-4 xl:p-5"><AdminUniversalHeader title="Administration" />
+      <div className="mx-auto w-full max-w-[1700px]">
         <button
           type="button"
           onClick={() => navigate("/")}
@@ -121,7 +121,7 @@ export default function AdminSettings() {
           and platform governance.
         </p>
 
-        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
           {ITEMS.map((item) => {
             const Icon = item.icon;
             return (
@@ -130,7 +130,7 @@ export default function AdminSettings() {
                 type="button"
                 onClick={() => activateItem(item)}
                 disabled={!item.available}
-                className="rounded-2xl border portal-border portal-surface-raised p-5 text-left shadow-sm transition hover:border-blue-300 hover:bg-[var(--portal-selected-bg)] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-2xl border portal-border portal-surface-raised p-4 text-left shadow-sm transition hover:border-blue-300 hover:bg-[var(--portal-selected-bg)] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <div className="inline-flex rounded-xl bg-[var(--portal-selected-bg)] p-3 text-[var(--portal-primary)]">
                   <Icon className="h-6 w-6" />
@@ -154,12 +154,12 @@ export default function AdminSettings() {
 
       {["email","communications","archive-rules"].includes(panel) && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/60 p-4"
+          className="fixed inset-0 z-[900] flex items-stretch justify-center bg-slate-950/70 p-2 backdrop-blur-sm sm:p-3 lg:p-4"
           role="dialog"
           aria-modal="true"
         >
-          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-3xl portal-surface-raised shadow-2xl">
-            <header className="flex items-center justify-between border-b p-5">
+          <div className="portal-admin-workspace flex h-full min-h-0 w-full max-w-[1720px] flex-col overflow-hidden rounded-2xl border portal-surface-raised shadow-2xl">
+            <header className="sticky top-0 z-20 flex shrink-0 items-center justify-between border-b bg-[var(--portal-surface-raised)] px-4 py-3 sm:px-5">
               <div>
                 <p className="text-sm font-bold text-[var(--portal-primary)]">
                   Admin Settings
@@ -177,7 +177,7 @@ export default function AdminSettings() {
                 <X className="h-5 w-5" />
               </button>
             </header>
-            <div className="p-6">
+            <div className="scroll-slim min-h-0 flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5">
               {panel === "email" ? <SystemEmailControls embedded /> : panel === "communications" ? <CompanyCommunicationsPanel /> : <ArchiveRulesPanel />}
             </div>
           </div>

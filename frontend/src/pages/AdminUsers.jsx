@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Archive,
   ArrowLeft,
@@ -19,6 +19,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import UserAccessDialog from "../components/UserAccessDialog";
 import UserActionMenu from "../components/UserActionMenu";
 import UserEditDialog from "../components/UserEditDialog";
+import BulkUserRoleDialog from "../components/admin/BulkUserRoleDialog";
 import { useAuth } from "../hooks/useAuth";
 import { azureApi, userApi } from "../services/api";
 import AdminUniversalHeader from "../components/admin/AdminUniversalHeader";
@@ -147,6 +148,7 @@ export default function AdminUsers() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [bulkRoleDialogOpen, setBulkRoleDialogOpen] = useState(false);
   const [message, setMessage] = useState(null);
   const [editingUser, setEditingUser] = useState(null);
   const [accessUser, setAccessUser] = useState(null);
@@ -249,12 +251,12 @@ export default function AdminUsers() {
     }
   };
 
-  const runBulkAction = async (action, value, confirmation) => {
-    if (!selectedIds.length) return;
-    if (!window.confirm(confirmation)) return;
+  const runBulkAction = async (action, value, confirmation, reason = "") => {
+    if (!selectedIds.length) return false;
+    if (confirmation && !window.confirm(confirmation)) return false;
     setBulkBusy(true);
     try {
-      const response = await userApi.bulkAction({ userIds: selectedIds, action, value });
+      const response = await userApi.bulkAction({ userIds: selectedIds, action, value, reason });
       const result = response.data || {};
       setMessage({
         type: result.failed ? "error" : "success",
@@ -262,24 +264,22 @@ export default function AdminUsers() {
       });
       setSelectedIds([]);
       await load();
+      return true;
     } catch (error) {
       setMessage({ type: "error", text: getErrorMessage(error) });
+      return false;
     } finally {
       setBulkBusy(false);
     }
   };
 
-  const promptBulkRole = () => {
-    const allowed = isSuperadmin
-      ? ["user", "agent", "operator", "manager", "admin", "superadmin"]
-      : ["user", "agent", "operator", "manager", "admin"];
-    const value = window.prompt(`Enter role: ${allowed.join(", ")}`)?.trim().toLowerCase();
-    if (!value) return;
-    if (!allowed.includes(value)) {
-      setMessage({ type: "error", text: "Invalid or unauthorised role." });
-      return;
-    }
-    runBulkAction("set_role", value, `Change the role of ${selectedIds.length} selected account(s) to ${ROLE_LABELS[value]}?`);
+  const bulkAssignableRoles = isSuperadmin
+    ? ["user", "hod", "agent", "operator", "manager", "admin", "superadmin"]
+    : ["user", "agent", "operator", "manager", "admin"];
+
+  const confirmBulkRole = async (role, reason) => {
+    const completed = await runBulkAction("set_role", role, null, reason);
+    if (completed) setBulkRoleDialogOpen(false);
   };
 
   const menuActions = (account) => {
@@ -436,7 +436,7 @@ export default function AdminUsers() {
               {selectedIds.length > 0 && isAdmin && (
                 <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[var(--portal-selected-border)] bg-[var(--portal-selected-bg)] p-2">
                   <span className="px-2 text-sm font-bold text-[var(--portal-primary-hover)]">{selectedIds.length} selected</span>
-                  <button type="button" disabled={bulkBusy} onClick={promptBulkRole} className="rounded-lg portal-surface-raised px-3 py-2 text-xs font-bold">Change role</button>
+                  <button type="button" disabled={bulkBusy} onClick={() => setBulkRoleDialogOpen(true)} className="rounded-lg portal-surface-raised px-3 py-2 text-xs font-bold">Change role</button>
                   <button type="button" disabled={bulkBusy} onClick={() => runBulkAction("deactivate", null, `Deactivate ${selectedIds.length} selected account(s)?`)} className="rounded-lg portal-surface-raised px-3 py-2 text-xs font-bold text-amber-700">Deactivate</button>
                   <button type="button" disabled={bulkBusy} onClick={() => runBulkAction("archive", null, `Archive ${selectedIds.length} selected account(s)?`)} className="rounded-lg portal-surface-raised px-3 py-2 text-xs font-bold text-red-700">Archive</button>
                   <button type="button" onClick={() => setSelectedIds([])} className="rounded-lg px-3 py-2 text-xs font-bold">Clear</button>
@@ -490,6 +490,15 @@ export default function AdminUsers() {
           </main>
         </div>
       </div>
+
+      <BulkUserRoleDialog
+        open={bulkRoleDialogOpen}
+        count={selectedIds.length}
+        allowedRoles={bulkAssignableRoles}
+        busy={bulkBusy}
+        onClose={() => setBulkRoleDialogOpen(false)}
+        onConfirm={confirmBulkRole}
+      />
 
       {editingUser && (
         <UserEditDialog

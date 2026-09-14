@@ -33,6 +33,7 @@ const TICKET_SELECT = `
  SELECT t.*,
  COALESCE(requester.name,t.external_requester_name) requester_name,
  COALESCE(requester.email,t.external_requester_email) requester_email,
+ requester.job_title requester_job_title, requester.department requester_department, requester.status requester_account_status,
  creator.name created_by_name, creator.email created_by_email,
  COALESCE(assignee.name,t.external_assignee_name) assigned_to_name,
  assignee.email assigned_to_email,
@@ -76,7 +77,7 @@ function assignmentLabel(ticket){
   if(!ticket)return "Unassigned";
   const agent=ticket.assigned_to_name||(ticket.assigned_to_user_id?`User #${ticket.assigned_to_user_id}`:"Unassigned");
   const group=ticket.assigned_group_name||(ticket.assigned_group_id?`Group #${ticket.assigned_group_id}`:"No group");
-  return `${agent} Â· ${group}`;
+  return `${agent} Ã‚Â· ${group}`;
 }
 async function logAssignmentChange(database,ticketId,actorId,before,after){
   const from=assignmentLabel(before);
@@ -228,10 +229,19 @@ router.get("/",async(req,res)=>{
     listConditions.push(`t.priority = ANY($${listValues.length}::text[])`);
   }
 
+  const addLike=(column,value)=>{const clean=text(value,200);if(clean){listValues.push(`%${clean}%`);listConditions.push(`${column} ILIKE $${listValues.length}`);}};
+  addLike("COALESCE(requester.name,t.external_requester_name)",req.query.requester);
+  addLike("requester.department",req.query.department);
+  addLike("t.source",req.query.source);
+  addLike("t.ticket_type",req.query.type);
+  if(String(req.query.view||"")==="today")listConditions.push("t.created_at >= CURRENT_DATE");
+  if(String(req.query.view||"")==="overdue")listConditions.push("t.due_at < NOW() AND t.status NOT IN ('Resolved','Closed')");
+  if(String(req.query.view||"")==="high")listConditions.push("t.priority IN ('Critical','High')");
+
   const requestedWorkspace=text(req.query.workspace,100);
   if(requestedWorkspace && requestedWorkspace.toLowerCase() !== "all"){
     listValues.push(requestedWorkspace);
-    listConditions.push(`t.workspace = ${listValues.length}`);
+    listConditions.push(`t.workspace = $${listValues.length}`);
   }
 
   const listWhere=listConditions.length?`WHERE ${listConditions.join(" AND ")}`:"";
@@ -241,7 +251,10 @@ router.get("/",async(req,res)=>{
   const perPage=Number.isFinite(requestedLimit)&&allowedPageSizes.has(Math.trunc(requestedLimit))?Math.trunc(requestedLimit):25;
   const page=Math.max(Math.trunc(Number(req.query.page)||1),1);
   const offset=(page-1)*perPage;
-  const orderBy=`${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END,t.created_at DESC`;
+  const sortColumns={created_at:"t.created_at",updated_at:"t.updated_at",requester:"COALESCE(requester.name,t.external_requester_name)",department:"requester.department",status:"t.status",priority:"CASE t.priority WHEN 'Critical' THEN 1 WHEN 'High' THEN 2 WHEN 'Medium' THEN 3 ELSE 4 END",due_at:"t.due_at",assigned_to:"COALESCE(assignee.name,t.external_assignee_name)",reference:"t.ticket_ref"};
+  const requestedSort=sortColumns[String(req.query.sort||"")]||sortColumns.created_at;
+  const direction=String(req.query.direction||"desc").toLowerCase()==="asc"?"ASC":"DESC";
+  const orderBy=`${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,CASE WHEN t.created_at>=CURRENT_DATE THEN 0 ELSE 1 END,${requestedSort} ${direction} NULLS LAST,t.id DESC`;
 
   // Queue badges are independent of the active list filters.
   const countValues=[...baseValues];
@@ -317,6 +330,40 @@ router.get("/",async(req,res)=>{
     return res.status(500).json({error:"Failed to fetch tickets."});
   }
 });
+router.post("/:id/reopen",async(req,res)=>{
+  const reason=text(req.body.reason,1000);
+  if(reason.length<10)return res.status(400).json({code:"REOPEN_REASON_REQUIRED",error:"Describe how the issue reappeared using at least 10 characters."});
+  const client=await pool.connect();
+  try{
+    await client.query("BEGIN");
+    const result=await client.query("SELECT * FROM tickets WHERE id=$1 AND archived_at IS NULL FOR UPDATE",[req.params.id]);
+    const ticket=result.rows[0];
+    if(!ticket)throw Object.assign(new Error("Ticket not found."),{status:404,code:"TICKET_NOT_FOUND"});
+    if(Number(ticket.requester_id)!==Number(req.user.id))throw Object.assign(new Error("Only the requester may reopen this ticket."),{status:403,code:"REOPEN_REQUESTER_ONLY"});
+    if(!["Resolved","Closed"].includes(ticket.status))throw Object.assign(new Error("Only a Resolved or Closed ticket can be reopened."),{status:409,code:"REOPEN_STATUS_INVALID"});
+    const cycle=Number(ticket.reopen_count||0)+1;
+    await client.query(`INSERT INTO ticket_resolution_cycles(ticket_id,cycle_number,prior_status,resolved_at,closed_at,reopened_by_user_id,recurrence_reason)
+      VALUES($1,$2,$3,$4,$5,$6,$7)`,[ticket.id,cycle,ticket.status,ticket.resolved_at,ticket.closed_at,req.user.id,reason]);
+    await client.query(`UPDATE tickets SET status='Open',resolved_at=NULL,closed_at=NULL,reopen_count=$2,latest_reopened_at=NOW(),latest_reopened_by_user_id=$3,latest_reopen_reason=$4,updated_at=NOW() WHERE id=$1`,[ticket.id,cycle,req.user.id,reason]);
+    await history(client,ticket.id,req.user.id,"requester_reopened_repeat_issue",ticket.status,JSON.stringify({cycle,reason}));
+    await client.query("COMMIT");
+    return res.json({message:"Ticket reopened and returned to the active support queue.",ticketId:ticket.id,reopenCount:cycle,repeatIssue:true});
+  }catch(error){
+    await client.query("ROLLBACK").catch(()=>{});
+    return res.status(error.status||500).json({code:error.code||"REOPEN_FAILED",error:error.status?error.message:"Failed to reopen ticket."});
+  }finally{client.release();}
+});
+
+router.get("/:id/resolution-cycles",async(req,res)=>{
+  try{
+    const ticket=await getTicket(req.params.id);
+    if(!ticket)return res.status(404).json({error:"Ticket not found."});
+    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
+    const result=await pool.query(`SELECT c.*,u.name AS reopened_by_name FROM ticket_resolution_cycles c LEFT JOIN users u ON u.id=c.reopened_by_user_id WHERE c.ticket_id=$1 ORDER BY c.cycle_number DESC`,[req.params.id]);
+    return res.json(result.rows);
+  }catch(error){if(error.code==="42P01")return res.status(503).json({code:"REOPEN_SCHEMA_PENDING",error:"Reopen-cycle storage is pending migration."});return res.status(500).json({error:"Failed to load resolution cycles."});}
+});
+
 router.get("/:id/history",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
@@ -440,6 +487,7 @@ router.post("/:id/comments",async(req,res)=>{
 router.post("/:id/reply-action",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
   const body=text(req.body.body || req.body.comment);
   const action=text(req.body.action || "send",30).toLowerCase();
+  if(action==="send_close"&&!["manager","superadmin"].includes(req.user.role))return res.status(403).json({error:"Immediate closure requires manager or superadministrator authority."});
   const allowed=new Set(["send","send_resolve","send_close"]);
   if(!body)return res.status(400).json({error:"Write a message before sending."});
   if(!allowed.has(action))return res.status(400).json({error:"Invalid reply action."});
@@ -619,6 +667,29 @@ router.get("/:id/attachments",async(req,res)=>{
   }
 });
 
+router.get("/:id/attachments/:attachmentId/preview",async(req,res)=>{
+  try{
+    const ticket=await getTicket(req.params.id);
+    if(!ticket)return res.status(404).json({error:"Ticket not found."});
+    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only preview attachments from tickets you can view."});
+    const attachment=await getAttachment(pool,req.params.attachmentId);
+    if(!attachment||Number(attachment.ticket_id)!==Number(ticket.id))return res.status(404).json({error:"Attachment not found."});
+    const allowed=new Set(["image/png","image/jpeg","image/webp","application/pdf"]);
+    const contentType=String(attachment.content_type||"").trim().toLowerCase();
+    if(!allowed.has(contentType))return res.status(415).json({error:"This attachment type is not available for inline preview."});
+    const absolutePath=absoluteFromStored(attachment.stored_path);
+    if(!fs.existsSync(absolutePath))return res.status(404).json({error:"Attachment file is missing on disk."});
+    const safeName=String(attachment.original_name||"attachment").replace(/["\r\n]/g,"");
+    res.setHeader("Content-Type",contentType);
+    res.setHeader("Content-Disposition",`inline; filename="${safeName}"`);
+    res.setHeader("X-Content-Type-Options","nosniff");
+    res.setHeader("Cache-Control","private, max-age=300");
+    return fs.createReadStream(absolutePath).pipe(res);
+  }catch(error){
+    return res.status(error.status||500).json({error:error.status?error.message:"Unable to preview attachment."});
+  }
+});
+
 router.get("/:id/attachments/:attachmentId/download",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
@@ -672,7 +743,7 @@ router.post("/bulk",allowRoles("agent","operator","manager","admin","superadmin"
  if(!ticketIds.length)return res.status(400).json({code:"BULK_TICKETS_REQUIRED",error:"Select at least one ticket."});
  if(!["modify","archive","delete"].includes(action))return res.status(400).json({code:"BULK_ACTION_INVALID",error:"Unsupported bulk ticket action."});
  if(["archive","delete"].includes(action)&&reason.length<5)return res.status(400).json({code:"BULK_REASON_REQUIRED",error:"Provide a reason of at least 5 characters."});
- if(action==="delete"&&!["admin","superadmin"].includes(req.user.role))return res.status(403).json({code:"BULK_DELETE_FORBIDDEN",error:"Permanent ticket deletion requires administrator authority."});
+ if(action==="delete"&&req.user.role!=="superadmin")return res.status(403).json({code:"BULK_DELETE_FORBIDDEN",error:"Permanent ticket deletion requires superadministrator authority."});
  const allowedChangeKeys=new Set(["priority","status","workspace","assignedGroupId","assignedToUserId","dueAt"]);
  const supplied=Object.keys(changes).filter(key=>changes[key]!==undefined);
  if(action==="modify"&&(!supplied.length||supplied.some(key=>!allowedChangeKeys.has(key))))return res.status(400).json({code:"BULK_CHANGES_INVALID",error:"Choose one or more supported fields."});
@@ -688,7 +759,8 @@ router.post("/bulk",allowRoles("agent","operator","manager","admin","superadmin"
     const before=found.rows[0];
     if(!before)throw Object.assign(new Error("Ticket not found."),{code:"TICKET_NOT_FOUND"});
     if(action==="archive"){
-     if(before.archived_at)throw Object.assign(new Error("Ticket is already archived."),{code:"TICKET_ALREADY_ARCHIVED"});
+      if(["agent","operator"].includes(req.user.role)&&Number(before.assigned_to_user_id)!==Number(req.user.id))throw Object.assign(new Error("Agents may archive only tickets assigned to their own account."),{code:"AGENT_ARCHIVE_SCOPE"});
+      if(before.archived_at)throw Object.assign(new Error("Ticket is already archived."),{code:"TICKET_ALREADY_ARCHIVED"});
      await client.query("UPDATE tickets SET archived_at=NOW(),archived_by_user_id=$2,archive_reason=$3,updated_at=NOW() WHERE id=$1",[ticketId,req.user.id,reason]);
      await history(client,ticketId,req.user.id,"bulk_archived",before.status,reason);
     }else if(action==="delete"){
@@ -782,7 +854,7 @@ router.post("/:id/assign",allowRoles("agent","operator","manager","admin","super
   }
 });
 /**
- * Requester-driven assignment â€” employees may pick or change the agent on
+ * Requester-driven assignment Ã¢â‚¬â€ employees may pick or change the agent on
  * their own active tickets. The group follows the agent's membership so the
  * assignment always stays valid.
  */
@@ -861,7 +933,7 @@ router.patch("/:id/resolve",allowRoles("agent","operator","manager","admin","sup
     return res.status(500).json({error:"Failed to resolve ticket."});
   }
 });
-router.patch("/:id/close",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+router.patch("/:id/close",allowRoles("manager","superadmin"),async(req,res)=>{
   try{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});

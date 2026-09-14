@@ -3,7 +3,25 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   base: "/helpdesk/",
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "atd-helpdesk-canonical-route",
+      configureServer(server) {
+        server.middlewares.use((request, response, next) => {
+          const originalUrl = String(request.url || "");
+          const [requestPath, query = ""] = originalUrl.split("?");
+          if (requestPath === "/helpdesk") {
+            response.statusCode = 308;
+            response.setHeader("Location", `/helpdesk/${query ? `?${query}` : ""}`);
+            response.end();
+            return;
+          }
+          next();
+        });
+      },
+    },
+  ],
   server: {
     host: 'localhost',
     port: 5173,

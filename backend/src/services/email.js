@@ -187,10 +187,12 @@ async function sendMailSafe({
   replyTo,
   category = "general",
   bypassUserPreferences = false,
+  attachments = [],
 }) {
   const intendedTo = normalizeRecipients(to);
   const intendedCc = normalizeRecipients(cc);
   const intendedBcc = normalizeRecipients(bcc);
+  const safeAttachments = Array.isArray(attachments) ? attachments.slice(0, 10) : [];
 
   if (!EMAIL_ENABLED) {
     return { sent: false, skipped: true, reason: "Email delivery is disabled by environment configuration." };
@@ -275,6 +277,7 @@ async function sendMailSafe({
         html: effectiveHtml,
         text: effectiveText,
         replyTo: replyTo || EMAIL_REPLY_TO,
+        attachments: safeAttachments,
       });
     }
 
@@ -287,6 +290,7 @@ async function sendMailSafe({
       subject: effectiveSubject,
       html: effectiveHtml,
       text: effectiveText,
+      attachments: safeAttachments,
     });
 
     return { sent: true, skipped: false, provider: "smtp", info };

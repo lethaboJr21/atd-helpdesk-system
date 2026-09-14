@@ -53,7 +53,7 @@ async function verifyGraphEmailConfiguration() {
   return { provider: "microsoft-graph", tokenAcquired: Boolean(accessToken), sender: SENDER };
 }
 
-async function sendGraphMail({ to, cc, bcc, subject, html, text, replyTo }) {
+async function sendGraphMail({ to, cc, bcc, subject, html, text, replyTo, attachments = [] }) {
   const toRecipients = toGraphRecipients(to);
   if (!toRecipients.length) return { sent: false, skipped: true, provider: "microsoft-graph", reason: "No valid recipients were provided." };
   if (!String(subject || "").trim()) throw new Error("Email subject is required.");
@@ -71,6 +71,14 @@ async function sendGraphMail({ to, cc, bcc, subject, html, text, replyTo }) {
   if (ccRecipients.length) message.ccRecipients = ccRecipients;
   if (bccRecipients.length) message.bccRecipients = bccRecipients;
   if (replyToRecipients.length) message.replyTo = replyToRecipients;
+  if (attachments.length) {
+    message.attachments = attachments.map((item) => ({
+      "@odata.type": "#microsoft.graph.fileAttachment",
+      name: String(item.filename || "attachment").replace(/[\r\n"]/g, "_"),
+      contentType: item.contentType || "application/octet-stream",
+      contentBytes: require("fs").readFileSync(item.path).toString("base64"),
+    }));
+  }
 
   const response = await axios.post(
     endpoint,
@@ -89,6 +97,7 @@ async function sendGraphMail({ to, cc, bcc, subject, html, text, replyTo }) {
     sender: SENDER,
     recipientCount: toRecipients.length + ccRecipients.length + bccRecipients.length,
     requestId: response.headers?.["request-id"] || null,
+    attachmentCount: attachments.length,
   };
 }
 

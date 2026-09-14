@@ -4,12 +4,14 @@ const auth = require('../middleware/auth')
 
 router.use(auth)
 
-// GET /api/stats/dashboard  — KPI cards (full ticket table, not a page sample)
+// GET /api/stats/dashboard  Ã¢â‚¬â€ KPI cards (full ticket table, not a page sample)
 router.get('/dashboard', async (req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT
         COUNT(*)::int AS total,
+        COUNT(*) FILTER (WHERE COALESCE(reopen_count,0)>0)::int AS reopened_tickets,
+        COALESCE(SUM(reopen_count),0)::int AS reopen_events,
         COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed'))::int AS open_tickets,
         COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed') AND priority = 'Critical')::int AS critical_tickets,
       COUNT(*) FILTER (WHERE status NOT IN ('Resolved','Closed') AND due_at IS NOT NULL AND due_at <= NOW())::int AS overdue_tickets,
@@ -51,6 +53,9 @@ router.get('/dashboard', async (req, res) => {
     res.json({
       open: row.open_tickets,
       total: row.total,
+      reopenedTickets: Number(row.reopened_tickets) || 0,
+      reopenEvents: Number(row.reopen_events) || 0,
+      reopenRate: row.total ? [Math.round((Number(row.reopened_tickets || 0) / Number(row.total)) * 100), '%'].join('') : '0%',
       critical: row.critical_at_risk,
       criticalTickets: row.critical_tickets,
       slaCompliance: withDue ? `${Math.round((withinSla / withDue) * 100)}%` : 'N/A',
@@ -64,6 +69,8 @@ router.get('/dashboard', async (req, res) => {
         overdueTickets: "Unresolved tickets whose governed resolution due time has been exhausted.",
         critical: "Open tickets with Critical priority or an overdue due date.",
         averageResolution: "Average time from ticket creation to resolution or closure.",
+        reopenedTickets: "Tickets reopened by requesters because a resolved or closed issue reappeared.",
+        reopenRate: "Percentage of Helpdesk tickets that have been reopened at least once.",
       },
       // legacy keys kept for older clients
       open_incidents: row.open_tickets,
@@ -77,7 +84,7 @@ router.get('/dashboard', async (req, res) => {
   }
 })
 
-// GET /api/stats/volume  — bar chart by created date (full table)
+// GET /api/stats/volume  Ã¢â‚¬â€ bar chart by created date (full table)
 router.get('/volume', async (req, res) => {
   const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90)
   try {
@@ -126,7 +133,7 @@ router.get('/volume', async (req, res) => {
   }
 })
 
-// GET /api/stats/service-mix — open workload by support group / workspace
+// GET /api/stats/service-mix Ã¢â‚¬â€ open workload by support group / workspace
 router.get('/service-mix', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
