@@ -54,57 +54,55 @@ Expected response:
 
 ## Project Structure
 
-```txt
+```
 atd-helpdesk/
-frontend/
- src/
-App.jsx
-main.jsx
-pages/
-Dashboard.jsx
-LoginPage.jsx
-SignupPage.jsx
-TicketWorkspace.jsx
-TicketDetailPage.jsx
-AdminUsers.jsx
-ProductionDashboard.jsx
-context/
-AuthContext.jsx
-services/
-Ã¢â€â€š   Ã¢â€â€š       Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ api.js
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ vite.config.js
-Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ package.json
-Ã¢â€â€š
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ backend/
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ src/
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ server.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ db/
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ pool.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ migrate.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ middleware/
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ auth.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ roles.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ routes/
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ auth.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ users.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ groups.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ tickets.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ notifications.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ production.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ productionEvents.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ productionSync.js
-Ã¢â€â€š   Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ services/
-Ã¢â€â€š   Ã¢â€â€š       Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ email.js
-Ã¢â€â€š   Ã¢â€â€š       Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ ticketReminders.js
-Ã¢â€â€š   Ã¢â€â€š       Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ productionSyncScheduler.js
-Ã¢â€â€š   Ã¢â€â€š       Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ syncBedlinerDailyProduction.js
-Ã¢â€â€š   Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ .env
-Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ package.json
-Ã¢â€â€š
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ database/
-Ã¢â€Å“Ã¢â€â‚¬Ã¢â€â‚¬ .github/workflows/
-Ã¢â€â€š   Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ ci.yml
-Ã¢â€â€Ã¢â€â‚¬Ã¢â€â‚¬ README.md
+|- frontend/
+|  |- src/
+|  |  |- App.jsx
+|  |  |- main.jsx
+|  |  |- pages/
+|  |  |  |- Dashboard.jsx
+|  |  |  |- LoginPage.jsx
+|  |  |  |- SignupPage.jsx
+|  |  |  |- TicketWorkspace.jsx
+|  |  |  |- TicketDetailPage.jsx
+|  |  |  |- AdminUsers.jsx
+|  |  |  `- ProductionDashboard.jsx
+|  |  |- context/
+|  |  |  `- AuthContext.jsx
+|  |  `- services/
+|  |     `- api.js
+|  |- vite.config.js
+|  `- package.json
+|- backend/
+|  |- src/
+|  |  |- server.js
+|  |  |- db/
+|  |  |  |- pool.js
+|  |  |  `- migrate.js
+|  |  |- middleware/
+|  |  |  |- auth.js
+|  |  |  `- roles.js
+|  |  |- routes/
+|  |  |  |- auth.js
+|  |  |  |- users.js
+|  |  |  |- groups.js
+|  |  |  |- tickets.js
+|  |  |  |- notifications.js
+|  |  |  |- production.js
+|  |  |  |- productionEvents.js
+|  |  |  `- productionSync.js
+|  |  `- services/
+|  |     |- email.js
+|  |     |- ticketReminders.js
+|  |     |- productionSyncScheduler.js
+|  |     `- syncBedlinerDailyProduction.js
+|  |- .env
+|  `- package.json
+|- database/
+|- .github/workflows/
+|  `- ci.yml
+`- README.md
 ```
 
 ---
@@ -739,10 +737,7 @@ ATD Alliance IT Helpdesk / Production Portal
 
 ---
 
-Ã‚Â© ATD Alliance Ã‚Â· portal.atdalliance.co.za
-
-
-
+(c) ATD Alliance | portal.atdalliance.co.za
 # Refined Production Frontend Files
 
 Replace:
