@@ -334,3 +334,29 @@ ATD Alliance IT Helpdesk and Operations Portal
 ---
 
 (c) ATD Alliance | portal.atdalliance.co.za
+
+<!-- ATD-FORWARDING-PARTICIPATION-MILESTONE-20260927-BEGIN -->
+## Forwarding and scoped ticket participation milestone
+
+The forwarding and scoped-participation milestone completed local implementation and governed validation on 27 September 2026.
+
+Delivered capabilities:
+
+- Governed ticket forwarding to approved employees, departments and controlled external-email destinations.
+- Ticket-scoped participants with Read Only or Reply Only access, invitation reasons, source types, expiry, email outcome and access outcome tracking.
+- Operations-only participant management with active and historical participant records, forwarding history and reason-required revocation.
+- An Employee Dashboard widget for Someone else's tickets.
+- Branded participation invitations with direct ticket and Employee Dashboard links.
+- Read-only participants may view authorised requester-visible content and attachments but cannot post replies or upload attachments.
+- Reply-only participants may post requester-visible replies and upload authorised evidence while remaining blocked from internal notes, assignment, SLA, priority, resolution, closure, archive, deletion and bulk controls.
+
+Validation and delivery state:
+
+- PostgreSQL participation migration applied successfully and required tables and indexes verified.
+- Existing tickets, users, ticket history, collaborators and email-participant row counts were preserved.
+- Comprehensive transactional milestone testing passed with zero failures and zero warnings.
+- Temporary participant, forwarding, comment and audit test records were rolled back completely.
+- No test or production email was sent during milestone validation.
+- Backend syntax and frontend production build passed.
+- Selective Git delivery and production deployment remain separate governed steps because the working tree contains unrelated local changes.
+<!-- ATD-FORWARDING-PARTICIPATION-MILESTONE-20260927-END -->

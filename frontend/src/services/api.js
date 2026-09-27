@@ -38,6 +38,7 @@ export const ticketsApi = {
   assignAgent: (ticketId, assignedToUserId) =>
     api.post(`/tickets/${ticketId}/assign-agent`, { assignedToUserId }),
   getEmployeeView: () =>api.get("/tickets/employee-view"),
+  getParticipantView: () => api.get("/tickets/participant-view"),
   getMyModules: () => api.get("/tickets/my-modules"),
   getById: (id) => api.get(`/tickets/${id}`),
   getHistory: (id) => api.get(`/tickets/${id}/history`),
@@ -106,6 +107,7 @@ export const ticketsApi = {
   removeEmailParticipant: (id, participantId) => api.delete(`/assignment-acceptance/${id}/email-participants/${participantId}`),
 };
 
+export const ticketParticipationApi = { getMine:()=>api.get("/ticket-participation/mine"), getTicket:(ticketId)=>api.get(`/ticket-participation/${ticketId}`), invite:(ticketId,data)=>api.post(`/ticket-participation/${ticketId}/invite`,data), forward:(ticketId,data)=>api.post(`/ticket-participation/${ticketId}/forward`,data), revoke:(ticketId,participantId,reason)=>api.delete(`/ticket-participation/${ticketId}/participants/${participantId}`,{data:{reason}}) };
 export const groupsApi = {
   getAll: () => api.get("/groups"),
   getCatalogue: () => api.get("/groups/catalogue"),

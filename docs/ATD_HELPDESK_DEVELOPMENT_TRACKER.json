@@ -1,6 +1,6 @@
 {
     "schemaVersion":  1,
-    "updatedAt":  "2026-09-01T11:26:04.8214413+02:00",
+    "updatedAt":  "2026-09-27T19:20:00+02:00",
     "project":  "ATD Helpdesk",
     "currentMilestone":  {
                              "id":  "post-deployment-functional-validation-and-hardening",
@@ -209,30 +209,396 @@
                                          ]
                         },
     "latestValidatedMilestone":  {
-                                     "id":  345,
-                                     "name":  "SLA Kanban and Dashboard Overdue",
+                                     "id":  "forwarding-scoped-ticket-participation-2026-09-27",
+                                     "name":  "Forwarding and scoped ticket participation",
                                      "status":  "validated",
-                                     "validatedAt":  "2026-09-07T13:29:46+02:00",
-                                     "features":  [
-                                                      "ticket-workspace-theme-priority-bubbles",
-                                                      "kanban-assignee-and-ticket-due",
-                                                      "sla-countdown-green-orange-red-overdue",
-                                                      "confirmed-governed-kanban-drag-drop",
-                                                      "sticky-kanban-column-headings",
-                                                      "dashboard-overdue-tickets"
-                                                  ],
+                                     "completedAt":  "2026-09-27T16:49:17+02:00",
+                                     "scripts":  [
+                                                     647,
+                                                     651,
+                                                     652,
+                                                     655,
+                                                     656,
+                                                     657,
+                                                     658
+                                                 ],
+                                     "capabilities":  [
+                                                          "governed-ticket-forwarding",
+                                                          "ticket-scoped-read-only-and-reply-only-participation",
+                                                          "someone-elses-tickets",
+                                                          "participant-management-and-revocation",
+                                                          "separate-access-and-email-outcomes",
+                                                          "reply-only-comment-and-attachment-write-boundaries"
+                                                      ],
                                      "validation":  {
-                                                        "frontendBuild":  "passed",
-                                                        "backendStatsSyntax":  "passed",
-                                                        "report":  "reports/ATD_HELPDESK_SCRIPT_348_VALIDATE_SLA_KANBAN_DASHBOARD_OVERDUE_V4_20260907-132946.txt"
+                                                        "comprehensiveTest":  "passed",
+                                                        "failures":  0,
+                                                        "warnings":  0,
+                                                        "temporaryDataRolledBack":  true,
+                                                        "emailSent":  false,
+                                                        "backendSyntax":  "passed",
+                                                        "frontendBuild":  "passed"
                                                     },
-                                     "deferred":  [
-                                                      "governed-dashboard-priority-queue-bulk-endpoints",
-                                                      "requestor-department-expanded-filters",
-                                                      "expanded-announcements-platform",
-                                                      "microsoft-directory-weekly-change-journal",
-                                                      "cartoon-avatar-library"
-                                                  ]
+                                     "delivery":  {
+                                                      "gitPush":  "pending-selective-staging",
+                                                      "deployment":  "deferred"
+                                                  }
                                  },
-    "lastUpdated":  "2026-09-07T13:29:46+02:00"
+    "lastUpdated":  "2026-09-07T13:29:46+02:00",
+    "milestoneHistory":  [
+                             {
+                                 "id":  "forwarding-scoped-ticket-participation-2026-09-27",
+                                 "name":  "Forwarding and scoped ticket participation",
+                                 "status":  "validated",
+                                 "completedAt":  "2026-09-27T16:49:17+02:00",
+                                 "scripts":  [
+                                                 647,
+                                                 651,
+                                                 652,
+                                                 655,
+                                                 656,
+                                                 657,
+                                                 658
+                                             ],
+                                 "capabilities":  [
+                                                      "governed-ticket-forwarding",
+                                                      "ticket-scoped-read-only-and-reply-only-participation",
+                                                      "someone-elses-tickets",
+                                                      "participant-management-and-revocation",
+                                                      "separate-access-and-email-outcomes",
+                                                      "reply-only-comment-and-attachment-write-boundaries"
+                                                  ],
+                                 "validation":  {
+                                                    "comprehensiveTest":  "passed",
+                                                    "failures":  0,
+                                                    "warnings":  0,
+                                                    "temporaryDataRolledBack":  true,
+                                                    "emailSent":  false,
+                                                    "backendSyntax":  "passed",
+                                                    "frontendBuild":  "passed"
+                                                },
+                                 "delivery":  {
+                                                  "gitPush":  "pending-selective-staging",
+                                                  "deployment":  "deferred"
+                                              }
+                             }
+                         ],
+    "pendingBatchHistory":  [
+                                {
+                                    "id":  "pending-four-function-batches-2026-09-27",
+                                    "recordedAt":  "2026-09-27T19:20:00+02:00",
+                                    "currentDelivery":  "forwarding-participation-selective-delivery",
+                                    "acceleratedPriority":  "finance-workspace-review-prototype",
+                                    "batches":  [
+                                                    {
+                                                        "id":  "finance-workspace",
+                                                        "priority":  "accelerated",
+                                                        "functions":  [
+                                                                          "finance-task-intake",
+                                                                          "finance-task-workspace",
+                                                                          "finance-lifecycle-and-approvals",
+                                                                          "finance-dashboard-and-meeting-pack"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "responsive-layout",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "responsive-dashboards",
+                                                                          "pinned-versus-floating-panels",
+                                                                          "universal-header",
+                                                                          "zoom-no-omission-validation"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "compact-ticket-detail",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "compact-people",
+                                                                          "status-resolve",
+                                                                          "sla-timing",
+                                                                          "contextual-action-menus"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "ticket-lifecycle",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "closed-ticket-action-locks",
+                                                                          "read-only-history-access",
+                                                                          "governed-reopen",
+                                                                          "repeat-issue-cycle"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "assignment-support-groups",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "default-single-group",
+                                                                          "select-owning-group",
+                                                                          "multi-group-alert-preferences",
+                                                                          "membership-without-alerts"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "escalation",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "separate-escalation-state",
+                                                                          "escalation-request",
+                                                                          "acknowledgement-lifecycle",
+                                                                          "notifications-and-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "email-first-authentication",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "email-first-entry",
+                                                                          "m365-domain-routing",
+                                                                          "local-password-routing",
+                                                                          "authentication-security"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "universal-table-filters",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "excel-style-columns",
+                                                                          "server-backed-values",
+                                                                          "combined-filter-state",
+                                                                          "portal-table-integration"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "new-ticket-attention",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "assignment-cycle-new-state",
+                                                                          "ticket-visual-pulses",
+                                                                          "notification-badge-and-browser-alerts",
+                                                                          "acknowledgement-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "notification-centre",
+                                                        "priority":  "launch-critical",
+                                                        "functions":  [
+                                                                          "repair-open-actions",
+                                                                          "persistent-pending-actions",
+                                                                          "event-settings",
+                                                                          "delivery-state-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "conversation-activity",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "complete-capture",
+                                                                          "requester-default-replies",
+                                                                          "change-popups-and-undo",
+                                                                          "detailed-activity-history"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "bulk-ticket-operations",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "bulk-selection",
+                                                                          "bulk-edit-resolution",
+                                                                          "archive-delete",
+                                                                          "teams-confirmation"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "workspace-search",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "list-kanban-preview-statistics",
+                                                                          "broad-filters",
+                                                                          "priority-queue-scope",
+                                                                          "universal-authorised-search"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "reopened-repeat-issues",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "employee-reopen",
+                                                                          "resolution-cycle-history",
+                                                                          "repeat-indicators",
+                                                                          "reopen-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "attachments-surveys",
+                                                        "priority":  "later",
+                                                        "functions":  [
+                                                                          "attachment-previews",
+                                                                          "full-screen-gallery",
+                                                                          "post-assistance-survey",
+                                                                          "survey-follow-up-reporting"
+                                                                      ]
+                                                    }
+                                                ]
+                                }
+                            ],
+    "pendingImplementationBatches":  {
+                                         "id":  "pending-four-function-batches-2026-09-27",
+                                         "recordedAt":  "2026-09-27T19:20:00+02:00",
+                                         "currentDelivery":  "forwarding-participation-selective-delivery",
+                                         "acceleratedPriority":  "finance-workspace-review-prototype",
+                                         "batches":  [
+                                                         {
+                                                             "id":  "finance-workspace",
+                                                             "priority":  "accelerated",
+                                                             "functions":  [
+                                                                               "finance-task-intake",
+                                                                               "finance-task-workspace",
+                                                                               "finance-lifecycle-and-approvals",
+                                                                               "finance-dashboard-and-meeting-pack"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "responsive-layout",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "responsive-dashboards",
+                                                                               "pinned-versus-floating-panels",
+                                                                               "universal-header",
+                                                                               "zoom-no-omission-validation"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "compact-ticket-detail",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "compact-people",
+                                                                               "status-resolve",
+                                                                               "sla-timing",
+                                                                               "contextual-action-menus"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "ticket-lifecycle",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "closed-ticket-action-locks",
+                                                                               "read-only-history-access",
+                                                                               "governed-reopen",
+                                                                               "repeat-issue-cycle"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "assignment-support-groups",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "default-single-group",
+                                                                               "select-owning-group",
+                                                                               "multi-group-alert-preferences",
+                                                                               "membership-without-alerts"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "escalation",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "separate-escalation-state",
+                                                                               "escalation-request",
+                                                                               "acknowledgement-lifecycle",
+                                                                               "notifications-and-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "email-first-authentication",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "email-first-entry",
+                                                                               "m365-domain-routing",
+                                                                               "local-password-routing",
+                                                                               "authentication-security"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "universal-table-filters",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "excel-style-columns",
+                                                                               "server-backed-values",
+                                                                               "combined-filter-state",
+                                                                               "portal-table-integration"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "new-ticket-attention",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "assignment-cycle-new-state",
+                                                                               "ticket-visual-pulses",
+                                                                               "notification-badge-and-browser-alerts",
+                                                                               "acknowledgement-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "notification-centre",
+                                                             "priority":  "launch-critical",
+                                                             "functions":  [
+                                                                               "repair-open-actions",
+                                                                               "persistent-pending-actions",
+                                                                               "event-settings",
+                                                                               "delivery-state-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "conversation-activity",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "complete-capture",
+                                                                               "requester-default-replies",
+                                                                               "change-popups-and-undo",
+                                                                               "detailed-activity-history"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "bulk-ticket-operations",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "bulk-selection",
+                                                                               "bulk-edit-resolution",
+                                                                               "archive-delete",
+                                                                               "teams-confirmation"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "workspace-search",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "list-kanban-preview-statistics",
+                                                                               "broad-filters",
+                                                                               "priority-queue-scope",
+                                                                               "universal-authorised-search"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "reopened-repeat-issues",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "employee-reopen",
+                                                                               "resolution-cycle-history",
+                                                                               "repeat-indicators",
+                                                                               "reopen-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "attachments-surveys",
+                                                             "priority":  "later",
+                                                             "functions":  [
+                                                                               "attachment-previews",
+                                                                               "full-screen-gallery",
+                                                                               "post-assistance-survey",
+                                                                               "survey-follow-up-reporting"
+                                                                           ]
+                                                         }
+                                                     ]
+                                     }
 }

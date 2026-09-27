@@ -5,6 +5,7 @@ export const DASHBOARD_WIDGETS = Object.freeze({
   myWork:{id:"myWork",label:"My work",description:"Open work, approvals, assets and alerts."},
   recentTickets:{id:"recentTickets",label:"Recent tickets",description:"The latest tickets available to the signed-in person."},
   assignedAssets:{id:"assignedAssets",label:"Assigned assets",description:"Equipment currently assigned to the signed-in person."},
+  participatedTickets:{id:"participatedTickets",label:"Someone else's tickets",description:"Tickets where the signed-in person has scoped participation."},
   pinnedActions:{id:"pinnedActions",label:"Favourites",description:"Favourite request and support shortcuts you can remove or restore."},
 });
 const ROLES=["user","hod","agent","operator","manager","admin","superadmin"];

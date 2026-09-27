@@ -82,6 +82,7 @@ export default function EmployeeDashboard() {
   const { user } = useAuth();
 
   const [tickets, setTickets] = useState([]);
+  const [participatedTickets, setParticipatedTickets] = useState([]);
   const [assets, setAssets] = useState([]);
   const [knowledge, setKnowledge] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -163,6 +164,7 @@ export default function EmployeeDashboard() {
         execute: () => ticketsApi.getEmployeeView(),
         apply: (response) => setTickets(extractArray(response)),
       },
+      { key:"participatedTickets", label:"Someone else's tickets", execute:()=>ticketsApi.getParticipantView(), apply:(response)=>setParticipatedTickets(extractArray(response)) },
       {
         key: "assets",
         label: "Assets",
@@ -669,6 +671,7 @@ export default function EmployeeDashboard() {
           </div>
         ) : null}
 
+        {isWidgetVisible("participatedTickets") && participatedTickets.length ? <DashboardPanel title="Someone else's tickets" count={participatedTickets.length} actionLabel="View all" onAction={()=>navigate("/tickets?view=participating")}><div className="space-y-1">{participatedTickets.slice(0,5).map(item=><button key={item.id} type="button" onClick={()=>navigate(`/tickets/${item.id}`)} className="flex w-full items-center justify-between gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-[var(--portal-surface-muted)]"><div className="min-w-0"><p className="portal-ticket-reference text-xs font-bold">{item.ticket_ref||`TICKET-${item.id}`}</p><p className="portal-title truncate text-sm font-semibold">{item.title}</p><p className="portal-muted truncate text-xs">Requester: {item.requester_name||"Unknown"}</p></div><span className="portal-accent-soft rounded-full px-2 py-1 text-xs font-bold">{item.status}</span></button>)}</div></DashboardPanel>:null}
         {/* Follow-through panels */}
         {isWidgetVisible("recentTickets") || isWidgetVisible("assignedAssets") ? (
           <div className="grid min-h-0 gap-3 md:grid-cols-2 xl:grid-cols-5">

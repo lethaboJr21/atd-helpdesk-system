@@ -56,7 +56,17 @@ function operations(user){ return OPERATIONS_ROLES.has(text(user?.role,50).toLow
 function age(value){ const created=new Date(value).getTime(); if(!Number.isFinite(created))return "N/A"; const m=Math.max(0,Math.floor((Date.now()-created)/60000)); if(m<60)return `${m}m`; const h=Math.floor(m/60); return h<24?`${h}h ${m%60}m`:`${Math.floor(h/24)}d ${h%24}h`; }
 function decorate(ticket){ const active=!['Resolved','Closed'].includes(ticket.status); const now=Date.now(); return {...ticket,age:age(ticket.created_at),overdue:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active),response_overdue:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now&&active),sla:{policyKey:ticket.sla_policy_key||null,policyVersion:ticket.sla_policy_version||null,responseDueAt:ticket.response_due_at||null,resolutionDueAt:ticket.due_at||null,responseMinutes:ticket.sla_response_minutes||null,resolutionMinutes:ticket.sla_resolution_minutes||null,responseBreached:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now),resolutionBreached:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active)}}; }
 function prefix(typeValue,title,workspace){ const normalized=text(typeValue,50).toLowerCase().replace(/[\s-]+/g,"_"); if(TYPE_PREFIX[normalized])return TYPE_PREFIX[normalized]; const context=`${title} ${workspace}`.toLowerCase(); if(context.includes("change"))return "CHG"; if(context.includes("request")||context.includes("asset"))return "REQ"; return "INC"; }
-function canView(user,ticket){ return operations(user)||Number(ticket.requester_id)===Number(user?.id); }
+async function canView(user,ticket,database=pool){if(operations(user)||Number(ticket.requester_id)===Number(user?.id))return true;try{const r=await database.query(`SELECT 1 FROM ticket_participants WHERE ticket_id=$1 AND user_id=$2 AND is_active=TRUE AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>NOW()) LIMIT 1`,[ticket.id,user?.id]);return Boolean(r.rowCount);}catch(error){if(error.code==="42P01")return false;throw error;}}
+async function canContribute(user,ticket,database=pool){
+  if(operations(user)||Number(ticket.requester_id)===Number(user?.id))return true;
+  try{
+    const result=await database.query(`SELECT 1 FROM ticket_participants WHERE ticket_id=$1 AND user_id=$2 AND access_scope='reply_only' AND is_active=TRUE AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>NOW()) LIMIT 1`,[ticket.id,user?.id]);
+    return Boolean(result.rowCount);
+  }catch(error){
+    if(error.code==="42P01")return false;
+    throw error;
+  }
+}
 function parseDetails(value){
   if(value==null||value==="")return {};
   if(typeof value==="object"&&!Array.isArray(value))return value;
@@ -100,6 +110,7 @@ router.get("/sla-policy",async(req,res)=>{
   try{const policy=await getSlaPolicy();return res.json(policy);}catch(error){console.error("SLA policy fetch failed:",error);return res.status(500).json({error:"SLA policy could not be loaded."});}
 });
 router.get("/employee-view",async(req,res)=>{ try{const result=await pool.query(`${TICKET_SELECT} WHERE t.requester_id=$1 ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){console.error(error);return res.status(500).json({error:"Failed to fetch your tickets."});}});
+router.get("/participant-view",async(req,res)=>{try{const result=await pool.query(`${TICKET_SELECT} JOIN ticket_participants participant_scope ON participant_scope.ticket_id=t.id WHERE participant_scope.user_id=$1 AND participant_scope.is_active=TRUE AND participant_scope.revoked_at IS NULL AND (participant_scope.expires_at IS NULL OR participant_scope.expires_at>NOW()) AND t.requester_id<>$1 ORDER BY ${ACTIVE_FIRST},t.updated_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(row=>({...decorate(row),participation:true})));}catch(error){if(error.code==="42P01")return res.status(503).json({code:"PARTICIPATION_SCHEMA_PENDING",error:"Ticket participation requires the pending migration."});return res.status(500).json({error:"Failed to fetch participated tickets."});}});
 router.get("/my-modules",async(req,res)=>{
   try{
     const payload=await getPersonalizedModules(req.user.id);
@@ -358,7 +369,7 @@ router.get("/:id/resolution-cycles",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
     const result=await pool.query(`SELECT c.*,u.name AS reopened_by_name FROM ticket_resolution_cycles c LEFT JOIN users u ON u.id=c.reopened_by_user_id WHERE c.ticket_id=$1 ORDER BY c.cycle_number DESC`,[req.params.id]);
     return res.json(result.rows);
   }catch(error){if(error.code==="42P01")return res.status(503).json({code:"REOPEN_SCHEMA_PENDING",error:"Reopen-cycle storage is pending migration."});return res.status(500).json({error:"Failed to load resolution cycles."});}
@@ -368,7 +379,7 @@ router.get("/:id/history",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
     const result=await pool.query(
       `SELECT th.id, th.ticket_id, th.actor_user_id, th.action, th.old_value, th.new_value, th.created_at,
               u.name AS actor_name, u.email AS actor_email
@@ -421,7 +432,7 @@ router.get("/:id/comments",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
     const ops=operations(req.user);
     const result=await pool.query(
       `SELECT c.id, c.ticket_id, c.author_user_id, c.body, c.is_internal, c.created_at,
@@ -450,7 +461,8 @@ router.post("/:id/comments",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only comment on tickets you can view."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only comment on tickets you can view."});
+    if(!await canContribute(req.user,ticket))return res.status(403).json({code:"PARTICIPANT_READ_ONLY",error:"This ticket participation is read-only. Reply Only access is required to post a message."});
     const ops=operations(req.user);
     const isInternal=ops&&wantInternal;
     const inserted=await pool.query(
@@ -526,7 +538,7 @@ router.get("/:id",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
     const attachments=await listAttachments(pool,ticket.id).catch(()=>[]);
     return res.json({...decorate(ticket),attachments});
   }catch(error){
@@ -660,7 +672,7 @@ router.get("/:id/attachments",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
     return res.json(await listAttachments(pool,ticket.id));
   }catch(error){
     return res.status(500).json({error:"Failed to list attachments."});
@@ -671,7 +683,7 @@ router.get("/:id/attachments/:attachmentId/preview",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only preview attachments from tickets you can view."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only preview attachments from tickets you can view."});
     const attachment=await getAttachment(pool,req.params.attachmentId);
     if(!attachment||Number(attachment.ticket_id)!==Number(ticket.id))return res.status(404).json({error:"Attachment not found."});
     const allowed=new Set(["image/png","image/jpeg","image/webp","application/pdf"]);
@@ -694,7 +706,7 @@ router.get("/:id/attachments/:attachmentId/download",async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
-    if(!canView(req.user,ticket))return res.status(403).json({error:"You may only download attachments from your own tickets."});
+    if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only download attachments from your own tickets."});
 
     const attachment=await getAttachment(pool,req.params.attachmentId);
     if(!attachment||Number(attachment.ticket_id)!==Number(ticket.id)){
@@ -722,7 +734,8 @@ router.post("/:id/attachments",optionalAttachments,async(req,res)=>{
   try{
     const ticket=await getTicket(req.params.id);
     if(!ticket){ cleanupFiles(files); return res.status(404).json({error:"Ticket not found."}); }
-    if(!canView(req.user,ticket)){ cleanupFiles(files); return res.status(403).json({error:"You may only attach files to your own tickets."}); }
+    if(!await canView(req.user,ticket)){ cleanupFiles(files); return res.status(403).json({error:"You may only attach files to tickets you can view."}); }
+    if(!await canContribute(req.user,ticket)){ cleanupFiles(files); return res.status(403).json({code:"PARTICIPANT_READ_ONLY",error:"This ticket participation is read-only. Reply Only access is required to upload evidence."}); }
     if(!files.length)return res.status(400).json({error:"Choose at least one file to upload."});
 
     const saved=await saveUploadedFiles(pool,ticket.id,req.user.id,files);

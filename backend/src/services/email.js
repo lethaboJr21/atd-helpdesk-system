@@ -353,6 +353,10 @@ async function sendM365WelcomeEmail(user) {
   });
 }
 
+async function sendTicketParticipationInvitation({ participant, ticket, inviter, reason, sourceType, accessScope }) {
+  const recipient=participant?.email; const reference=ticket?.ticket_ref||`TICKET-${ticket?.id}`; const ticketUrl=`${PUBLIC_PORTAL_URL}/tickets/${ticket?.id}`; const dashboardUrl=`${PUBLIC_PORTAL_URL}/employee`;
+  return sendMailSafe({to:recipient,category:"ticket_update",subject:`[${reference}] Ticket participation invitation`,html:`<div style="font-family:Segoe UI,Arial,sans-serif;color:#0f172a;line-height:1.55"><h2>ATD Helpdesk participation invitation</h2><p>Hi ${escapeHtml(participant?.name||"there")},</p><p>${escapeHtml(inviter?.name||inviter?.email||"A Helpdesk user")} invited you to participate in <strong>${escapeHtml(reference)}</strong>.</p><p><strong>${escapeHtml(ticket?.title||"Untitled ticket")}</strong></p><div style="padding:12px;background:#f8fafc;border-radius:8px">${escapeHtml(reason)}</div><p>Access: ${escapeHtml(accessScope||"reply_only")} | Source: ${escapeHtml(sourceType||"requested_reply")}</p><p>You may read requester-visible content and reply. Internal notes, assignment, SLA, resolution, closure, archive and deletion controls remain restricted.</p><p><a href="${ticketUrl}" style="background:#172b57;color:white;padding:10px 16px;text-decoration:none;border-radius:8px">Open authorised ticket</a> &nbsp; <a href="${dashboardUrl}">Employee Dashboard</a></p></div>`,text:`ATD Helpdesk participation invitation\n${reference}\n${ticket?.title||""}\n\nReason: ${reason}\nAccess: ${accessScope||"reply_only"}\n\nOpen ticket: ${ticketUrl}\nEmployee Dashboard: ${dashboardUrl}`});
+}
 async function sendTicketAssignmentEmail({ recipients, ticket, groupName }) {
   const reference = ticket?.ticket_ref || `TICKET-${ticket?.id}`;
   const url = `${PUBLIC_PORTAL_URL}/tickets/${ticket?.id}`;
@@ -391,6 +395,7 @@ module.exports = {
   sendApprovalEmail,
   sendAccountRequestReceivedEmail,
   sendTicketAssignmentEmail,
+  sendTicketParticipationInvitation,
   sendTicketCreatedEmail,
   sendM365WelcomeEmail,
 };

@@ -921,3 +921,169 @@ Updated: 2026-09-13 22:07:08
 - Migration execution, functional testing, Git commit, push, server connection, restart, email, and deployment: NOT PERFORMED.
 - Next unused script after successful completion: 536.
 <!-- ATD-SCRIPT-535-ARCHIVE-LIFECYCLE-END -->
+
+<!-- ATD-FORWARDING-PARTICIPATION-MILESTONE-20260927-BEGIN -->
+## Forwarding and scoped ticket participation milestone
+
+Status: **COMPLETED LOCALLY, MIGRATED AND COMPREHENSIVELY VALIDATED**
+
+Completed:
+
+- Forwarding and participation schema applied to PostgreSQL with `ticket_participants` and `ticket_forwarding_events`.
+- Active participant duplicate prevention, expiry, revocation actor/reason, invitation state, access outcome and email outcome storage verified.
+- Ticket Detail operations workspace for Forward Ticket and Invite Participant.
+- Employee, department-email and governed external-email destinations.
+- Read Only and Reply Only scopes with mandatory invitation or forwarding reason.
+- Someone else's tickets on the Employee Dashboard.
+- Branded invitation email function and direct authorised ticket link.
+- Participant and forwarding history with governed revocation.
+- Read-only reply and attachment-upload restrictions enforced through `canContribute`.
+- Comprehensive milestone test passed with zero failures and zero warnings.
+- Transactional test cleanup restored participant, forwarding-event, comment and ticket-history counts.
+- Backend syntax and frontend production build passed.
+
+Delivery controls:
+
+- No validation email was sent.
+- No permanent test data remains.
+- No Git push, server restart, PM2 action or production deployment has been performed for this milestone.
+- The working tree contains unrelated local work. Delivery must use selective staging and committed-file verification.
+- Next script: 663, selective staging preparation and verification. Production deployment remains deferred.
+<!-- ATD-FORWARDING-PARTICIPATION-MILESTONE-20260927-END -->
+
+<!-- ATD-PENDING-BATCHES-20260927-BEGIN -->
+## Consolidated pending implementation batches - 27 September 2026
+
+The following backlog is preserved as four-function groups. Current forwarding and scoped-participation delivery remains the active release checkpoint. New implementation must not be mixed into that selective commit.
+
+### Accelerated priority: Finance Workspace review prototype
+
+1. **Finance task intake** - structured finance categories, requester, department, priority, due date, attachments and confidential-field rules.
+2. **Finance task workspace** - List, Kanban, Preview and Statistics views with finance-specific filters and queues.
+3. **Finance lifecycle and approvals** - review, information request, approval, in-progress, completion, rejection, cancellation and reopening states.
+4. **Finance dashboard and meeting pack** - backlog, approvals, overdue work, categories, departments, owners, completion time and review questions for the Finance Manager.
+
+Target: a reviewable prototype before the Finance Manager meeting beginning next week. The prototype is intended for correction and requirements feedback, not premature production deployment.
+
+### Responsive dashboards, panels and universal header
+
+1. Responsive Employee, Agent and Operations dashboards that reflow at browser zoom without omitting authorised content.
+2. Right-side panel semantics: pinned panels consume layout space and reflow blocks; unpinned panels overlay the page; the width slider controls governed panel width and preferences persist per user/screen mode.
+3. Universal non-overlapping header order from left to right: Refresh, New Request, Ticket Monitor, Profile Avatar at the far-right; move Logout into the profile menu.
+4. Zoom and overflow validation at 100%, 125%, 150%, 175% and 200%, including tables, Kanban, charts, saved layouts and panel states.
+
+### Compact Ticket Detail controls
+
+1. Keep compact People information visible: requester, owner, support group, assignment state and participant/collaborator counts.
+2. Keep Status, status dropdown, Resolve and compact SLA/timing information visible.
+3. Move assignment, collaborator, participant, forwarding, lifecycle and other advanced ticket actions into contextual three-dot menus and action drawers.
+4. Hide Assign to Me when an individual assignee or active assignment proposal already exists; show only valid contextual ownership actions.
+
+### Closed-ticket lifecycle enforcement
+
+1. Disable or hide actions applicable only to open tickets after closure.
+2. Keep read-only details, conversation, attachments, audit, SLA, escalation and participation history available.
+3. Make governed Reopen the primary lifecycle action, with reason, actor, timestamp, cycle number and repeat-issue flag.
+4. Restore eligible open-ticket actions only after successful reopening and permission checks.
+
+### Assignment and multi-group support governance
+
+1. Selecting an assignee automatically selects the person's only eligible support group.
+2. If the person belongs to multiple groups, require selection of the owning group.
+3. Configure per-membership ticket-opening alerts for all groups, selected groups, owning group only or no groups.
+4. Allow group membership and assignment eligibility without sending ticket-opening group alerts; audit ticket-specific overrides and delivery outcomes.
+
+### Governed escalation workflow
+
+1. Separate escalation state from ordinary ticket lifecycle status.
+2. Capture escalation type, level, target, reason, expected action, ownership effect and acknowledgement deadline.
+3. Track raised, delivered, acknowledged, in-progress, resolved, de-escalated and cancelled states.
+4. Add portal/email/Teams notifications, escalation SLA, audit evidence and management reporting.
+
+Current observation: Escalated appears to operate mainly as a status change. Full governed escalation remains pending.
+
+### Email-first authentication routing
+
+1. Ask for and validate the email address before selecting an authentication method.
+2. Route configured ATD Alliance domains to M365 SSO with login hint and return-path preservation.
+3. Route approved non-company accounts to local email/password authentication without forcing M365.
+4. Add change-email, rate limiting, similar-domain protection, account-state checks and governed fallback rules.
+
+### Universal Excel-style table filtering
+
+1. Add per-column dropdown filters with searchable distinct values, Select All and checkboxes.
+2. Add data-type-aware filters for text, dates, numbers, statuses, blanks and ranges using server-backed authorised values.
+3. Combine column filters correctly with global search, sorting, pagination, saved views and List/Kanban switching.
+4. Reuse the table-filter framework across User Administration, tickets, Ticket Monitor, archive, access, assets, directory, notifications, Finance Workspace, reports and audit tables.
+
+### New-ticket attention and acknowledgement
+
+1. Track a New state per assignment cycle until the current direct assignee opens the ticket.
+2. Show New badges and five accessible visual pulses at 30-second intervals in Workspace List/Kanban, Ticket Monitor List/Kanban, Dashboard and Priority Queue.
+3. Increment and pulse the notification badge for up to 15 seconds; opening Notification Centre stops badge animation, while opening the ticket acknowledges the assignment.
+4. Send deduplicated browser notifications where permission exists, with optional sound, reduced-motion support and assignment-to-first-open reporting.
+
+### Notification Centre completion
+
+1. Repair assignment notification Open actions, payload/reference mapping, legacy compatibility and safe ticket-opening fallback.
+2. Preserve actionable pending items after Mark as Read.
+3. Support detailed event settings and portal/email/Teams delivery governance.
+4. Report delivery, seen, opened, ticket-opened and assignment-acknowledged states separately.
+
+### Conversation, activity and change controls
+
+1. Capture complete public conversation and internal-note activity with participant, origin and timestamps.
+2. Default responses to requester-visible; require explicit operations-only internal-note selection.
+3. Add compact centred change notifications with safe Undo and detailed confirmations.
+4. Add later notification history and a separate detailed Activity view.
+
+### Bulk ticket operations
+
+1. Bulk selection in Workspace List/Kanban and Dashboard Priority Queue.
+2. Governed bulk edit and resolution preparation with per-ticket eligibility results.
+3. Governed archive/delete with confirmation, reason, partial-failure handling and audit evidence.
+4. Optional Teams confirmation prompts and consolidated results.
+
+### Ticket Workspace, filtering and search
+
+1. Complete List/Kanban/Preview/Statistics and saved views.
+2. Broad filters for Department, Requester, Priority, status, incident type, service request type, assignee, support group, dates, SLA and reopened state.
+3. Priority Queue scope: assigned directly to me, my support group or both.
+4. Universal authorised word-or-sentence search across reference, subject, description, requester, department, assignee, group, category, status, priority and conversation.
+
+### Reopened and repeat issues
+
+1. Permit governed employee reopening of eligible resolved tickets.
+2. Track resolution cycles, reopen reasons, actors and timestamps.
+3. Show repeat-issue indicators in Ticket Detail, queues, dashboards and reports.
+4. Report reopen count, recurrence categories and time from resolution to reopen.
+
+### Attachments and surveys - later batches
+
+1. Attachment previews and full-screen viewing with governed access.
+2. Attachment gallery, metadata, download controls and missing-file handling.
+3. Short survey after meaningful assistance/resolution or final closure, without duplicate survey spam.
+4. Survey reporting, low-rating follow-up and optional governed reopening. Survey work remains later than Finance preparation.
+
+### Access, visuals, reporting and organisational modules
+
+1. Access requests: grey out existing functions, show granted-access source and keep governed revocation.
+2. Light/Dark mode and named responsive dashboard-layout templates.
+3. Interactive reporting drill-downs preserving filters and underlying ticket links.
+4. Complete department, support-group and management workspaces after the accelerated Finance prototype.
+
+### Communications, directory, rebranding and post-deployment architecture
+
+1. Company Communications audiences, exclusions, external recipients and landing-page announcements.
+2. Microsoft Directory no-op protection and Monday 08:00 consolidated change alerts attached to Weekly Reports.
+3. Preserve and rebrand CMDB after a replacement name is selected; fix avatar cache refresh and fallback behaviour.
+4. After deployment, produce modular architecture docs, ADRs, function rationale records, failure-mode register and decision playbooks.
+
+### Delivery sequence
+
+1. Finish the forwarding-participation selective staged tree, validate, commit, push, review, deploy and verify.
+2. Accelerate the Finance Workspace prototype for next week's review meeting.
+3. Repair the Notification Centre assignment-action defect.
+4. Execute the responsive layout and compact Ticket Detail batches, followed by assignment governance and escalation.
+5. Continue remaining four-function batches by dependency and launch priority.
+<!-- ATD-PENDING-BATCHES-20260927-END -->
