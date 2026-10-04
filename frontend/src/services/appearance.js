@@ -3,7 +3,7 @@ export const LEGACY_THEME_STORAGE_KEY = "atd-helpdesk-theme";
 export const APPEARANCE_EVENT = "atd-helpdesk:appearance-change";
 
 export const APPEARANCE_MODES = Object.freeze(["light", "dark", "system"]);
-export const APPEARANCE_STYLES = Object.freeze(["solid", "two-color", "gradient"]);
+export const APPEARANCE_STYLES = Object.freeze(["solid", "two-color", "gradient", "glass"]);
 export const ACCENT_THEMES = Object.freeze([
   { id: "atd-blue", label: "ATD Blue", primary: "#2563eb", secondary: "#22d3ee" },
   { id: "slate", label: "Slate", primary: "#475569", secondary: "#94a3b8" },

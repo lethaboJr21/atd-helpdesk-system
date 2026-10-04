@@ -225,14 +225,14 @@ export default function Sidebar({
     <>
     <aside
       className={classNames(
-        // Animate width only (not `all`) and hint the compositor â€” animating
+        // Animate width only (not `all`) and hint the compositor — animating
         // every property forced needless style recalcs on each frame.
         "fixed inset-y-0 left-0 z-30 hidden overflow-hidden border-r border-slate-800 bg-slate-950 text-white [transition:width_220ms_cubic-bezier(0.4,0,0.2,1)] [will-change:width] lg:block",
         collapsed ? "w-20" : "w-72"
       )}
     >
       <div className="flex h-full flex-col">
-        {/* Both marks stay mounted and cross-fade â€” swapping the img src on
+        {/* Both marks stay mounted and cross-fade — swapping the img src on
             toggle caused a decode flash mid-animation. */}
         <div
           className={classNames(
@@ -360,7 +360,7 @@ export default function Sidebar({
               >
                 <Icon className="h-5 w-5 shrink-0" />
 
-                {/* Labels stay mounted and fade â€” unmounting them mid-slide
+                {/* Labels stay mounted and fade — unmounting them mid-slide
                     made the text reflow and snap. */}
                 <span
                   className={classNames(

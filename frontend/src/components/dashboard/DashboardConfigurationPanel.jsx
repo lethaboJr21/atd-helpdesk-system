@@ -1,10 +1,10 @@
-import { Copy, LayoutTemplate, Pencil, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
+import { Check, Copy, Eye, LayoutTemplate, Maximize2, Pencil, RotateCcw, Save, Settings2, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DASHBOARD_WIDGETS, availableDashboardTemplates } from "./dashboardTemplates";
 import EmployeeDashboardSnapshot from "./EmployeeDashboardSnapshot";
 import { readAppearance } from "../../services/appearance";
 
-function SnapshotCard({ template, visibleWidgets, appearance, selected, label, onSelect }) {
+function SnapshotCard({ template, visibleWidgets, appearance, selected, label, onSelect, onPreview }) {
   return (
     <article className={`rounded-2xl border p-3 transition ${selected ? "border-[var(--portal-primary)] ring-2 ring-[var(--portal-focus)]" : "border-[var(--portal-border)]"}`}>
       <EmployeeDashboardSnapshot
@@ -20,7 +20,7 @@ function SnapshotCard({ template, visibleWidgets, appearance, selected, label, o
           <p className="portal-title font-bold">{label || template?.label}</p>
           {template?.description ? <p className="portal-muted mt-1 text-xs leading-5">{template.description}</p> : null}
         </div>
-        {onSelect ? <button type="button" onClick={onSelect} className="portal-control shrink-0 rounded-lg border px-3 py-1.5 text-xs font-bold">{selected ? "Selected" : "Select"}</button> : null}
+        <div className="flex shrink-0 gap-2"><button type="button" onClick={onPreview} className="portal-control inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold"><Eye className="h-3.5 w-3.5"/>Preview</button>{onSelect?<button type="button" onClick={onSelect} className="portal-control rounded-lg border px-3 py-1.5 text-xs font-bold">{selected?"Pending":"Select"}</button>:null}</div>
       </div>
     </article>
   );
@@ -49,12 +49,16 @@ export default function DashboardConfigurationPanel({
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [renameId, setRenameId] = useState(null);
+  const [pendingTemplateId, setPendingTemplateId] = useState(templateId);
+  const [expandedTemplate, setExpandedTemplate] = useState(null);
   const templates = useMemo(
     () => availableDashboardTemplates(role, experience).filter((template) => template.widgets.length),
     [role, experience]
   );
   const visible = new Set(visibleWidgets);
   const currentAppearance = readAppearance();
+
+  useEffect(() => { if (open) setPendingTemplateId(templateId); }, [open, templateId]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -102,7 +106,8 @@ export default function DashboardConfigurationPanel({
                   visibleWidgets={template.widgets}
                   appearance={currentAppearance}
                   selected={templateId === template.id && !activeCustomLayoutId}
-                  onSelect={() => onTemplateChange(template.id)}
+                  onSelect={() => setPendingTemplateId(template.id)}
+                  onPreview={() => setExpandedTemplate(template)}
                 />
               ))}
             </div>
@@ -158,10 +163,9 @@ export default function DashboardConfigurationPanel({
           </section>
         </div>
 
-        <footer className="border-t border-[var(--portal-border)] p-5">
-          <button type="button" onClick={onReset} className="portal-control inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold"><RotateCcw className="h-4 w-4" />Restore default layout</button>
-        </footer>
+        <footer className="grid gap-3 border-t border-[var(--portal-border)] p-5 sm:grid-cols-2"><button type="button" onClick={onReset} className="portal-control inline-flex w-full items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-bold"><RotateCcw className="h-4 w-4"/>Restore default layout</button><button type="button" disabled={!pendingTemplateId||pendingTemplateId===templateId} onClick={()=>onTemplateChange(pendingTemplateId)} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--portal-primary)] px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Check className="h-4 w-4"/>Apply selected layout</button></footer>
       </aside>
+      {expandedTemplate?<div className="fixed inset-0 z-[210] grid place-items-center bg-[var(--portal-overlay)] p-4" onMouseDown={event=>event.target===event.currentTarget&&setExpandedTemplate(null)}><section role="dialog" aria-modal="true" className="portal-surface-raised flex max-h-[94vh] w-full max-w-7xl flex-col rounded-2xl border shadow-2xl"><header className="flex items-center justify-between border-b border-[var(--portal-border)] p-4"><div><p className="portal-title font-bold">{expandedTemplate.label}</p><p className="portal-muted text-xs">Preview only. No layout change is applied until the final Apply action.</p></div><button type="button" onClick={()=>setExpandedTemplate(null)} className="portal-control rounded-xl border p-2"><X className="h-5 w-5"/></button></header><div className="min-h-0 flex-1 p-4"><EmployeeDashboardSnapshot templateId={expandedTemplate.id} visibleWidgets={expandedTemplate.widgets} appearance={currentAppearance} label={`${expandedTemplate.label} expanded preview`} height={Math.min(window.innerHeight*.76,760)} expanded/></div><footer className="flex justify-end gap-3 border-t border-[var(--portal-border)] p-4"><button type="button" onClick={()=>setExpandedTemplate(null)} className="portal-control rounded-xl border px-4 py-2 text-sm font-bold">Close preview</button><button type="button" onClick={()=>{setPendingTemplateId(expandedTemplate.id);setExpandedTemplate(null);}} className="rounded-xl bg-[var(--portal-primary)] px-4 py-2 text-sm font-bold text-white">Use this layout</button></footer></section></div>:null}
     </div>
   );
 }

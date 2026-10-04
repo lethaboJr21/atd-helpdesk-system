@@ -49,7 +49,7 @@ import Sidebar from "../components/Sidebar";
 import CompanyAnnouncements from "../components/dashboard/CompanyAnnouncements";
 import { useToast } from "../components/notifications/ToastProvider";
 import NotificationCenter from "../components/notifications/NotificationCenter";
-import ProfileAvatar from "../components/account/ProfileAvatar";
+import SharedAccountMenu from "../components/account/AccountMenu";
 
 import RequestEntryMenu from "../components/tickets/RequestEntryMenu";
 import PendingAcceptanceCards from "../components/tickets/PendingAcceptanceCards";
@@ -76,6 +76,8 @@ const NOTIFICATION_MODULES = ["admin", "helpdesk"];
 const SEARCH_DEBOUNCE_MS = 300;
 const ADMIN_ROLES = new Set(["manager", "admin", "superadmin"]);
 const DASHBOARD_VIEW_STORAGE_KEY = "atd-helpdesk-dashboard-view";
+const DASHBOARD_SEARCH_SCOPE_KEY = "atd-helpdesk-dashboard-search-scope";
+const DASHBOARD_ASSIGNMENT_SCOPE_KEY = "atd-helpdesk-dashboard-assignment-scope";
 const DASHBOARD_VIEW_OPTIONS = new Set(["simple", "explorative"]);
 
 function storedPreference(key, allowedValues, fallback) {
@@ -272,8 +274,10 @@ export default function Dashboard() {
   });
   const [ticketPagination, setTicketPagination] = useState({ page: 1, perPage: 25, total: 0, totalPages: 1 });
   const [knownWorkspaces, setKnownWorkspaces] = useState(["All"]);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(() => sessionStorage.getItem("atd-helpdesk-dashboard-search") || "");
   const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [searchScope, setSearchScope] = useState(() => localStorage.getItem(DASHBOARD_SEARCH_SCOPE_KEY) || "everything");
+  const [assignmentScope, setAssignmentScope] = useState(() => localStorage.getItem(DASHBOARD_ASSIGNMENT_SCOPE_KEY) || "mine-or-groups");
   const [workspaceFilter, setWorkspaceFilter] = useState("All");
   const [requesterFilter, setRequesterFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
@@ -453,6 +457,8 @@ export default function Dashboard() {
         per_page: ticketPageSize,
         status: "Unresolved",
         search: debouncedQuery || undefined,
+        searchScope,
+        assignmentScope,
         workspace: workspaceFilter === "All" ? undefined : workspaceFilter,
         requester: requesterFilter || undefined,
         department: departmentFilter || undefined,
@@ -493,7 +499,7 @@ export default function Dashboard() {
     } finally {
       setTicketLoading(false);
     }
-  }, [debouncedQuery, ticketPage, ticketPageSize, workspaceFilter, requesterFilter, departmentFilter, priorityFilter]);
+  }, [debouncedQuery, searchScope, assignmentScope, ticketPage, ticketPageSize, workspaceFilter, requesterFilter, departmentFilter, priorityFilter]);
 
   const refreshDashboard = useCallback(async () => {
     await Promise.all([
@@ -558,7 +564,10 @@ export default function Dashboard() {
 
   const workspaces = knownWorkspaces;
 
-  useEffect(() => { setTicketPage(1); }, [debouncedQuery, workspaceFilter, requesterFilter, departmentFilter, priorityFilter]);
+  useEffect(() => { sessionStorage.setItem("atd-helpdesk-dashboard-search", query); }, [query]);
+  useEffect(() => { localStorage.setItem(DASHBOARD_SEARCH_SCOPE_KEY, searchScope); }, [searchScope]);
+  useEffect(() => { localStorage.setItem(DASHBOARD_ASSIGNMENT_SCOPE_KEY, assignmentScope); }, [assignmentScope]);
+  useEffect(() => { setTicketPage(1); }, [debouncedQuery, searchScope, assignmentScope, workspaceFilter, requesterFilter, departmentFilter, priorityFilter]);
 
   const selectedGroup = useMemo(() => {
     return groups.find((group) => {
@@ -754,7 +763,10 @@ export default function Dashboard() {
         requestError?.message || "The notification action could not be completed."
       );
       setError(message);
-      toast.error(message, { title: "Action not completed" });
+      toast.error(message, {
+        title: "Action not completed",
+        eventKey: `notification-action-${notification?.id || "unknown"}-${action}-${message}`,
+      });
     } finally {
       setActionLoading(false);
     }
@@ -879,7 +891,7 @@ export default function Dashboard() {
         )}
       >
         <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
-          <div className="flex flex-col gap-4 px-5 py-4 xl:flex-row xl:items-center xl:justify-between xl:px-8">
+          <div className="dashboard-operations-header flex flex-col gap-4 px-5 py-4 pr-24 sm:pr-28 xl:flex-row xl:items-center xl:justify-between xl:px-8 xl:pr-28">
             <div>
               <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500">
                 <Factory className="h-4 w-4" />
@@ -894,20 +906,12 @@ export default function Dashboard() {
               </h1>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative min-w-64 flex-1 xl:flex-none">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search all tickets, requesters or groups..."
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                />
-
-                {ticketLoading && (
-                  <RefreshCw className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />
-                )}
+            <div className="dashboard-header-actions flex min-w-0 flex-1 flex-wrap items-center gap-2 xl:justify-end">
+              <div className="dashboard-universal-search flex min-w-0 flex-[1_1_32rem] items-stretch gap-2">
+                <select value={searchScope} onChange={(event) => setSearchScope(event.target.value)} aria-label="Search within" className="rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700">
+                  <option value="everything">Everything</option><option value="reference">Reference</option><option value="subject">Subject</option><option value="description">Description</option><option value="requester">Requester</option><option value="department">Department</option><option value="assignee">Assignee</option><option value="support-group">Support group</option><option value="category">Category</option><option value="status">Status</option><option value="priority">Priority</option><option value="conversation">Conversation</option>
+                </select>
+                <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by word, sentence or ticket reference..." className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-10 text-sm outline-none focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100" />{ticketLoading && <RefreshCw className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-slate-400" />}</div>
               </div>
 
               <NotificationMenu
@@ -941,22 +945,17 @@ export default function Dashboard() {
                 Refresh
               </button>
 
-              <AccountMenu
-                menuRef={accountMenuRef}
-                open={showAccountMenu}
-                user={user}
-                theme={appearance.mode}
+              <Link
+                to="/ticket-monitor"
+                className="dashboard-header-action inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
+              >
+                <Monitor className="h-4 w-4" />
+                Ticket Monitor
+              </Link>
+              <SharedAccountMenu
+                compact
                 dashboardView={dashboardView}
-                onToggle={() => {
-                  setShowNotifications(false);
-                  setShowAccountMenu((current) => !current);
-                }}
-                onThemeChange={setMode}
                 onDashboardViewChange={setDashboardView}
-                onRequestLogout={() => {
-                  setShowAccountMenu(false);
-                  setShowLogoutConfirmation(true);
-                }}
               />
 
               {adminUser && (
@@ -985,7 +984,7 @@ export default function Dashboard() {
                   className="inline-flex items-center gap-2 rounded-xl portal-accent-fill bg-[var(--portal-primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90"
                 >
                   <Plus className="h-4 w-4" />
-                  New Ticket
+                  New Request
                   <ChevronDown className="h-4 w-4" />
                 </button>
 
@@ -1171,6 +1170,9 @@ export default function Dashboard() {
                 requesterFilter={requesterFilter}
                 departmentFilter={departmentFilter}
                 priorityFilter={priorityFilter}
+                assignmentScope={assignmentScope}
+                onAssignmentScopeChange={setAssignmentScope}
+                resultCount={ticketPagination.total}
                 onRequesterChange={setRequesterFilter}
                 onDepartmentChange={setDepartmentFilter}
                 onPriorityChange={setPriorityFilter}
@@ -1387,96 +1389,6 @@ function SectionError({ message, className }) {
   );
 }
 
-function AccountMenu({
-  menuRef,
-  open,
-  user,
-  theme,
-  dashboardView,
-  onToggle,
-  onThemeChange,
-  onDashboardViewChange,
-  onRequestLogout,
-}) {
-  const initials = String(user?.name || user?.email || "U")
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-
-  const optionClass = (selected) => classNames(
-    "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold transition",
-    selected ? "bg-blue-50 text-[var(--portal-primary)]" : "text-slate-700 hover:bg-slate-100"
-  );
-
-  return (
-    <div ref={menuRef} className="relative">
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        aria-haspopup="menu"
-        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm hover:bg-slate-50"
-      >
-        <ProfileAvatar user={user} className="h-8 w-8" />
-        <span className="hidden max-w-36 truncate text-left text-sm font-semibold text-slate-800 2xl:block">
-          {user?.name || "My account"}
-        </span>
-        <ChevronDown className="h-4 w-4 text-slate-500" />
-      </button>
-
-      {open ? (
-        <div
-          role="menu"
-          aria-label="Account and appearance"
-          className="absolute right-0 z-50 mt-2 w-[min(92vw,22rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
-        >
-          <div className="border-b border-slate-200 bg-slate-50 p-4">
-            <p className="font-bold text-slate-950">{user?.name || "Portal account"}</p>
-            <p className="mt-1 truncate text-sm text-slate-500">{user?.email || ""}</p>
-            {user?.job_title || user?.jobTitle ? (
-              <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {user?.job_title || user?.jobTitle}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="max-h-[70vh] space-y-4 overflow-y-auto p-3">
-            <section>
-              <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Dashboard view</p>
-              <button type="button" role="menuitemradio" aria-checked={dashboardView === "simple"} onClick={() => onDashboardViewChange("simple")} className={optionClass(dashboardView === "simple")}>
-                <LayoutDashboard className="h-4 w-4" /> Simple
-              </button>
-              <button type="button" role="menuitemradio" aria-checked={dashboardView === "explorative"} onClick={() => onDashboardViewChange("explorative")} className={optionClass(dashboardView === "explorative")}>
-                <Gauge className="h-4 w-4" /> Explorative
-              </button>
-            </section>
-
-            <section className="border-t border-slate-100 pt-3">
-              <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Theme</p>
-              <button type="button" role="menuitemradio" aria-checked={theme === "light"} onClick={() => onThemeChange("light")} className={optionClass(theme === "light")}>
-                <Sun className="h-4 w-4" /> Light
-              </button>
-              <button type="button" role="menuitemradio" aria-checked={theme === "dark"} onClick={() => onThemeChange("dark")} className={optionClass(theme === "dark")}>
-                <Moon className="h-4 w-4" /> Dark
-              </button>
-              <button type="button" role="menuitemradio" aria-checked={theme === "system"} onClick={() => onThemeChange("system")} className={optionClass(theme === "system")}>
-                <Monitor className="h-4 w-4" /> Use device setting
-              </button>
-            </section>
-
-            <section className="border-t border-slate-100 pt-3">
-              <button type="button" role="menuitem" onClick={onRequestLogout} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-bold text-red-600 hover:bg-red-50">
-                <LogOut className="h-4 w-4" /> Sign out
-              </button>
-            </section>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 function NotificationMenu({
   menuRef,
   notifications,
@@ -1693,6 +1605,9 @@ function TicketQueue({
   requesterFilter,
   departmentFilter,
   priorityFilter,
+  assignmentScope,
+  onAssignmentScopeChange,
+  resultCount,
   onRequesterChange,
   onDepartmentChange,
   onPriorityChange,
@@ -1705,13 +1620,10 @@ function TicketQueue({
             <h2 className="text-lg font-bold text-slate-950">
               Priority Ticket Queue
             </h2>
-            <p className="text-sm text-slate-500">
-              Search covers the full authorised queue. Select a ticket to review it.
-              {loading && tickets.length > 0 && " Updating results…"}
-            </p>
+            <p className="text-sm text-slate-500">Search covers the full authorised queue. {Number(resultCount || 0).toLocaleString("en-ZA")} matching ticket{Number(resultCount || 0) === 1 ? "" : "s"}. Select a ticket to review it.{loading && tickets.length > 0 && " Updating results…"}</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2"><input value={requesterFilter} onChange={(event)=>onRequesterChange(event.target.value)} placeholder="Requester" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><input value={departmentFilter} onChange={(event)=>onDepartmentChange(event.target.value)} placeholder="Department" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><select value={priorityFilter} onChange={(event)=>onPriorityChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold"><option value="">All priorities</option><option value="Critical">Critical</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select><button type="button" onClick={onSelectVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={onClearVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Clear current page</button><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold">{DASHBOARD_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} rows</option>)}</select><select
+          <div className="dashboard-priority-controls flex flex-wrap items-center gap-2"><select value={assignmentScope} onChange={(event)=>onAssignmentScopeChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold" aria-label="Assignment scope"><option value="mine">Assigned to me</option><option value="my-groups">My support groups</option><option value="mine-or-groups">Me or my groups</option><option value="unassigned">Unassigned</option><option value="all">All authorised</option></select><input value={requesterFilter} onChange={(event)=>onRequesterChange(event.target.value)} placeholder="Requester" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><input value={departmentFilter} onChange={(event)=>onDepartmentChange(event.target.value)} placeholder="Department" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><select value={priorityFilter} onChange={(event)=>onPriorityChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold"><option value="">All priorities</option><option value="Critical">Critical</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select><button type="button" onClick={onSelectVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={onClearVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Clear current page</button><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold">{DASHBOARD_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} rows</option>)}</select><select
             value={workspaceFilter}
             onChange={(event) => onWorkspaceChange(event.target.value)}
             className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"

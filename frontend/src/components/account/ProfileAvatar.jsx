@@ -68,7 +68,10 @@ export default function ProfileAvatar({ user, className, imageClassName }) {
     };
   }, [user?.id, mediaRevision, refreshRevision]);
 
-  const photoUrl = securePhotoUrl || fallbackPhotoUrl;
+  const fallbackPhotoWithRevision = fallbackPhotoUrl
+    ? `${fallbackPhotoUrl}${fallbackPhotoUrl.includes("?") ? "&" : "?"}avatarRevision=${encodeURIComponent(refreshRevision || mediaRevision)}`
+    : null;
+  const photoUrl = securePhotoUrl || fallbackPhotoWithRevision;
 
   useEffect(() => {
     setImageFailed(false);

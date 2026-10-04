@@ -205,7 +205,7 @@ export default function EmployeeDashboard() {
         return;
       }
 
-      // Personalization is optional â€” don't block the home experience.
+      // Personalization is optional — don't block the home experience.
       if (request.key === "modules") {
         setPersonalization(null);
         return;
@@ -454,7 +454,7 @@ export default function EmployeeDashboard() {
           </div>
         )}
 
-        {/* Hero â€” Freshservice mental model, ATD brand */}
+        {/* Hero — Freshservice mental model, ATD brand */}
         <div
           className="employee-hero relative z-10 shrink-0 overflow-visible rounded-[1.75rem] px-5 py-5 text-white shadow-lift sm:px-8 sm:py-6"
           style={{
@@ -473,7 +473,7 @@ export default function EmployeeDashboard() {
               Hi {greetingName}, how can we help?
             </h2>
             <p className="mx-auto mt-1.5 max-w-xl text-sm text-slate-200/85">
-              Incidents, services, assets, and changes â€” each in its own place.
+              Incidents, services, assets, and changes — each in its own place.
             </p>
 
             <div className="relative mx-auto mt-4 max-w-2xl">
@@ -576,7 +576,7 @@ export default function EmployeeDashboard() {
           </div>
         ) : null}
 
-        {/* Four separate request modules â€” never mixed on one form */}
+        {/* Four separate request modules — never mixed on one form */}
         {isWidgetVisible("requestModules") ? (
           <div className="shrink-0">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
@@ -613,7 +613,7 @@ export default function EmployeeDashboard() {
           />
         ) : null}
 
-        {/* Compact shortcuts â€” ranked for this person / department */}
+        {/* Compact shortcuts — ranked for this person / department */}
         {isWidgetVisible("quickLinks") ? (
           <div className="shrink-0 rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface)] px-3 py-2.5 shadow-soft backdrop-blur-sm">
           <div className="flex flex-wrap items-center gap-2">
@@ -633,7 +633,7 @@ export default function EmployeeDashboard() {
           </div>
         ) : null}
 
-        {/* My work â€” dense strip, not a second dashboard */}
+        {/* My work — dense strip, not a second dashboard */}
         {isWidgetVisible("myWork") ? (
           <div className="flex shrink-0 flex-wrap items-center gap-2 rounded-2xl border border-[var(--portal-border)] bg-[var(--portal-surface)] px-3.5 py-2.5 shadow-soft backdrop-blur-sm">
           <p className="mr-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--portal-text-muted)]">
@@ -758,7 +758,7 @@ export default function EmployeeDashboard() {
                             Serial
                           </span>{" "}
                           <span className="font-medium text-[var(--portal-text-soft)]">
-                            {asset.serial_number || "â€”"}
+                            {asset.serial_number || "—"}
                           </span>
                         </p>
                       </div>
@@ -896,7 +896,7 @@ function QuickLink({ icon: Icon, label, hint, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      title={hint ? `${label} â€” ${hint}` : label}
+      title={hint ? `${label} — ${hint}` : label}
       className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-[var(--portal-surface-muted)] px-2.5 py-1.5 text-left transition hover:border-[var(--portal-primary)] hover:bg-[var(--portal-selected-bg)]"
     >
       <Icon className="h-3.5 w-3.5 text-[var(--portal-text-muted)]" strokeWidth={1.75} />

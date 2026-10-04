@@ -1,11 +1,12 @@
 export const DASHBOARD_WIDGETS = Object.freeze({
+  announcements:{id:"announcements",label:"Announcements and participation",description:"Recent company communications with acknowledgement, attachments and discussion access."},
   supportActions:{id:"supportActions",label:"Support actions",description:"Approvals and self-service solutions."},
   requestModules:{id:"requestModules",label:"Request modules",description:"Incident, service, asset, change and project entry points."},
   quickLinks:{id:"quickLinks",label:"Quick links",description:"Frequently used guided support shortcuts."},
   myWork:{id:"myWork",label:"My work",description:"Open work, approvals, assets and alerts."},
   recentTickets:{id:"recentTickets",label:"Recent tickets",description:"The latest tickets available to the signed-in person."},
-  assignedAssets:{id:"assignedAssets",label:"Assigned assets",description:"Equipment currently assigned to the signed-in person."},
   participatedTickets:{id:"participatedTickets",label:"Someone else's tickets",description:"Tickets where the signed-in person has scoped participation."},
+  assignedAssets:{id:"assignedAssets",label:"Assigned assets",description:"Equipment currently assigned to the signed-in person."},
   pinnedActions:{id:"pinnedActions",label:"Favourites",description:"Favourite request and support shortcuts you can remove or restore."},
 });
 const ROLES=["user","hod","agent","operator","manager","admin","superadmin"];
@@ -14,11 +15,13 @@ const preview=(accent,secondary,blocks)=>({accent,secondary,blocks});
 export const DASHBOARD_TEMPLATES=Object.freeze({
  employee:{id:"employee",label:"Employee Self-Service",description:"Balanced support, requests, tickets and equipment visibility.",roles:ROLES,experience:"employee",route:"/employee",widgets:ALL,preview:preview("#2563eb","#22d3ee",["hero","actions","requests","tickets"])},
  employeeFocused:{id:"employeeFocused",label:"My Work Focus",description:"Prioritises actions, active work and recent tickets.",roles:ROLES,experience:"employee",route:"/employee",widgets:["supportActions","pinnedActions","myWork","recentTickets","quickLinks"],preview:preview("#7c3aed","#ec4899",["hero","work","tickets"])},
+ announcementGlass:{id:"announcementGlass",label:"Connected Glass",description:"A modern announcement-first dashboard with direct participation, work and ticket visibility.",roles:ROLES,experience:"employee",route:"/employee",widgets:["announcements","supportActions","myWork","recentTickets","pinnedActions","quickLinks"],preview:preview("#1d4ed8","#06b6d4",["announcements","glass","work","tickets"])},
  quickSupport:{id:"quickSupport",label:"Quick Support",description:"Fast access to support and favourite shortcuts.",roles:ROLES,experience:"employee",route:"/employee",widgets:["supportActions","pinnedActions","requestModules","quickLinks"],preview:preview("#0891b2","#14b8a6",["hero","actions","links"])},
  equipment:{id:"equipment",label:"My Equipment",description:"Centres assigned equipment and current work.",roles:ROLES,experience:"employee",route:"/employee",widgets:["assignedAssets","pinnedActions","myWork","recentTickets"],preview:preview("#16a34a","#84cc16",["hero","assets","work"])},
  knowledgeFirst:{id:"knowledgeFirst",label:"Knowledge First",description:"Promotes self-service solutions before raising a request.",roles:ROLES,experience:"employee",route:"/employee",widgets:["supportActions","quickLinks","pinnedActions","recentTickets"],preview:preview("#d97706","#facc15",["hero","knowledge","tickets"])},
  minimal:{id:"minimal",label:"Minimal Home",description:"A calm lightweight home for requests and current work.",roles:ROLES,experience:"employee",route:"/employee",widgets:["pinnedActions","requestModules","myWork"],preview:preview("#475569","#94a3b8",["hero","requests"])},
  operations:{id:"operations",label:"Helpdesk Operations",description:"Operational ticket, SLA and alert monitoring.",roles:ROLES.slice(1),experience:"operations",route:"/",widgets:[],preview:preview("#1d4ed8","#f97316",["metrics","chart","tickets"])},
+ operationsGlass:{id:"operationsGlass",label:"Connected Operations Glass",description:"Announcement-first operations view with direct participation and preserved SLA, queue and ticket monitoring.",roles:ROLES.slice(1),experience:"operations",route:"/",widgets:["announcements"],preview:preview("#172b57","#22d3ee",["announcements","glass","metrics","tickets"])},
  manager:{id:"manager",label:"Manager Overview",description:"Department, service performance, approvals and escalation oversight.",roles:["manager"],experience:"management",route:"/",widgets:[],preview:preview("#6d28d9","#0ea5e9",["metrics","chart","teams"])},
  admin:{id:"admin",label:"Administration Overview",description:"Users, groups, directory, communications and system governance.",roles:["admin"],experience:"administration",route:"/admin",widgets:[],preview:preview("#0f766e","#2563eb",["users","groups","health"])},
  superadmin:{id:"superadmin",label:"Platform Governance",description:"Global audited governance, emergency controls and platform health.",roles:["superadmin"],experience:"governance",route:"/admin",widgets:[],preview:preview("#991b1b","#7c3aed",["governance","audit","health"])},

@@ -87,7 +87,7 @@ function assignmentLabel(ticket){
   if(!ticket)return "Unassigned";
   const agent=ticket.assigned_to_name||(ticket.assigned_to_user_id?`User #${ticket.assigned_to_user_id}`:"Unassigned");
   const group=ticket.assigned_group_name||(ticket.assigned_group_id?`Group #${ticket.assigned_group_id}`:"No group");
-  return `${agent} Ã‚Â· ${group}`;
+  return `${agent} · ${group}`;
 }
 async function logAssignmentChange(database,ticketId,actorId,before,after){
   const from=assignmentLabel(before);
@@ -137,9 +137,34 @@ router.get("/",async(req,res)=>{
   }
 
   if(req.query.search){
-    values.push(`%${text(req.query.search,200)}%`);
+    const search=text(req.query.search,300);
+    const scope=String(req.query.searchScope||"everything").trim().toLowerCase();
+    const allowedScopes=new Set(["everything","reference","subject","description","requester","department","assignee","support-group","category","status","priority","conversation"]);
+    if(!allowedScopes.has(scope))return res.status(400).json({error:"Invalid search scope."});
+    values.push(`%${search}%`);
     const i=values.length;
-    conditions.push(`(t.ticket_ref ILIKE $${i} OR t.external_id ILIKE $${i} OR t.title ILIKE $${i} OR t.description ILIKE $${i} OR t.category ILIKE $${i} OR requester.name ILIKE $${i} OR t.external_requester_name ILIKE $${i} OR t.external_requester_email ILIKE $${i} OR assignee.name ILIKE $${i} OR t.external_assignee_name ILIKE $${i} OR g.name ILIKE $${i} OR t.external_group_name ILIKE $${i})`);
+    const scoped={
+      reference:`(t.ticket_ref ILIKE $${i} OR t.external_id ILIKE $${i})`,
+      subject:`t.title ILIKE $${i}`,
+      description:`t.description ILIKE $${i}`,
+      requester:`(requester.name ILIKE $${i} OR requester.email ILIKE $${i} OR t.external_requester_name ILIKE $${i} OR t.external_requester_email ILIKE $${i})`,
+      department:`requester.department ILIKE $${i}`,
+      assignee:`(assignee.name ILIKE $${i} OR assignee.email ILIKE $${i} OR t.external_assignee_name ILIKE $${i})`,
+      "support-group":`(g.name ILIKE $${i} OR t.external_group_name ILIKE $${i})`,
+      category:`(t.category ILIKE $${i} OR t.sub_category ILIKE $${i} OR t.item_category ILIKE $${i} OR t.workspace ILIKE $${i})`,
+      status:`t.status ILIKE $${i}`,
+      priority:`t.priority ILIKE $${i}`,
+      conversation:`EXISTS(SELECT 1 FROM ticket_comments search_comment WHERE search_comment.ticket_id=t.id AND search_comment.body ILIKE $${i} AND (search_comment.is_internal=FALSE OR $${i+1}=TRUE))`,
+    };
+    if(scope==="conversation"){
+      values.push(operations(req.user));
+      conditions.push(scoped.conversation);
+    }else if(scope!=="everything")conditions.push(scoped[scope]);
+    else{
+      values.push(operations(req.user));
+      const internalIndex=values.length;
+      conditions.push(`(t.ticket_ref ILIKE $${i} OR t.external_id ILIKE $${i} OR t.title ILIKE $${i} OR t.description ILIKE $${i} OR t.category ILIKE $${i} OR t.sub_category ILIKE $${i} OR t.item_category ILIKE $${i} OR t.workspace ILIKE $${i} OR t.status ILIKE $${i} OR t.priority ILIKE $${i} OR requester.name ILIKE $${i} OR requester.email ILIKE $${i} OR requester.department ILIKE $${i} OR t.external_requester_name ILIKE $${i} OR t.external_requester_email ILIKE $${i} OR assignee.name ILIKE $${i} OR assignee.email ILIKE $${i} OR t.external_assignee_name ILIKE $${i} OR g.name ILIKE $${i} OR t.external_group_name ILIKE $${i} OR EXISTS(SELECT 1 FROM ticket_comments search_comment WHERE search_comment.ticket_id=t.id AND search_comment.body ILIKE $${i} AND (search_comment.is_internal=FALSE OR $${internalIndex}=TRUE)))`);
+    }
   }
   const legacyView = String(req.query.view || "")
     .trim()
@@ -176,6 +201,7 @@ router.get("/",async(req,res)=>{
     "mine",
     "unassigned",
     "my-groups",
+    "mine-or-groups",
   ]);
   if(!allowedAssignmentScopes.has(assignmentScope)){
     return res.status(400).json({error:"Invalid assignment filter."});
@@ -196,6 +222,15 @@ router.get("/",async(req,res)=>{
       JOIN support_groups sg ON sg.id=gm.group_id AND COALESCE(sg.is_active,TRUE)=TRUE
       WHERE gm.user_id=$${i}
     )`);
+  }else if(assignmentScope==="mine-or-groups"){
+    values.push(req.user.id);
+    const i=values.length;
+    conditions.push(`(t.assigned_to_user_id=$${i} OR t.assigned_group_id IN(
+      SELECT gm.group_id
+      FROM support_group_members gm
+      JOIN support_groups sg ON sg.id=gm.group_id AND COALESCE(sg.is_active,TRUE)=TRUE
+      WHERE gm.user_id=$${i}
+    ))`);
   }
 
   const baseWhere=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";
@@ -247,6 +282,8 @@ router.get("/",async(req,res)=>{
   addLike("t.ticket_type",req.query.type);
   if(String(req.query.view||"")==="today")listConditions.push("t.created_at >= CURRENT_DATE");
   if(String(req.query.view||"")==="overdue")listConditions.push("t.due_at < NOW() AND t.status NOT IN ('Resolved','Closed')");
+  if(String(req.query.view||"")==="aged-seven")listConditions.push("t.created_at <= NOW()-INTERVAL '7 days' AND t.status NOT IN ('Resolved','Closed')");
+  if(String(req.query.view||"")==="aged-overdue")listConditions.push("t.created_at <= NOW()-INTERVAL '7 days' AND t.due_at < NOW() AND t.status NOT IN ('Resolved','Closed')");
   if(String(req.query.view||"")==="high")listConditions.push("t.priority IN ('Critical','High')");
 
   const requestedWorkspace=text(req.query.workspace,100);
@@ -754,8 +791,9 @@ router.post("/bulk",allowRoles("agent","operator","manager","admin","superadmin"
  const reason=text(req.body.reason,1000);
  const changes=req.body.changes&&typeof req.body.changes==="object"?req.body.changes:{};
  if(!ticketIds.length)return res.status(400).json({code:"BULK_TICKETS_REQUIRED",error:"Select at least one ticket."});
- if(!["modify","archive","delete"].includes(action))return res.status(400).json({code:"BULK_ACTION_INVALID",error:"Unsupported bulk ticket action."});
+ if(!["modify","archive","delete","prepare-resolution"].includes(action))return res.status(400).json({code:"BULK_ACTION_INVALID",error:"Unsupported bulk ticket action."});
  if(["archive","delete"].includes(action)&&reason.length<5)return res.status(400).json({code:"BULK_REASON_REQUIRED",error:"Provide a reason of at least 5 characters."});
+ if(action==="prepare-resolution"&&reason.length<10)return res.status(400).json({code:"RESOLUTION_SUMMARY_REQUIRED",error:"Provide a resolution summary of at least 10 characters."});
  if(action==="delete"&&req.user.role!=="superadmin")return res.status(403).json({code:"BULK_DELETE_FORBIDDEN",error:"Permanent ticket deletion requires superadministrator authority."});
  const allowedChangeKeys=new Set(["priority","status","workspace","assignedGroupId","assignedToUserId","dueAt"]);
  const supplied=Object.keys(changes).filter(key=>changes[key]!==undefined);
@@ -771,7 +809,16 @@ router.post("/bulk",allowRoles("agent","operator","manager","admin","superadmin"
     const found=await client.query("SELECT * FROM tickets WHERE id=$1 FOR UPDATE",[ticketId]);
     const before=found.rows[0];
     if(!before)throw Object.assign(new Error("Ticket not found."),{code:"TICKET_NOT_FOUND"});
-    if(action==="archive"){
+    if(action==="prepare-resolution"){
+      if(before.archived_at)throw Object.assign(new Error("Archived tickets cannot be prepared for resolution."),{code:"TICKET_ARCHIVED"});
+      if(["Resolved","Closed"].includes(before.status))throw Object.assign(new Error(`Ticket is already ${before.status.toLowerCase()}.`),{code:"TICKET_ALREADY_FINAL"});
+      if(before.status==="Waiting Approval")throw Object.assign(new Error("Ticket is awaiting approval."),{code:"TICKET_WAITING_APPROVAL"});
+      if(!before.assigned_to_user_id&&!before.assigned_group_id)throw Object.assign(new Error("Ticket has no accountable owner or support group."),{code:"TICKET_OWNER_REQUIRED"});
+      if(["agent","operator"].includes(req.user.role)&&Number(before.assigned_to_user_id)!==Number(req.user.id))throw Object.assign(new Error("Agents may prepare only tickets assigned directly to their account."),{code:"AGENT_RESOLUTION_SCOPE"});
+      await client.query("UPDATE tickets SET status='Resolved',resolved_at=COALESCE(resolved_at,NOW()),closed_at=NULL,updated_at=NOW() WHERE id=$1",[ticketId]);
+      await history(client,ticketId,req.user.id,"bulk_prepared_for_resolution",before.status,JSON.stringify({status:"Resolved",summary:reason,batchSize:ticketIds.length}));
+      await logStatusChange(client,ticketId,req.user.id,before.status,"Resolved","resolve");
+    }else if(action==="archive"){
       if(["agent","operator"].includes(req.user.role)&&Number(before.assigned_to_user_id)!==Number(req.user.id))throw Object.assign(new Error("Agents may archive only tickets assigned to their own account."),{code:"AGENT_ARCHIVE_SCOPE"});
       if(before.archived_at)throw Object.assign(new Error("Ticket is already archived."),{code:"TICKET_ALREADY_ARCHIVED"});
      await client.query("UPDATE tickets SET archived_at=NOW(),archived_by_user_id=$2,archive_reason=$3,updated_at=NOW() WHERE id=$1",[ticketId,req.user.id,reason]);
@@ -867,7 +914,7 @@ router.post("/:id/assign",allowRoles("agent","operator","manager","admin","super
   }
 });
 /**
- * Requester-driven assignment Ã¢â‚¬â€ employees may pick or change the agent on
+ * Requester-driven assignment — employees may pick or change the agent on
  * their own active tickets. The group follows the agent's membership so the
  * assignment always stays valid.
  */
@@ -917,6 +964,7 @@ router.post("/:id/assign-agent",async(req,res)=>{
 router.patch("/:id/status",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
   const next=status(req.body.status);
   if(!next)return res.status(400).json({error:"Invalid ticket status."});
+  if(["Resolved","Closed"].includes(next))return res.status(409).json({code:"GOVERNED_STATUS_REQUIRED",error:"Resolve and Close must use their governed workflows."});
   try{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
@@ -946,17 +994,27 @@ router.patch("/:id/resolve",allowRoles("agent","operator","manager","admin","sup
     return res.status(500).json({error:"Failed to resolve ticket."});
   }
 });
-router.patch("/:id/close",allowRoles("manager","superadmin"),async(req,res)=>{
+router.patch("/:id/close",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+  const classification=text(req.body.classification,80);
+  const reason=text(req.body.reason,1000);
+  const agentClassifications=new Set(["Irrelevant","Not IT Related"]);
+  if(reason.length<10)return res.status(400).json({code:"CLOSURE_REASON_REQUIRED",error:"Provide a closure reason of at least 10 characters."});
+  if(["agent","operator"].includes(req.user.role)&&!agentClassifications.has(classification))return res.status(403).json({code:"AGENT_CLOSURE_CLASSIFICATION_REQUIRED",error:"Agents may close only Irrelevant or Not IT Related tickets."});
+  if(!classification)return res.status(400).json({code:"CLOSURE_CLASSIFICATION_REQUIRED",error:"Select a closure classification."});
+  const client=await pool.connect();
   try{
-    const existing=await getTicket(req.params.id);
-    if(!existing)return res.status(404).json({error:"Ticket not found."});
-    await pool.query(`UPDATE tickets SET status='Closed',resolved_at=COALESCE(resolved_at,NOW()),closed_at=NOW(),updated_at=NOW() WHERE id=$1`,[req.params.id]);
-    const ticket=await getTicket(req.params.id);
-    await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status,"closed");
-    return res.json(decorate(ticket));
-  }catch(error){
-    return res.status(500).json({error:"Failed to close ticket."});
-  }
+    await client.query("BEGIN");
+    const result=await client.query("SELECT * FROM tickets WHERE id=$1 AND archived_at IS NULL FOR UPDATE",[req.params.id]);
+    const existing=result.rows[0];
+    if(!existing)throw Object.assign(new Error("Ticket not found."),{status:404});
+    if(["agent","operator"].includes(req.user.role)&&Number(existing.assigned_to_user_id)!==Number(req.user.id))throw Object.assign(new Error("Agents may close only tickets assigned directly to their account."),{status:403,code:"AGENT_CLOSURE_SCOPE"});
+    await client.query(`UPDATE tickets SET status='Closed',resolved_at=COALESCE(resolved_at,NOW()),closed_at=NOW(),updated_at=NOW() WHERE id=$1`,[req.params.id]);
+    await history(client,req.params.id,req.user.id,"governed_closed",existing.status,JSON.stringify({status:"Closed",classification,reason}));
+    await logStatusChange(client,req.params.id,req.user.id,existing.status,"Closed","closed");
+    await client.query("COMMIT");
+    return res.json({...decorate(await getTicket(req.params.id)),closure:{classification,reason}});
+  }catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(error.status||500).json({code:error.code||"CLOSE_FAILED",error:error.status?error.message:"Failed to close ticket."});}
+  finally{client.release();}
 });
 
 module.exports = router;

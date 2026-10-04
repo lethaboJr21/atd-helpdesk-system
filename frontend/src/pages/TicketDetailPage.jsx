@@ -1,5 +1,5 @@
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
@@ -185,7 +185,7 @@ function describeHistoryEntry(entry) {
   if (action === "closed" || action === "close") {
     return {
       title: "Closed",
-      detail: from && to ? `${from}  ->  ${to}` : "Ticket closed successfully.",
+      detail: from && to ? `${from}  ->  ${to}` : "Ticket closed.",
       actor,
     };
   }
@@ -317,6 +317,7 @@ export default function TicketDetailPage() {
   const [emailParticipants, setEmailParticipants] = useState([]);
   const [selectedRecipients, setSelectedRecipients] = useState([]);
   const [resolutionNote, setResolutionNote] = useState("");
+  const [closureClassification, setClosureClassification] = useState("");
   const [reopenReason, setReopenReason] = useState("");
   const [pendingFiles, setPendingFiles] = useState([]);
   const attachmentInputRef = useRef(null);
@@ -620,16 +621,11 @@ export default function TicketDetailPage() {
 
   const closeTicket = async () => {
     const note = resolutionNote.trim();
-    await runAction(async () => {
-      if (note) {
-        await ticketsApi.addComment(ticket.id, {
-          body: `Closed: ${note}`,
-          isInternal: false,
-        });
-      }
-      await ticketsApi.close(ticket.id);
-    }, "Ticket closed successfully.");
+    if (note.length < 10) { setError("Provide a closure reason of at least 10 characters."); return; }
+    if (!closureClassification) { setError("Select a closure classification."); return; }
+    await runAction(() => ticketsApi.close(ticket.id, { classification: closureClassification, reason: note }), "Ticket closed successfully.");
     setResolutionNote("");
+    setClosureClassification("");
   };
 
   const shellActions = (
@@ -1080,10 +1076,8 @@ export default function TicketDetailPage() {
               <MessageSquare className="h-4 w-4" style={{ color: BRAND }} />
               <h2 className="text-lg font-bold text-slate-950">Conversation</h2>
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              Replies between the requester and support. Agents can add private
-              notes.
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Complete timestamped conversation between the requester and support. Internal notes remain protected from requester-facing portal and email views.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs font-bold"><span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-blue-800">{comments.filter((item) => !item.is_internal).length} requester-visible</span>{operationsUser ? <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-800">{comments.filter((item) => item.is_internal).length} internal notes</span> : null}<span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">{comments.length} total entries</span></div>
 
             {comments.length === 0 ? (
               <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm text-slate-500">
@@ -1169,18 +1163,7 @@ export default function TicketDetailPage() {
               />
               <div className="flex flex-wrap items-center justify-between gap-3">
                 {operationsUser ? (
-                  <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={internalNote}
-                      onChange={(event) =>
-                        setInternalNote(event.target.checked)
-                      }
-                      className="h-4 w-4 rounded border-slate-300"
-                      style={{ accentColor: BRAND }}
-                    />
-                    Internal note (agents only)
-                  </label>
+                  <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Message visibility"><button type="button" onClick={() => setInternalNote(false)} aria-pressed={!internalNote} className={`rounded-xl border px-3 py-2 text-xs font-bold ${!internalNote ? "border-blue-300 bg-blue-50 text-blue-800" : "border-slate-200"}`}>Reply to requester</button><button type="button" onClick={() => { setInternalNote(true); setReplyAction("send"); }} aria-pressed={internalNote} className={`rounded-xl border px-3 py-2 text-xs font-bold ${internalNote ? "border-amber-300 bg-amber-50 text-amber-800" : "border-slate-200"}`}>Internal note</button></div>
                 ) : (
                   <span />
                 )}
@@ -1394,11 +1377,12 @@ export default function TicketDetailPage() {
                   <UserCheck className="h-4 w-4" />
                   Assign to Me
                 </button>
+                <select id="governed-closure" value={closureClassification} onChange={(event) => setClosureClassification(event.target.value)} className={inputClass}><option value="">Closure classification</option><option value="Irrelevant">Irrelevant</option><option value="Not IT Related">Not IT Related</option>{["manager","admin","superadmin"].includes(user?.role)?<option value="Completed and approved">Completed and approved</option>:null}</select>
                 <textarea
                   rows="2"
                   value={resolutionNote}
                   onChange={(event) => setResolutionNote(event.target.value)}
-                  placeholder="Optional resolution / close note..."
+                  placeholder="Resolution summary or mandatory closure reason..."
                   className={inputClass}
                 />
                 <button
@@ -1410,7 +1394,7 @@ export default function TicketDetailPage() {
                   <CheckCircle2 className="h-4 w-4" />
                   Resolve
                 </button>
-                {["manager","superadmin"].includes(user?.role) ? <button
+                {(["agent","operator","manager","admin","superadmin"].includes(user?.role)) ? <button
                   type="button"
                   onClick={closeTicket}
                   disabled={actionLoading}
@@ -1529,7 +1513,9 @@ export default function TicketDetailPage() {
       </div>
       <TicketAttachmentPreview
         attachment={previewAttachment}
+        attachments={attachments}
         url={previewUrl}
+        onNavigate={openAttachmentPreview}
         onClose={closeAttachmentPreview}
         onDownload={() =>
           previewAttachment && downloadAttachment(previewAttachment)

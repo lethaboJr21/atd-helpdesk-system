@@ -6,7 +6,7 @@ function getModuleBase() {
     : "/helpdesk";
 }
 
-// Dev uses a relative path so the Vite proxy forwards /api to the backend ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â
+// Dev uses a relative path so the Vite proxy forwards /api to the backend —
 // works from any machine, not just the server itself.
 const API_BASE = import.meta.env.MODE === "production"
   ? `${window.location.origin}${getModuleBase()}/api`
@@ -71,7 +71,7 @@ export const ticketsApi = {
   bulkAction: (data) => api.post("/tickets/bulk", data),
   updateStatus: (id, status) => api.patch(`/tickets/${id}/status`, { status }),
   resolve: (id) => api.patch(`/tickets/${id}/resolve`, {}),
-  close: (id) => api.patch(`/tickets/${id}/close`, {}),
+  close: (id, data) => api.patch(`/tickets/${id}/close`, data),
   reopen: (id, reason) => api.post(`/tickets/${id}/reopen`, { reason }),
   getResolutionCycles: (id) => api.get(`/tickets/${id}/resolution-cycles`),
   assign: (id, assignedToUserId, assignedGroupId) => api.post(`/tickets/${id}/assign`, { assignedToUserId, assignedGroupId }),
@@ -340,6 +340,7 @@ export const financeWorkspaceApi = {
   dashboard: () => api.get("/finance-workspace/dashboard"),
   exportContract: () => api.get("/finance-workspace/export-contract"),
 };
+
 export default api;
 
 export const operationalMonitorApi = {

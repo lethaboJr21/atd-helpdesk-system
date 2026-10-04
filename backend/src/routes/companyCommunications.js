@@ -13,7 +13,7 @@ const {
   normalizeAudience,
   getEligibleRecipients,
   getCampaign,
-  sendCampaign,
+  queueCampaign,
 } = require("../services/companyCommunications");
 
 const router = express.Router();
@@ -104,7 +104,13 @@ router.get("/", async (_request, response) => {
           )::integer AS skipped_count,
           COUNT(delivery.id) FILTER (
             WHERE delivery.status = 'failed'
-          )::integer AS failed_count
+          )::integer AS failed_count,
+          COUNT(delivery.id) FILTER (
+            WHERE delivery.status = 'processing'
+          )::integer AS processing_count,
+          COUNT(delivery.id) FILTER (
+            WHERE delivery.status = 'pending'
+          )::integer AS pending_count
         FROM company_communication_campaigns campaign
         LEFT JOIN company_communication_deliveries delivery
           ON delivery.campaign_id = campaign.id
@@ -262,8 +268,11 @@ router.delete("/:id/attachments/:attachmentId", async (request,response)=>{try{c
 router.get("/:id/deliveries", async (request, response) => {
   try {
     const result = await pool.query(`
-      SELECT delivery.id, delivery.intended_email, delivery.status, delivery.provider,
-             delivery.attempted_at, delivery.created_at, delivery.detail,
+      SELECT delivery.id, delivery.intended_email, delivery.effective_email,
+             delivery.status, delivery.provider, delivery.attempt_count,
+             delivery.governance_mode, delivery.environment_redirected,
+             delivery.processing_started_at, delivery.completed_at,
+             delivery.attempted_at, delivery.created_at, delivery.last_error, delivery.detail,
              user_account.name AS recipient_name, user_account.department,
              user_account.job_title AS position
       FROM company_communication_deliveries delivery
@@ -418,10 +427,9 @@ router.post("/:id/send", async (request, response) => {
   }
 
 try {
-    const result = await sendCampaign(request.params.id, request.user.id);
-
-    await writeAudit(request, "company_communication_sent", result);
-    return response.json(result);
+    const result = await queueCampaign(request.params.id, request.user.id);
+    await writeAudit(request, "company_communication_delivery_accepted", result);
+    return response.status(202).json(result);
   } catch (error) {
     console.error("Send company communication failed:", error);
     return response.status(error.status || 500).json({

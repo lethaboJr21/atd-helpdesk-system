@@ -242,7 +242,7 @@ function EmployeeRoute({ children }) {
   return children;
 }
 
-/** Redirect legacy /tickets/new?type=Ã¢â‚¬Â¦ to dedicated module routes */
+/** Redirect legacy /tickets/new?type=… to dedicated module routes */
 function LegacyTicketCreateRedirect() {
   const [params] = useSearchParams();
   const type = params.get("type") || "incident";
@@ -535,6 +535,15 @@ function AppRoutes({ moduleBase }) {
         }
       />
       <Route
+        path="/finance-workspace"
+        element={
+          <PrivateRoute>
+            <FinanceWorkspace />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
         path="/workspaces"
         element={
           <PrivateRoute>
@@ -582,14 +591,6 @@ function AppRoutes({ moduleBase }) {
       <Route
         path="*"
         element={<Navigate to="/" replace />}
-      />
-      <Route
-        path="/finance-workspace"
-        element={
-          <PrivateRoute>
-            <FinanceWorkspace />
-          </PrivateRoute>
-        }
       />
 </Routes>
   );

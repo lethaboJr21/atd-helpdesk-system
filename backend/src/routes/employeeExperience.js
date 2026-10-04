@@ -1,4 +1,4 @@
-﻿const express = require("express");
+const express = require("express");
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 
@@ -7,7 +7,7 @@ router.use(auth);
 
 const TEMPLATES = ["employee","employeeFocused","quickSupport","equipment","knowledgeFirst","minimal"];
 const THEMES = ["light","dark","system"];
-const APPEARANCE_STYLES = ["solid","two-color","gradient"];
+const APPEARANCE_STYLES = ["solid","two-color","gradient","glass"];
 const APPEARANCE_ACCENTS = ["atd-blue","slate","cyan","teal","sky","violet","rose","amber","green"];
 const MONITOR_VIEWS = ["list","kanban"];
 const WIDGETS = ["supportActions","requestModules","pinnedActions","quickLinks","myWork","recentTickets","assignedAssets"];

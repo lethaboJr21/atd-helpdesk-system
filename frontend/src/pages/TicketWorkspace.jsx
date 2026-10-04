@@ -4,7 +4,13 @@ import {
   CheckCircle2,
   Check,
   Columns3,
+  BarChart3,
+  Eye,
   Filter,
+  Maximize2,
+  PanelRightClose,
+  Pin,
+  PinOff,
   List,
   SquareCheck,
   RotateCcw,
@@ -197,12 +203,12 @@ function PaginationBar({ pagination, loading, onPageChange, pageSize, onPageSize
         <span className="font-bold text-slate-950">
           {pagination.totalPages}
         </span>
-        {" Â· "}
+        {" · "}
         <span className="font-bold text-slate-950">
           {pagination.total.toLocaleString("en-ZA")}
         </span>{" "}
         tickets
-        {" Â· "}
+        {" · "}
         {pagination.perPage} per page
       </p>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -220,7 +226,7 @@ function PaginationBar({ pagination, loading, onPageChange, pageSize, onPageSize
           const showGap = previous && pageNumber - previous > 1;
           return (
             <span key={pageNumber} className="inline-flex items-center gap-1.5">
-              {showGap ? <span className="px-1 text-slate-400">â€¦</span> : null}
+              {showGap ? <span className="px-1 text-slate-400">…</span> : null}
               <button
                 type="button"
                 disabled={loading}
@@ -327,7 +333,10 @@ export default function TicketWorkspace() {
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
   const [advancedFilters,setAdvancedFilters]=useState(()=>({view:searchParams.get("view")||"unresolved",search:defaultQuery,requester:searchParams.get("requester")||"",department:searchParams.get("department")||"",source:searchParams.get("source")||"",type:searchParams.get("type")||"",priority:searchParams.get("priority")||defaultPriority,sort:searchParams.get("sort")||"created_at",direction:searchParams.get("direction")||"desc"}));
   const [workspaceView, setWorkspaceView] = useState(() => localStorage.getItem("atd-ticket-workspace-view") === "kanban" ? "kanban" : "list");
-  const [previewVisible,setPreviewVisible]=useState(()=>localStorage.getItem("atd-ticket-preview-visible")!=="false");
+  const [panelMode,setPanelMode]=useState(()=>localStorage.getItem("atd-ticket-workspace-panel-mode") || (localStorage.getItem("atd-ticket-preview-visible") === "false" ? "hidden" : "preview"));
+  const [panelPinned,setPanelPinned]=useState(()=>localStorage.getItem("atd-ticket-workspace-panel-pinned")!=="false");
+  const [panelWidth,setPanelWidth]=useState(()=>Math.min(640,Math.max(360,Number(localStorage.getItem("atd-ticket-workspace-panel-width"))||460)));
+  const listScrollRef=useRef(null);
   const [selectMode, setSelectMode] = useState(false);
   const selection = useCrossPageTicketSelection();
   const [pageSize,setPageSize]=useState(()=>{const value=Number(localStorage.getItem("atd-ticket-workspace-page-size"));return PAGE_SIZES.includes(value)?value:DEFAULT_PAGE_SIZE;});
@@ -440,7 +449,10 @@ export default function TicketWorkspace() {
   }, [fetchTickets]);
 
   useEffect(() => { localStorage.setItem("atd-ticket-workspace-view", workspaceView); }, [workspaceView]);
-  useEffect(()=>localStorage.setItem("atd-ticket-preview-visible",String(previewVisible)),[previewVisible]);
+  useEffect(()=>localStorage.setItem("atd-ticket-workspace-panel-mode",panelMode),[panelMode]);
+  useEffect(()=>localStorage.setItem("atd-ticket-workspace-panel-pinned",String(panelPinned)),[panelPinned]);
+  useEffect(()=>localStorage.setItem("atd-ticket-workspace-panel-width",String(panelWidth)),[panelWidth]);
+  useEffect(()=>{const saved=Number(sessionStorage.getItem("atd-ticket-workspace-scroll"));if(listScrollRef.current&&Number.isFinite(saved))listScrollRef.current.scrollTop=saved;return()=>{if(listScrollRef.current)sessionStorage.setItem("atd-ticket-workspace-scroll",String(listScrollRef.current.scrollTop));};},[]);
   const toggleTicketSelection=(id)=>{const ticket=tickets.find((item)=>String(item.id)===String(id));if(ticket)selection.toggle(ticket);};
 
   useEffect(() => {
@@ -803,13 +815,13 @@ export default function TicketWorkspace() {
       <div
         className={classNames(
           "grid min-h-0 w-full flex-1 gap-3 lg:gap-4",
-          selectedTicket
-            ? "xl:grid-cols-[minmax(0,1fr)_minmax(380px,34%)]"
+          panelMode !== "hidden"
+            ? "ticket-workspace-with-panel"
             : "grid-cols-1"
         )}
       >
-        <StickyListShell label={employeeExperience ? "My tickets" : "Ticket workspace results"} className="xl:min-h-0">
-          {!employeeExperience ? <AdvancedTicketFilterBar value={advancedFilters} onChange={setAdvancedFilters} onApply={()=>{const presets={unresolved:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},mine:{assignment:"mine",statuses:[...UNRESOLVED_STATUSES]},"my-groups":{assignment:"my-groups",statuses:[...UNRESOLVED_STATUSES]},today:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},high:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},all:{assignment:"all",statuses:[]}};const preset=presets[advancedFilters.view]||presets.unresolved;setAssignmentScope(preset.assignment);setDraftAssignmentScope(preset.assignment);setSelectedStatuses(preset.statuses);setDraftStatuses(preset.statuses);const next=new URLSearchParams(searchParams);next.delete("status");if(preset.assignment==="all")next.delete("assignment");else next.set("assignment",preset.assignment);if(preset.statuses.length)next.set("statuses",preset.statuses.join(","));else next.delete("statuses");Object.entries(advancedFilters).forEach(([key,value])=>value?next.set(key,value):next.delete(key));setQuery(advancedFilters.search||"");setAppliedQuery((advancedFilters.search||"").trim());next.delete("page");setPage(1);setSearchParams(next,{replace:true});}} onReset={()=>{const reset={view:"unresolved",search:"",requester:"",department:"",source:"",type:"",priority:"",sort:"created_at",direction:"desc"};setAdvancedFilters(reset);setQuery("");setAppliedQuery("");setPage(1);setSearchParams(new URLSearchParams(),{replace:true});}} /> : null}
+        <div ref={listScrollRef} onScroll={(event)=>sessionStorage.setItem("atd-ticket-workspace-scroll",String(event.currentTarget.scrollTop))} className="min-h-0 overflow-auto"><StickyListShell label={employeeExperience ? "My tickets" : "Ticket workspace results"} className="xl:min-h-0">
+          {!employeeExperience ? <AdvancedTicketFilterBar value={advancedFilters} onChange={setAdvancedFilters} onApply={()=>{const presets={unresolved:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},mine:{assignment:"mine",statuses:[...UNRESOLVED_STATUSES]},"my-groups":{assignment:"my-groups",statuses:[...UNRESOLVED_STATUSES]},today:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},overdue:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-seven":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-overdue":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},high:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},all:{assignment:"all",statuses:[]}};const preset=presets[advancedFilters.view]||presets.unresolved;setAssignmentScope(preset.assignment);setDraftAssignmentScope(preset.assignment);setSelectedStatuses(preset.statuses);setDraftStatuses(preset.statuses);const next=new URLSearchParams(searchParams);next.delete("status");if(preset.assignment==="all")next.delete("assignment");else next.set("assignment",preset.assignment);if(preset.statuses.length)next.set("statuses",preset.statuses.join(","));else next.delete("statuses");Object.entries(advancedFilters).forEach(([key,value])=>value?next.set(key,value):next.delete(key));setQuery(advancedFilters.search||"");setAppliedQuery((advancedFilters.search||"").trim());next.delete("page");setPage(1);setSearchParams(next,{replace:true});}} onReset={()=>{const reset={view:"unresolved",search:"",requester:"",department:"",source:"",type:"",priority:"",sort:"created_at",direction:"desc"};setAdvancedFilters(reset);setQuery("");setAppliedQuery("");setPage(1);setSearchParams(new URLSearchParams(),{replace:true});}} /> : null}
           <div className="shrink-0 border-b border-slate-200 px-3 py-2.5 xl:px-4 xl:py-3">
             <div className="relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -834,7 +846,7 @@ export default function TicketWorkspace() {
                 </p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectMode((current) => !current); selection.clear(); }} className={classNames("portal-control inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold", selectMode && "portal-selected")}><SquareCheck className="h-4 w-4"/>Select</button><div className="portal-surface-muted inline-flex rounded-xl border p-1"><button type="button" aria-pressed={workspaceView === "list"} onClick={() => setWorkspaceView("list")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "list" && "portal-selected")}><List className="mr-1 inline h-3.5 w-3.5"/>List</button><button type="button" aria-pressed={workspaceView === "kanban"} onClick={() => setWorkspaceView("kanban")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "kanban" && "portal-selected")}><Columns3 className="mr-1 inline h-3.5 w-3.5"/>Kanban</button></div><button type="button" onClick={()=>setPreviewVisible(v=>!v)} className="portal-control rounded-xl border px-3 py-2 text-xs font-bold">{previewVisible?"Hide ticket preview":"Show ticket preview"}</button><div ref={filterPanelRef} className="relative shrink-0">
+              <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => { setSelectMode((current) => !current); selection.clear(); }} className={classNames("portal-control inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold", selectMode && "portal-selected")}><SquareCheck className="h-4 w-4"/>Select</button><div className="portal-surface-muted inline-flex rounded-xl border p-1"><button type="button" aria-pressed={workspaceView === "list"} onClick={() => setWorkspaceView("list")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "list" && "portal-selected")}><List className="mr-1 inline h-3.5 w-3.5"/>List</button><button type="button" aria-pressed={workspaceView === "kanban"} onClick={() => setWorkspaceView("kanban")} className={classNames("rounded-lg px-2.5 py-1.5 text-xs font-bold", workspaceView === "kanban" && "portal-selected")}><Columns3 className="mr-1 inline h-3.5 w-3.5"/>Kanban</button></div><div className="portal-surface-muted inline-flex flex-wrap rounded-xl border p-1" aria-label="Ticket workspace panel mode"><button type="button" aria-pressed={panelMode==="preview"} onClick={()=>setPanelMode("preview")} className={classNames("inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold",panelMode==="preview"&&"portal-selected")}><Eye className="h-3.5 w-3.5"/>Ticket Preview</button><button type="button" aria-pressed={panelMode==="statistics"} onClick={()=>setPanelMode("statistics")} className={classNames("inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold",panelMode==="statistics"&&"portal-selected")}><BarChart3 className="h-3.5 w-3.5"/>Ticket Statistics</button><button type="button" aria-pressed={panelMode==="hidden"} onClick={()=>setPanelMode("hidden")} className={classNames("inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-bold",panelMode==="hidden"&&"portal-selected")}><PanelRightClose className="h-3.5 w-3.5"/>Hide Panel</button></div><div ref={filterPanelRef} className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1043,7 +1055,7 @@ export default function TicketWorkspace() {
                 <span className="min-w-0 flex-1">Ticket</span>
                 <span className="w-44 shrink-0">Agent</span>
                 <span className="w-[7.5rem] shrink-0 text-right">
-                  Status Â· Priority
+                  Status · Priority
                 </span>
               </div>
             ) : null}
@@ -1110,9 +1122,9 @@ export default function TicketWorkspace() {
                           <span className="portal-ticket-reference font-bold">
                             {item.ticket_ref || `TICKET-${item.id}`}
                           </span>
-                          <span className="text-slate-300">Â·</span>
+                          <span className="text-slate-300">·</span>
                           <span>{module.shortLabel}</span>
-                          <span className="text-slate-300">Â·</span>
+                          <span className="text-slate-300">·</span>
                           <span>{formatAge(item)} ago</span>
                         </p>
                       </div>
@@ -1203,7 +1215,7 @@ export default function TicketWorkspace() {
                             item.requester_email ||
                             "Unknown requester"}
                         {!employeeExperience
-                          ? ` Â· ${item.assigned_group_name || item.workspace || "No group"}`
+                          ? ` · ${item.assigned_group_name || item.workspace || "No group"}`
                           : null}
                       </p>
                     </div>
@@ -1241,10 +1253,11 @@ export default function TicketWorkspace() {
               />
             </StickyListFooter>
           ) : null}
-        </StickyListShell>
-        {previewVisible ? <aside
+        </StickyListShell></div>
+        {panelMode !== "hidden" ? <aside
+          style={{"--ticket-workspace-panel-width":`${panelWidth}px`}}
           className={classNames(
-            "min-h-0 overflow-y-auto",
+            "ticket-workspace-adaptive-panel min-h-0 overflow-y-auto",
             // On laptop, only show the preview pane when a ticket is selected
             // so the list keeps vertical room. Monitors always show the pane.
             selectedTicket
@@ -1252,7 +1265,8 @@ export default function TicketWorkspace() {
               : "hidden xl:block"
           )}
         >
-          {!selectedTicket ? (
+          <div className="portal-surface-raised sticky top-0 z-30 mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border p-2"><div className="flex items-center gap-2"><button type="button" onClick={()=>setPanelPinned(value=>!value)} className="portal-control hidden rounded-lg border p-2 xl:inline-flex" aria-label={panelPinned?"Unpin panel":"Pin panel"}>{panelPinned?<Pin className="h-4 w-4"/>:<PinOff className="h-4 w-4"/>}</button><span className="portal-title text-xs font-bold">{panelMode==="statistics"?"Ticket Statistics":"Ticket Preview"}</span></div><div className="flex items-center gap-2"><label className="portal-muted hidden text-xs xl:flex">Width<input type="range" min="360" max="640" step="20" value={panelWidth} onChange={event=>setPanelWidth(Number(event.target.value))} className="ml-2 w-24"/></label><button type="button" onClick={()=>setPanelMode("hidden")} className="portal-control rounded-lg border p-2" aria-label="Hide panel"><X className="h-4 w-4"/></button></div></div>
+          {panelMode === "statistics" ? <TicketWorkspaceStatistics tickets={tickets} counts={counts} pagination={pagination}/> : !selectedTicket ? (
             <div className="flex h-full min-h-[180px] flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-6 text-center shadow-sm">
               <Ticket className="h-8 w-8 text-slate-400" />
               <p className="mt-3 font-semibold text-slate-950">
@@ -1265,7 +1279,7 @@ export default function TicketWorkspace() {
             </div>
           ) : (
             <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-3"><button type="button" onClick={()=>setPreviewVisible(false)} className="portal-control order-last rounded-lg border p-1.5" aria-label="Close ticket preview"><X className="h-4 w-4"/></button>
+              <div className="flex items-start justify-between gap-3"><button type="button" onClick={()=>setPanelMode("hidden")} className="portal-control order-last rounded-lg border p-1.5" aria-label="Close ticket preview"><X className="h-4 w-4"/></button>
                 <div className="min-w-0">
                   <p className="text-sm font-bold text-[var(--portal-primary)]">
                     {selectedTicket.ticket_ref}
@@ -1396,20 +1410,7 @@ export default function TicketWorkspace() {
                       <CheckCircle2 className="h-4 w-4" />
                       Resolve
                     </button>
-                    <button
-                      type="button"
-                      disabled={actionLoading}
-                      onClick={() =>
-                        runAction(
-                          () => ticketsApi.close(selectedTicket.id),
-                          "Ticket closed."
-                        )
-                      }
-                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Close
-                    </button>
+                    <button type="button" disabled={actionLoading} onClick={() => navigate(`/tickets/${selectedTicket.id}#governed-closure`)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"><XCircle className="h-4 w-4" />Close</button>
                   </div>
                 </div>
               )}
@@ -1448,6 +1449,17 @@ export default function TicketWorkspace() {
   );
 }
 
+function TicketWorkspaceStatistics({tickets,counts,pagination}) {
+  const statusRows=STATUS_OPTIONS.map(status=>({label:status,value:counts?.[status]??tickets.filter(ticket=>ticket.status===status).length}));
+  const priorityRows=["Critical","High","Medium","Low"].map(priority=>({label:priority,value:tickets.filter(ticket=>ticket.priority===priority).length}));
+  const groupMap=new Map();tickets.forEach(ticket=>{const key=ticket.assigned_group_name||ticket.workspace||"Unassigned / Other";groupMap.set(key,(groupMap.get(key)||0)+1);});
+  const groupRows=[...groupMap.entries()].sort((a,b)=>b[1]-a[1]).slice(0,8).map(([label,value])=>({label,value}));
+  const total=Number(pagination?.total??counts?.All??tickets.length)||0;
+  const overdue=tickets.filter(ticket=>slaState(ticket).overdue).length;
+  const reopened=tickets.filter(ticket=>Number(ticket.reopen_count||0)>0).length;
+  const section=(title,rows)=><section className="portal-surface-raised rounded-xl border p-4"><h3 className="portal-title text-sm font-black">{title}</h3><div className="mt-3 space-y-2">{rows.map(row=><div key={row.label} className="flex items-center justify-between gap-3 text-sm"><span className="portal-copy truncate">{row.label}</span><span className="portal-accent-soft rounded-full px-2 py-0.5 text-xs font-black">{row.value}</span></div>)}</div></section>;
+  return <div className="space-y-3"><div className="grid grid-cols-2 gap-2"><Info label="Authorised total" value={total.toLocaleString("en-ZA")}/><Info label="Current page" value={tickets.length}/><Info label="Overdue on page" value={overdue}/><Info label="Reopened on page" value={reopened}/></div>{section("Lifecycle status",statusRows)}{section("Priority on current page",priorityRows)}{section("Support group / workspace",groupRows.length?groupRows:[{label:"No current data",value:0}])}<p className="portal-muted px-1 text-xs leading-5">Authorised total uses the server count. Priority, SLA, reopened and support-group breakdowns describe the currently loaded page and preserve the active filters.</p></div>;
+}
 function Info({ label, value }) {
   return (
     <div className="rounded-xl bg-slate-50 p-2.5">

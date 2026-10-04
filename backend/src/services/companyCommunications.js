@@ -330,33 +330,66 @@ async function claimCampaign(campaignId, actorId, database) {
   return result.rows[0] || null;
 }
 
-async function sendCampaign(campaignId, actorId = null) {
+async function claimDelivery(campaignId) {
+  const result = await pool.query(
+    `
+      WITH candidate AS (
+        SELECT id
+        FROM company_communication_deliveries
+        WHERE campaign_id = $1
+          AND (
+            status IN ('pending','failed','skipped')
+            OR (status = 'processing' AND processing_started_at < NOW() - INTERVAL '10 minutes')
+          )
+        ORDER BY id
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      UPDATE company_communication_deliveries delivery
+      SET status = 'processing', processing_started_at = NOW(),
+          attempt_count = attempt_count + 1, last_error = NULL
+      FROM candidate
+      WHERE delivery.id = candidate.id
+      RETURNING delivery.*
+    `,
+    [campaignId]
+  );
+  return result.rows[0] || null;
+}
+function deliveryEvidence(result, intendedEmail) {
+  const environmentRedirected = Boolean(process.env.EMAIL_REDIRECT_ALL);
+  const governanceMode = environmentRedirected
+    ? "testing"
+    : result.governanceMode || result.governance_mode || "configured";
+  return {
+    ...result,
+    intendedEmail,
+    effectiveRecipients: result.effectiveRecipients || result.effective_recipients || null,
+    governanceMode,
+    environmentRedirected,
+  };
+}
+async function sendCampaign(campaignId, actorId = null, options = {}) {
   const client = await pool.connect();
   let campaign;
   let recipients;
   let attachments = [];
-
   try {
     await client.query("BEGIN");
-
-    campaign = await claimCampaign(campaignId, actorId, client);
-
-    if (!campaign) {
-      const existingCampaign = await getCampaign(campaignId, client);
-
+    campaign = options.preclaimed
+      ? await getCampaign(campaignId, client)
+      : await claimCampaign(campaignId, actorId, client);
+    if (!campaign || (options.preclaimed && campaign.status !== "sending")) {
+      const existingCampaign = campaign || await getCampaign(campaignId, client);
       if (!existingCampaign) {
         const error = new Error("Campaign not found.");
         error.status = 404;
         throw error;
       }
-
-      const error = new Error(
-        `Campaign cannot be sent from status '${existingCampaign.status}'.`
-      );
+      const error = new Error(`Campaign cannot be sent from status '${existingCampaign.status}'.`);
       error.status = 409;
       throw error;
     }
-
     attachments = await communicationAttachments.emailAttachments(client, campaign.id);
     recipients = await getEligibleRecipients(
       campaign.audience_definition && typeof campaign.audience_definition === "object"
@@ -364,49 +397,24 @@ async function sendCampaign(campaignId, actorId = null) {
         : { type: campaign.audience_type, values: campaign.audience_values },
       client
     );
-
     if (recipients.length === 0) {
       await client.query(
-        `
-          UPDATE company_communication_campaigns
-          SET
-            status = 'failed',
-            last_error = 'No eligible recipients were found.',
-            updated_at = NOW()
-          WHERE id = $1
-        `,
+        `UPDATE company_communication_campaigns
+         SET status='failed',last_error='No eligible recipients were found.',updated_at=NOW()
+         WHERE id=$1`,
         [campaign.id]
       );
-
       await client.query("COMMIT");
-
-      return {
-        campaignId: Number(campaign.id),
-        recipients: 0,
-        sent: 0,
-        skipped: 0,
-        failed: 0,
-        status: "failed",
-        reason: "No eligible recipients were found.",
-      };
+      return { campaignId:Number(campaign.id),recipients:0,sent:0,skipped:0,failed:0,status:"failed",reason:"No eligible recipients were found." };
     }
-
     for (const recipient of recipients) {
       await client.query(
-        `
-          INSERT INTO company_communication_deliveries (
-            campaign_id,
-            user_id,
-            intended_email
-          )
-          VALUES ($1, $2, LOWER($3))
-          ON CONFLICT (campaign_id, intended_email)
-          DO NOTHING
-        `,
-        [campaign.id, recipient.id, recipient.email]
+        `INSERT INTO company_communication_deliveries(campaign_id,user_id,intended_email)
+         VALUES($1,$2,LOWER($3))
+         ON CONFLICT(campaign_id,intended_email) DO NOTHING`,
+        [campaign.id,recipient.id,recipient.email]
       );
     }
-
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -415,88 +423,94 @@ async function sendCampaign(campaignId, actorId = null) {
     client.release();
   }
 
-  let sent = 0;
-  let skipped = 0;
-  let failed = 0;
-
-  for (const recipient of recipients) {
-    const body = renderCampaign(campaign, recipient);
-    const result = await sendMailSafe({
-      to: recipient.email,
-      subject: campaign.subject,
-      html: body.html,
-      text: body.text,
-      category: "welcome",
-      attachments,
-    });
-
-    const deliveryStatus = result.sent
-      ? "sent"
-      : result.skipped
-        ? "skipped"
-        : "failed";
-
-    if (deliveryStatus === "sent") sent += 1;
-    if (deliveryStatus === "skipped") skipped += 1;
-    if (deliveryStatus === "failed") failed += 1;
-
-    await pool.query(
-      `
-        UPDATE company_communication_deliveries
-        SET
-          status = $3,
-          provider = $4,
-          detail = $5::jsonb,
-          attempted_at = NOW()
-        WHERE campaign_id = $1
-          AND LOWER(intended_email) = LOWER($2)
-      `,
-      [
-        campaign.id,
-        recipient.email,
-        deliveryStatus,
-        result.provider || null,
-        JSON.stringify(result),
-      ]
-    );
+  const recipientByEmail = new Map(recipients.map((recipient) => [recipient.email.toLowerCase(),recipient]));
+  while (true) {
+    const delivery = await claimDelivery(campaign.id);
+    if (!delivery) break;
+    const recipient = recipientByEmail.get(String(delivery.intended_email).toLowerCase()) || {
+      id: delivery.user_id,
+      email: delivery.intended_email,
+      name: "ATD colleague",
+    };
+    try {
+      const body = renderCampaign(campaign, recipient);
+      const rawResult = await sendMailSafe({
+        to: recipient.email,
+        subject: campaign.subject,
+        html: body.html,
+        text: body.text,
+        category: "welcome",
+        attachments,
+      });
+      const result = deliveryEvidence(rawResult,recipient.email);
+      const deliveryStatus = result.sent ? "sent" : result.skipped ? "skipped" : "failed";
+      await pool.query(
+        `UPDATE company_communication_deliveries
+         SET status=$2,provider=$3,detail=$4::jsonb,attempted_at=NOW(),completed_at=NOW(),
+             effective_email=$5,governance_mode=$6,environment_redirected=$7,last_error=$8
+         WHERE id=$1 AND status='processing'`,
+        [delivery.id,deliveryStatus,result.provider || null,JSON.stringify(result),
+         Array.isArray(result.effectiveRecipients) ? result.effectiveRecipients.join(",") : null,
+         result.governanceMode,result.environmentRedirected,
+         result.error?.message || (deliveryStatus === "failed" ? result.reason || "Delivery failed." : null)]
+      );
+    } catch (error) {
+      await pool.query(
+        `UPDATE company_communication_deliveries
+         SET status='failed',completed_at=NOW(),last_error=$2,
+             detail=jsonb_build_object('error',$2,'retryable',true)
+         WHERE id=$1 AND status='processing'`,
+        [delivery.id,error.message]
+      );
+    }
   }
 
-  const finalStatus = determineFinalStatus({ sent, skipped, failed });
-  const lastError = failed > 0
-    ? `${failed} delivery attempt(s) failed.`
-    : null;
-
+  const totals = (await pool.query(
+    `SELECT COUNT(*)::integer AS recipients,
+            COUNT(*) FILTER(WHERE status='sent')::integer AS sent,
+            COUNT(*) FILTER(WHERE status='skipped')::integer AS skipped,
+            COUNT(*) FILTER(WHERE status='failed')::integer AS failed,
+            COUNT(*) FILTER(WHERE status='processing')::integer AS processing,
+            COUNT(*) FILTER(WHERE status='pending')::integer AS pending
+     FROM company_communication_deliveries WHERE campaign_id=$1`,
+    [campaign.id]
+  )).rows[0];
+  const finalStatus = determineFinalStatus(totals);
+  const lastError = totals.failed > 0 ? `${totals.failed} delivery attempt(s) failed.` : null;
   await pool.query(
-    `
-      UPDATE company_communication_campaigns
-      SET
-        status = $2,
-        sent_at = CASE
-          WHEN $2 IN ('sent', 'partially_sent') THEN NOW()
-          ELSE sent_at
-        END,
-        published_at = CASE
-          WHEN $2 IN ('sent', 'partially_sent') THEN COALESCE(published_at,NOW())
-          ELSE published_at
-        END,
-        last_error = $3,
-        updated_at = NOW()
-      WHERE id = $1
-    `,
-    [campaign.id, finalStatus, lastError]
+    `UPDATE company_communication_campaigns
+     SET status=$2,
+         sent_at=CASE WHEN $2 IN('sent','partially_sent') THEN NOW() ELSE sent_at END,
+         published_at=CASE WHEN $2 IN('sent','partially_sent') THEN COALESCE(published_at,NOW()) ELSE published_at END,
+         last_error=$3,updated_at=NOW()
+     WHERE id=$1 AND status='sending'`,
+    [campaign.id,finalStatus,lastError]
   );
-
-  return {
-    campaignId: Number(campaign.id),
-    recipients: recipients.length,
-    sent,
-    skipped,
-    failed,
-    status: finalStatus,
-    attachmentCount: attachments.length,
-  };
+  return { campaignId:Number(campaign.id),...totals,status:finalStatus,attachmentCount:attachments.length };
 }
-
+async function queueCampaign(campaignId,actorId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const campaign = await claimCampaign(campaignId,actorId,client);
+    if (!campaign) {
+      const existing = await getCampaign(campaignId,client);
+      const error = new Error(existing ? `Campaign cannot be sent from status '${existing.status}'.` : "Campaign not found.");
+      error.status = existing ? 409 : 404;
+      throw error;
+    }
+    await client.query("COMMIT");
+    setImmediate(() => sendCampaign(campaign.id,actorId,{preclaimed:true}).catch((error) => {
+      console.error("Queued company communication failed:",error.message);
+    }));
+    return { accepted:true,campaignId:Number(campaign.id),status:"sending",message:"Campaign delivery accepted and is processing in the background." };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 async function processDueCampaigns() {
   if (schedulerProcessing) return;
 
@@ -537,7 +551,9 @@ module.exports = {
   normalizeAudience,
   getEligibleRecipients,
   getCampaign,
+  claimCampaign,
   sendCampaign,
+  queueCampaign,
   processDueCampaigns,
   startCompanyCommunicationsScheduler,
 };

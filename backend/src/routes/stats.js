@@ -4,7 +4,7 @@ const auth = require('../middleware/auth')
 
 router.use(auth)
 
-// GET /api/stats/dashboard  Ã¢â‚¬â€ KPI cards (full ticket table, not a page sample)
+// GET /api/stats/dashboard  — KPI cards (full ticket table, not a page sample)
 router.get('/dashboard', async (req, res) => {
   try {
     const { rows } = await pool.query(`
@@ -84,7 +84,7 @@ router.get('/dashboard', async (req, res) => {
   }
 })
 
-// GET /api/stats/volume  Ã¢â‚¬â€ bar chart by created date (full table)
+// GET /api/stats/volume  — bar chart by created date (full table)
 router.get('/volume', async (req, res) => {
   const days = Math.min(Math.max(parseInt(req.query.days, 10) || 7, 1), 90)
   try {
@@ -133,7 +133,7 @@ router.get('/volume', async (req, res) => {
   }
 })
 
-// GET /api/stats/service-mix Ã¢â‚¬â€ open workload by support group / workspace
+// GET /api/stats/service-mix — open workload by support group / workspace
 router.get('/service-mix', async (_req, res) => {
   try {
     const { rows } = await pool.query(`

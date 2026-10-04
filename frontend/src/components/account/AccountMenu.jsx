@@ -1,6 +1,7 @@
 import {
   Camera,
   ChevronDown,
+  Gauge,
   LayoutDashboard,
   LogOut,
   Monitor,
@@ -15,7 +16,7 @@ import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../hooks/useAuth";
 import useAppearance from "../../hooks/useAppearance";
-import { ACCENT_THEMES } from "../../services/appearance";
+import { ACCENT_THEMES, APPEARANCE_STYLES } from "../../services/appearance";
 import AvatarEditor from "./AvatarEditor";
 import ProfileAvatar from "./ProfileAvatar";
 
@@ -23,7 +24,11 @@ function classNames(...values) {
   return values.filter(Boolean).join(" ");
 }
 
-export default function AccountMenu({ compact = false }) {
+export default function AccountMenu({
+  compact = false,
+  dashboardView = null,
+  onDashboardViewChange = null,
+}) {
   const navigate = useNavigate();
   const {
     user,
@@ -85,7 +90,7 @@ export default function AccountMenu({ compact = false }) {
   };
 
   return (
-    <div ref={menuRef} className="group/account relative z-[120] overflow-visible">
+    <div ref={menuRef} className="portal-universal-account-anchor group/account z-[120] overflow-visible">
       <button
         type="button"
         onClick={() => setOpen((current) => !current)}
@@ -134,6 +139,16 @@ export default function AccountMenu({ compact = false }) {
                 <LayoutDashboard className="h-4 w-4" />
                 {employeeView ? "Return to Operations View" : "Switch to Employee View"}
               </button>
+            ) : null}            {operationsAccount && dashboardView && onDashboardViewChange ? (
+              <section className="border-t border-[var(--portal-border)] pt-3">
+                <p className="px-3 pb-1 text-xs font-bold uppercase tracking-wide text-[var(--portal-text-muted)]">Operations dashboard view</p>
+                <button type="button" role="menuitemradio" aria-checked={dashboardView === "simple"} onClick={() => onDashboardViewChange("simple")} className={classNames("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold", dashboardView === "simple" ? "portal-selected" : "text-[var(--portal-text-soft)] hover:bg-[var(--portal-surface-muted)]")}>
+                  <LayoutDashboard className="h-4 w-4" /> Simple
+                </button>
+                <button type="button" role="menuitemradio" aria-checked={dashboardView === "explorative"} onClick={() => onDashboardViewChange("explorative")} className={classNames("flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold", dashboardView === "explorative" ? "portal-selected" : "text-[var(--portal-text-soft)] hover:bg-[var(--portal-surface-muted)]")}>
+                  <Gauge className="h-4 w-4" /> Explorative
+                </button>
+              </section>
             ) : null}
 
             <section className="border-t border-[var(--portal-border)] pt-3">
@@ -164,7 +179,7 @@ export default function AccountMenu({ compact = false }) {
                 </button>
               ))}
               <div className="mt-2 grid grid-cols-2 gap-2 px-3">
-                {["solid", "two-color", "gradient"].map((value) => <button key={value} type="button" onClick={() => setStyle(value)} className={classNames("portal-control rounded-lg border px-2 py-2 text-xs font-bold capitalize", appearance.style === value && "portal-selected")}>{value}</button>)}
+                {APPEARANCE_STYLES.map((value) => <button key={value} type="button" onClick={() => setStyle(value)} className={classNames("portal-control rounded-lg border px-2 py-2 text-xs font-bold capitalize", appearance.style === value && "portal-selected")}>{value}</button>)}
               </div>
               <div className="mt-3 flex flex-wrap gap-2 px-3" aria-label="Accent colours">
                 {ACCENT_THEMES.map((item) => <button key={item.id} type="button" onClick={() => setAccent(item.id)} title={item.label} aria-label={item.label} aria-pressed={appearance.accent === item.id} className={classNames("h-7 w-7 rounded-full border-2 border-[var(--portal-surface)] shadow ring-1 ring-[var(--portal-border)]", appearance.accent === item.id && "ring-2 ring-[var(--portal-primary)]")} style={{ background: appearance.style === "solid" ? item.primary : `linear-gradient(135deg, ${item.primary}, ${item.secondary})` }} />)}
