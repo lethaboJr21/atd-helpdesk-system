@@ -1,6 +1,6 @@
 {
     "schemaVersion":  1,
-    "updatedAt":  "2026-09-27T23:56:36+02:00",
+    "updatedAt":  "2026-10-04T21:48:15+02:00",
     "project":  "ATD Helpdesk",
     "currentMilestone":  {
                              "id":  "post-deployment-functional-validation-and-hardening",
@@ -10,8 +10,8 @@
                              "milestoneValidationScript":  208,
                              "serverPushAndReadmeScript":  207
                          },
-    "completedThrough":  207,
-    "currentCheckpoint":  207,
+    "completedThrough":  743,
+    "currentCheckpoint":  744,
     "policies":  {
                      "consolidatedMilestoneTesting":  true,
                      "readmeAtMilestoneBoundary":  true,
@@ -244,7 +244,7 @@
                                                       "deployment":  "deferred"
                                                   }
                                  },
-    "lastUpdated":  "2026-09-07T13:29:46+02:00",
+    "lastUpdated":  "2026-10-04T21:48:15+02:00",
     "milestoneHistory":  [
                              {
                                  "id":  "forwarding-scoped-ticket-participation-2026-09-27",
@@ -347,6 +347,50 @@
                                                                                "Assets / CMDB"
                                                                            ]
                                                }
+                             },
+                             {
+                                 "id":  "urgent-release-checkpoint-2026-10-04",
+                                 "recordedAt":  "2026-10-04T21:48:15+02:00",
+                                 "status":  "committed-locally-remote-push-pending",
+                                 "branch":  "feature/launch-communications-queue-compatibility",
+                                 "commit":  "86c8b876b5313f3748378db87b3b25cc77b21871",
+                                 "tree":  "4e4948d001b840f4742d08d68210773621e22e86",
+                                 "approvedPathCount":  14,
+                                 "capabilities":  [
+                                                      "finance-workspace-review-prototype",
+                                                      "notification-ticket-reference-fallback",
+                                                      "assets-management-naming",
+                                                      "ticket-close-wording"
+                                                  ],
+                                 "validation":  {
+                                                    "patchAllowlist":  "passed",
+                                                    "stagedWhitespace":  "passed",
+                                                    "backendSyntax":  "passed",
+                                                    "frontendBuild":  "passed",
+                                                    "modulesTransformed":  2469,
+                                                    "stagedTree":  "passed"
+                                                },
+                                 "delivery":  {
+                                                  "trackingRemote":  "gitlab",
+                                                  "secondaryRemote":  "github",
+                                                  "push":  "pending",
+                                                  "deployment":  "not-performed",
+                                                  "migration":  "created-not-applied",
+                                                  "productionGate":  [
+                                                                         "authorised-production-target",
+                                                                         "database-backup",
+                                                                         "migration-state",
+                                                                         "rollback-point"
+                                                                     ]
+                                              },
+                                 "nextActions":  [
+                                                     "push-and-verify-gitlab-remote",
+                                                     "confirm-production-delivery-context",
+                                                     "authorised-migration-review",
+                                                     "controlled-deployment-and-verification",
+                                                     "finance-accounts-payable-expansion",
+                                                     "responsive-layout-and-universal-header"
+                                                 ]
                              }
                          ],
     "pendingBatchHistory":  [
@@ -670,8 +714,8 @@
     "currentDelivery":  {
                             "id":  "post-forwarding-milestone-2026-09-27",
                             "recordedAt":  "2026-09-27T22:48:00+02:00",
-                            "deliveredCommit":  "edf97e4876d09d6e8120377a35a39b55896e61a7",
-                            "deliveredTree":  "904ce7c9027269fd22f8b5175425b86851c0a731",
+                            "deliveredCommit":  "86c8b876b5313f3748378db87b3b25cc77b21871",
+                            "deliveredTree":  "4e4948d001b840f4742d08d68210773621e22e86",
                             "deployment":  {
                                                "status":  "blocked_pending_authorised_context",
                                                "requirements":  [
@@ -731,7 +775,9 @@
                                                                           "CMDB",
                                                                           "Assets / CMDB"
                                                                       ]
-                                          }
+                                          },
+                            "deliveryStatus":  "committed-locally-remote-push-pending",
+                            "trackingRemote":  "gitlab"
                         },
     "financeCommercialIntelligence":  {
                                           "id":  "finance-commercial-intelligence-scope-2026-09-27",
@@ -1027,5 +1073,49 @@
                                                         "frontendBuild":  "passed"
                                                     },
                                          "deployment":  "pending-selective-stage-commit-push-and-authorised-migration-review"
-                                     }
+                                     },
+    "latestDeliveryCheckpoint":  {
+                                     "id":  "urgent-release-checkpoint-2026-10-04",
+                                     "recordedAt":  "2026-10-04T21:48:15+02:00",
+                                     "status":  "committed-locally-remote-push-pending",
+                                     "branch":  "feature/launch-communications-queue-compatibility",
+                                     "commit":  "86c8b876b5313f3748378db87b3b25cc77b21871",
+                                     "tree":  "4e4948d001b840f4742d08d68210773621e22e86",
+                                     "approvedPathCount":  14,
+                                     "capabilities":  [
+                                                          "finance-workspace-review-prototype",
+                                                          "notification-ticket-reference-fallback",
+                                                          "assets-management-naming",
+                                                          "ticket-close-wording"
+                                                      ],
+                                     "validation":  {
+                                                        "patchAllowlist":  "passed",
+                                                        "stagedWhitespace":  "passed",
+                                                        "backendSyntax":  "passed",
+                                                        "frontendBuild":  "passed",
+                                                        "modulesTransformed":  2469,
+                                                        "stagedTree":  "passed"
+                                                    },
+                                     "delivery":  {
+                                                      "trackingRemote":  "gitlab",
+                                                      "secondaryRemote":  "github",
+                                                      "push":  "pending",
+                                                      "deployment":  "not-performed",
+                                                      "migration":  "created-not-applied",
+                                                      "productionGate":  [
+                                                                             "authorised-production-target",
+                                                                             "database-backup",
+                                                                             "migration-state",
+                                                                             "rollback-point"
+                                                                         ]
+                                                  },
+                                     "nextActions":  [
+                                                         "push-and-verify-gitlab-remote",
+                                                         "confirm-production-delivery-context",
+                                                         "authorised-migration-review",
+                                                         "controlled-deployment-and-verification",
+                                                         "finance-accounts-payable-expansion",
+                                                         "responsive-layout-and-universal-header"
+                                                     ]
+                                 }
 }

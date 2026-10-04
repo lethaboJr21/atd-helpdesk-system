@@ -1297,3 +1297,35 @@ Build a reviewable prototype with structured configuration and no fabricated fin
 
 Before deployment, selectively stage, validate, commit and push the Finance prototype, naming repairs and this tracker update. Deploy only remote-verified commits. Confirm the production target, database backup, migration status and rollback point before applying the Finance migration or restarting services.
 <!-- ATD-FINANCE-READINESS-ROSTER-NAMING-20260927-END -->
+<!-- ATD-URGENT-RELEASE-CHECKPOINT-20261004-BEGIN -->
+## Urgent release delivery checkpoint - 4 October 2026
+
+### Completed and validated
+- Finance Workspace review prototype foundation is implemented in the selective release.
+- Finance backend route, frontend page, application route, Sidebar entry and API client are included.
+- Notification Centre ticket-opening compatibility now resolves numeric IDs, target URLs, target IDs and legacy REQ, INC and TMP-FS ticket references through an authorised exact-reference fallback.
+- Compact navigation uses **Assets** and the module page uses **Assets Management** while existing asset routes and data remain preserved.
+- User-facing ticket closure wording is standardised to **Close** and `Ticket closed successfully.`
+- Exact urgent-release patch validation passed for 14 approved paths.
+- Isolated staged-tree backend syntax and frontend production build passed with 2,469 modules transformed.
+- Selective commit `86c8b876b5313f3748378db87b3b25cc77b21871` was created and verified.
+- Verified commit tree: `4e4948d001b840f4742d08d68210773621e22e86`.
+- Post-commit Git index is clean.
+
+### Delivery state
+- Tracking remote identified as `gitlab`.
+- Secondary remote identified as `github`.
+- Push has **not** been performed. Script 741 stopped safely because the repository has no remote named `origin`.
+- No production deployment, migration execution, server restart, PM2 action or live communication occurred.
+- Finance migration `2026-09-27-finance-workspace-prototype.sql` remains created but unapplied.
+- Production target, database backup, migration state and rollback point still require authorised confirmation before deployment.
+
+### Next guarded actions
+1. Push and verify commit `86c8b876b5313f3748378db87b3b25cc77b21871` through the verified `gitlab` tracking remote.
+2. Confirm the remote commit, parent, tree, subject and exact 14-path allowlist.
+3. Inspect production target, backup readiness, migration state and rollback evidence before any deployment.
+4. Keep the Finance migration unapplied until the authorised deployment gate is satisfied.
+5. Continue Finance Accounts Payable and commercial-intelligence expansion as the next Finance function group after delivery control.
+6. Continue the responsive layout and universal-header batch. The required top-header New Request and Ticket Monitor controls remain pending.
+7. Preserve the broader unrelated local working tree outside this selective release.
+<!-- ATD-URGENT-RELEASE-CHECKPOINT-20261004-END -->

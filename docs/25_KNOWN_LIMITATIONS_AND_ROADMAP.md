@@ -176,3 +176,26 @@ Pre-deployment user-facing naming is complete: `Assets`, `Assets Management`, an
 
 Next: selective staging, clean staged-tree validation, commit, push, remote verification, authorised migration review and controlled deployment.
 <!-- ATD-FINANCE-READINESS-ROSTER-NAMING-20260927-END -->
+<!-- ATD-URGENT-RELEASE-ROADMAP-20261004-BEGIN -->
+## Urgent release and roadmap status - 4 October 2026
+
+### Release validated locally
+- Finance Workspace prototype, Notification Centre reference fallback, Assets naming and ticket-close wording are committed locally in `86c8b876b5313f3748378db87b3b25cc77b21871`.
+- The commit contains exactly 14 approved paths and tree `4e4948d001b840f4742d08d68210773621e22e86`.
+- Backend syntax, staged whitespace validation and isolated frontend production build passed.
+- The release is not yet pushed or deployed.
+
+### Remaining delivery blockers
+- Push the exact commit through the verified `gitlab` tracking remote and verify the remote tree.
+- Confirm the authorised production target, database backup, Finance migration state and rollback point.
+- Keep the Finance migration unapplied until the production gate is approved.
+- Run controlled post-deployment verification before changing any item from implemented to deployed.
+
+### Remaining priority roadmap
+1. Finance Accounts Payable and commercial-intelligence expansion, including governed office queues, approvals, product reporting, Boardroom packs and clean Excel exports.
+2. Responsive Employee, Agent and Operations dashboards plus pinned and overlay panel behaviour.
+3. Universal header order: Refresh, New Request, Ticket Monitor and far-right Profile Avatar without overlap.
+4. Compact Ticket Detail actions, closed-ticket restrictions, governed reopening and repeat-issue reporting.
+5. Assignment support-group defaults, configurable multi-group alerts and governed escalation.
+6. Broader milestone testing, deployment verification and consolidated README update at the next milestone boundary.
+<!-- ATD-URGENT-RELEASE-ROADMAP-20261004-END -->
