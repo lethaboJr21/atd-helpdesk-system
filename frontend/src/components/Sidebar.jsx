@@ -2,6 +2,7 @@ import {
   AlertTriangle,
   Archive,
   BriefcaseBusiness,
+  WalletCards,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -106,8 +107,13 @@ export default function Sidebar({
       path: "/workspaces",
     },
     {
+      icon: WalletCards,
+      label: "Finance Workspace",
+      path: "/finance-workspace",
+    },
+    {
       icon: HardDrive,
-      label: "Assets / CMDB",
+      label: "Assets",
       path: "/assets",
     },
     {

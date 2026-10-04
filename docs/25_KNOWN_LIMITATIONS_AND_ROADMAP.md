@@ -137,3 +137,42 @@ Priority order:
 
 The detailed four-function definitions remain in `ATD_HELPDESK_DEVELOPMENT_TRACKER.md` and `ATD_HELPDESK_DEVELOPMENT_TRACKER.json`.
 <!-- ATD-PENDING-BATCHES-20260927-END -->
+
+<!-- ATD-POST-MILESTONE-20260927-BEGIN -->
+## Post-forwarding milestone priorities - 27 September 2026
+
+- Forwarding and scoped participation is committed and pushed at `edf97e4876d09d6e8120377a35a39b55896e61a7`.
+- Production deployment is awaiting authorised target, backup and migration-status confirmation.
+- Accelerated next batch: Finance Workspace prototype for next week's Finance Manager review.
+- Following batch: responsive dashboards, pinned and floating side panels, width persistence and universal non-overlapping header controls.
+- Global status popup must render above all content, dismiss briefly, pause for interaction and provide governed Undo where safe.
+- Resolve and Close from Ticket Detail must exit the record and navigate to the appropriate status queue.
+- User-facing closure label is `Close`, not `Governed Close`.
+- Standardise the former Assets/CMDB module as `Assets Management`, with `Assets` as the sidebar label, while preserving all existing data and functionality.
+
+Detailed four-function definitions and sequencing remain in `ATD_HELPDESK_DEVELOPMENT_TRACKER.md` and `ATD_HELPDESK_DEVELOPMENT_TRACKER.json`.
+<!-- ATD-POST-MILESTONE-20260927-END -->
+
+<!-- ATD-FINANCE-COMMERCIAL-INTELLIGENCE-20260927-BEGIN -->
+## Finance commercial intelligence expansion - 27 September 2026
+
+The accelerated Finance Workspace is expanded into a secure Finance and Commercial Intelligence platform covering Finance Main and CFO Office, Accounts Payable Office and a governed Finance Boardroom.
+
+Compulsory scope includes structured product-line capture for Rear Step Bumpers, Chassis Frames, Tailgates, Bedliners, Box Rails and Endcaps; supplier, employee, invoice, purchase-order, sales-order, payment, approval and reconciliation data; presentation-ready dashboards; point-in-time Boardroom packs; clean governed Excel exports with Data Dictionary and Export Metadata; drill-down reporting; separation of duties; field and document classification; access and export auditing; and read-only Microsoft Entra organogram mapping.
+
+Confidential document upload remains blocked until protected storage, file validation, malware scanning, CSRF protection, retention, authenticated download and identity-security controls are configured and reviewed.
+
+The detailed four-function implementation definition remains in the development trackers.
+<!-- ATD-FINANCE-COMMERCIAL-INTELLIGENCE-20260927-END -->
+
+<!-- ATD-FINANCE-READINESS-ROSTER-NAMING-20260927-BEGIN -->
+## Finance readiness and pre-deployment status - 27 September 2026
+
+The Finance and Commercial Intelligence prototype passed static readiness validation with zero failures. The Finance migration remains unapplied, confidential uploads remain disabled, XLSX generation awaits an approved workbook service, and Entra office/title verification remains read-only and pending.
+
+The provisional Accounts Payable and Finance Main/CFO office rosters are recorded in the development tracker. Access must not be granted from names alone.
+
+Pre-deployment user-facing naming is complete: `Assets`, `Assets Management`, and `Close`. Technical routes and governance remain preserved.
+
+Next: selective staging, clean staged-tree validation, commit, push, remote verification, authorised migration review and controlled deployment.
+<!-- ATD-FINANCE-READINESS-ROSTER-NAMING-20260927-END -->

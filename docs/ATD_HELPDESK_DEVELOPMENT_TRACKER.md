@@ -1087,3 +1087,213 @@ Current observation: Escalated appears to operate mainly as a status change. Ful
 4. Execute the responsive layout and compact Ticket Detail batches, followed by assignment governance and escalation.
 5. Continue remaining four-function batches by dependency and launch priority.
 <!-- ATD-PENDING-BATCHES-20260927-END -->
+
+<!-- ATD-POST-MILESTONE-20260927-BEGIN -->
+## Forwarding milestone closure and next-batch activation - 27 September 2026
+
+### Delivered and pushed
+
+- Forwarding and scoped ticket participation was selectively committed and pushed to `feature/launch-communications-queue-compatibility`.
+- Verified commit: `edf97e4876d09d6e8120377a35a39b55896e61a7`.
+- Verified tree: `904ce7c9027269fd22f8b5175425b86851c0a731`.
+- Clean staged-tree backend syntax, tracker JSON, migration structure and frontend production build passed.
+- Deployment-readiness review passed for the pushed commit.
+- Production deployment remains blocked until the deployment target, database backup and participation migration status are confirmed through the authorised production procedure.
+
+### Activated next delivery stream: Finance Workspace prototype
+
+1. **Finance task intake** - structured categories, requester and department context, confidentiality, attachments, priority and due date.
+2. **Finance workspace** - List, Kanban, Preview and Statistics with finance filters, queues and role-aware access.
+3. **Finance lifecycle and approvals** - review, information request, approval, rejection, progress, completion, cancellation and reopening.
+4. **Finance dashboard and meeting pack** - backlog, approvals, overdue work, categories, departments, owners and Finance Manager review questions.
+
+Target: a reviewable prototype before the Finance Manager meeting beginning next week. Build for review and correction first, not premature production deployment.
+
+### Activated responsive layout and universal controls batch
+
+1. Pinned right panels consume layout space and reflow page blocks; unpinned panels overlay the page.
+2. The width slider controls governed panel width and persists per user and screen mode.
+3. Universal header order is Refresh, New Request, Ticket Monitor, Profile Avatar, with the avatar fixed at the far-right and no overlap.
+4. Validate Employee, Agent and Operations pages at 100%, 125%, 150%, 175% and 200% zoom without omitting authorised functions.
+
+### Global change popup, Undo and lifecycle navigation
+
+1. Status and change popups render through a portal-level overlay above headers, panels, menus and page content.
+2. Popups remain brief, pause on hover or keyboard focus and retain a governed Undo action during the permitted reversal window.
+3. Resolving or closing a ticket from Ticket Detail exits the record and navigates to the relevant Resolved or Closed queue while preserving the originating workspace where possible.
+4. Queue counters, List, Kanban, Ticket Monitor, Dashboard and preview state update immediately without duplicate records.
+
+### Ticket closure wording and behaviour
+
+- User-facing action label is **Close** or **Close ticket**, never **Governed Close**.
+- Governance remains internal through permissions, mandatory reason, confirmation, audit, lifecycle restrictions and authorised reopening.
+- Closed tickets disable actions applicable only to open tickets while preserving read-only history and authorised Reopen.
+
+### Assets Management naming decision
+
+- Full module name: **Assets Management**.
+- Sidebar and compact navigation label: **Assets**.
+- Remove user-facing **CMDB** and **Assets / CMDB** wording across navigation, pages, permissions, notifications, reports, search and documentation.
+- Preserve existing asset functionality, records, relationships, permissions, routes, audit data and backward compatibility.
+
+### Immediate execution order
+
+1. Collect exact Finance Workspace and reusable workspace-module source context.
+2. Build the four-function Finance prototype batch.
+3. Continue the responsive layout and universal controls batch.
+4. Implement compact Ticket Detail, lifecycle navigation, global popup and Undo, and closed-ticket restrictions in dependency order.
+5. Complete Assets Management rebranding in its scheduled portal-wide batch.
+6. Resume controlled deployment only after authorised target, backup and migration-status confirmation.
+<!-- ATD-POST-MILESTONE-20260927-END -->
+
+<!-- ATD-FINANCE-COMMERCIAL-INTELLIGENCE-20260927-BEGIN -->
+## Finance Workspace commercial intelligence, reporting and security scope - 27 September 2026
+
+### Product vision
+
+The Finance Workspace must operate as a secure Finance and Commercial Intelligence workspace, not only as a ticket queue. Structured information captured once must support operational processing, approvals, management dashboards, Boardroom packs, clean Excel exports, reconciliations, forecasting and decision-making.
+
+### Finance organisational model
+
+1. **Finance Main and CFO Office** - executive Finance work, strategy, budgets, forecasts, reporting, treasury, audit, compliance, confidential correspondence and escalations.
+2. **Accounts Payable Office** - supplier invoices, supplier payments, employee payments and reimbursements, sales orders, purchase-order matching, payment batches, supplier queries and payment exceptions. This office has its own manager and operational queues.
+3. **Finance Boardroom** - a governed meeting and decision space for agendas, review packs, decisions, action items and point-in-time reporting snapshots. The Boardroom is not a support group or default assignee.
+4. **Entra-backed organogram** - use read-only department, job title, manager, office location, company, employee type, account status and object ID references. Do not invent names or write back to Microsoft Entra ID. Suggested membership requires governed review.
+
+### Finance process catalogue
+
+- Supplier invoice
+- Supplier payment
+- Employee payment
+- Employee reimbursement
+- Sales order processing
+- Purchase-order matching
+- Payment exception
+- Supplier query
+- Budget review
+- Financial reporting
+- Audit request
+- Boardroom review
+- General Finance request
+
+### Product and commercial data model
+
+Use governed product families and line items so one invoice or order can contain multiple products:
+
+- `RSB` - Rear Step Bumpers
+- `CF` - Chassis Frames
+- `TG` - Tailgates
+- `BL` - Bedliners
+- `BR` - Box Rails
+- `EC` - Endcaps
+- `OTHER` - Other or uncategorised products
+
+Capture product family, product code, description, customer and internal part numbers, variant, programme or model, customer, site, unit of measure, quantity, unit price, discount, tax, net line value, currency, cost centre and effective dates. Preserve future mapping to Syspro or another authoritative product master.
+
+### Structured Finance data capture
+
+Capture dedicated fields rather than hiding reportable values in descriptions or comments. The data model must support Finance office, process, transaction type, customer, supplier, employee reference, invoice, purchase order, sales order, delivery note, payment batch, document and due dates, quantities, amounts, currency, exchange rate, local-currency value, cost centre, department, general-ledger reference, approval state, payment state, reconciliation state, confidentiality, owner, completion and reopened indicators.
+
+### Reporting and presentation readiness
+
+Provide Executive Finance, Product Performance, Accounts Payable, Finance Manager and Boardroom reporting. Reports must support daily, weekly, monthly, quarterly, year-to-date, financial-year and custom periods. Every chart and headline value must drill into the exact authorised records represented while preserving active filters.
+
+Required measures include units, gross value, discount, tax, net value, local-currency value, paid and unpaid value, approved and pending value, overdue value, processing time, approval time, exceptions, reopened items, blocked payments, completion rate, on-time payment rate and invoice-to-payment cycle time.
+
+Boardroom packs must be point-in-time snapshots containing reporting period, refresh timestamp, filters, executive summary, KPIs, charts, variances, exceptions, commentary, decisions required and underlying record count.
+
+### Clean Excel exports
+
+Provide governed `.xlsx` exports for detailed Finance data, product sales, Accounts Payable, approvals and management packs. Management workbooks should include Summary, Product Performance, Accounts Payable, Approvals, Overdue Items, Office Workload, Exceptions, Detailed Data, Data Dictionary and Export Metadata sheets.
+
+Raw-data sheets must use one header row, one record per row, one attribute per column, genuine Excel dates, numeric money and percentages, separate currency columns, stable names, record IDs, source references, filters, export timestamp, classification and exporter identity. Do not use merged cells or decorative blank rows in raw-data sheets.
+
+Every workbook must contain a Data Dictionary describing column name, business meaning, type, allowed values, mandatory status, source, classification, calculation rule and example.
+
+### Data quality controls
+
+Detect duplicate supplier invoices, missing supplier or amount, invalid currency, unjustified negative values, invalid date order, payment before approval, quantity without product, missing customer where required, line totals not matching document totals, tax inconsistency, missing purchase order, missing approval, missing supporting documents, invalid cost centre, invalid Finance office and conflicting confidentiality. Status values are Valid, Incomplete, Needs Review, Exception and Blocked.
+
+### Finance security baseline
+
+1. Enforce least privilege and separate Requester, Processor, Reviewer, Approver, Payment Releaser, Workspace Manager, Finance Security Administrator, Auditor and Boardroom Participant roles.
+2. Prevent one person from requesting, processing, approving and releasing the same sensitive transaction unless an authorised exception is recorded.
+3. Support confidentiality levels: Internal, Finance Restricted, Confidential, CFO Restricted, Boardroom Restricted, Payment Restricted, Employee Financial Information and Supplier Banking Information.
+4. Restrict sensitive fields, previews, downloads and exports independently from general workspace visibility.
+5. Record every view, download, export, approval, decision, change and access-revocation event.
+6. Confidential uploads remain disabled until protected storage, extension and signature validation, generated filenames, size controls, malware scanning, CSRF protection, retention and authenticated download controls are configured and reviewed.
+7. Plan Microsoft Entra MFA, Conditional Access, trusted or compliant device rules, session controls and step-up authentication through the authorised identity-security process.
+
+### Updated four-function prototype batch
+
+1. **Finance organisation and secure intake** - offices, organogram references, process catalogue, classifications, structured forms, product lines and data-quality validation.
+2. **Finance operations workspace** - office selector, List, Kanban, Preview, Statistics, Accounts Payable, CFO, approval, overdue, exception, product and period queues.
+3. **Finance lifecycle and controls** - information requests, approvals, separation of duties, payment states, exceptions, completion, reopening, restricted fields and audit history.
+4. **Finance intelligence and reporting** - executive, Accounts Payable and product dashboards, Boardroom pack, drill-down reporting, clean Excel exports, data dictionary and export auditing.
+
+### Delivery guardrails
+
+Build a reviewable prototype with structured configuration and no fabricated financial values. Real data enters only through authorised integration or governed manual capture. Review terminology, workflow and security with Finance leadership before enabling confidential document upload or production deployment.
+<!-- ATD-FINANCE-COMMERCIAL-INTELLIGENCE-20260927-END -->
+
+<!-- ATD-FINANCE-READINESS-ROSTER-NAMING-20260927-BEGIN -->
+## Finance prototype readiness, provisional roster and pre-deployment naming - 27 September 2026
+
+### Finance prototype readiness
+
+- Finance Workspace prototype foundation implemented locally.
+- Backend JavaScript syntax passed.
+- Frontend production build passed with 2,469 modules transformed.
+- Finance readiness test passed with 0 failures, 4 expected warnings and 66 passing checks.
+- Finance migration created but not executed.
+- Confidential Finance uploads remain disabled pending security readiness.
+- Genuine XLSX generation remains pending an approved workbook service or dependency.
+- Microsoft Entra organogram mapping remains read-only and tenant verification is pending.
+
+### Provisional Accounts Payable Office roster
+
+1. Sibongile Jele - Accountant
+2. Phindile Ntuli - title pending Entra verification
+3. Lindokuhle Malevu - Accountant Assistant
+4. Francina Tshabalala - title pending Entra verification
+5. Mpho Mnisi - title pending Entra verification
+6. Tshepo Maroga - title pending Entra verification
+7. Hlengiwe Lubisi - title pending Entra verification
+8. Bhekumuzi Thubana - title pending Entra verification
+9. Sesihle Sanka - title pending Entra verification
+10. Cynthia Cannela - title pending Entra verification
+11. Suphaporn - Office Manager
+
+### Provisional Finance Main and CFO Office roster
+
+1. Puseletso Sithole - title pending Entra verification
+2. Ayanda Mbatha - title pending Entra verification
+3. Lutho Mafunda - title pending Entra verification
+4. Khumbudzo Mutheiwana - title pending Entra verification
+5. Mncedisi Valashiya - Accountant Manager
+6. Bongani Tshabalala - Finance Manager
+
+### Roster governance
+
+- Names and supplied titles are provisional until matched to approved ATD Alliance Entra accounts.
+- Verify display name, user principal name, mail, job title, department, office location, employee type, account status, object ID and manager.
+- Ambiguous, guest, disabled or unmatched accounts require manual review.
+- Entra matching does not automatically grant Finance Workspace access.
+- Workspace office and role assignments require authorised approval.
+- No Entra write-back is permitted.
+
+### Pre-deployment naming completed
+
+- Sidebar module label standardised to `Assets`.
+- Assets page and dashboard template standardised to `Assets Management`.
+- User-facing `Governed Close` standardised to `Close`.
+- Ticket Detail closure confirmation standardised to `Ticket closed successfully.`
+- Technical governed-closure route and controls preserved.
+- Existing Assets route, data identifiers and functionality preserved.
+- Portal-wide stale user-facing naming scan passed.
+- Frontend production build passed after naming changes.
+
+### Deployment boundary
+
+Before deployment, selectively stage, validate, commit and push the Finance prototype, naming repairs and this tracker update. Deploy only remote-verified commits. Confirm the production target, database backup, migration status and rollback point before applying the Finance migration or restarting services.
+<!-- ATD-FINANCE-READINESS-ROSTER-NAMING-20260927-END -->

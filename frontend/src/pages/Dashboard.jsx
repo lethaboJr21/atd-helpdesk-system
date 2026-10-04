@@ -206,6 +206,46 @@ function getErrorMessage(error, fallbackMessage) {
   );
 }
 
+function ticketReferenceCandidates(notification, payload, targetUrl) {
+  const values = [
+    notification?.ticket_ref,
+    notification?.ticketReference,
+    notification?.ticket_reference,
+    payload?.ticketRef,
+    payload?.ticket_ref,
+    payload?.ticketReference,
+    payload?.ticket_reference,
+    payload?.requestRef,
+    payload?.request_ref,
+    payload?.reference,
+  ];
+  const searchableText = [targetUrl, notification?.message, ...values]
+    .filter(Boolean)
+    .join(" ");
+  const detected = searchableText.match(/\b(?:ATD\s+)?(?:REQ|INC|TMP-FS)-\d+\b/i)?.[0] || "";
+  if (detected) values.push(detected);
+  return Array.from(new Set(values
+    .map((value) => String(value || "").trim().replace(/^ATD\s+/i, ""))
+    .filter(Boolean)));
+}
+async function resolveNotificationTicketId(notification, payload, targetUrl, directTicketId) {
+  if (Number.isInteger(directTicketId) && directTicketId > 0) return directTicketId;
+  for (const reference of ticketReferenceCandidates(notification, payload, targetUrl)) {
+    const response = await ticketsApi.getAll({
+      page: 1,
+      per_page: 10,
+      search: reference,
+      searchScope: "reference",
+    });
+    const body = response?.data;
+    const rows = Array.isArray(body) ? body : Array.isArray(body?.tickets) ? body.tickets : [];
+    const normalized = reference.toUpperCase();
+    const exact = rows.find((row) => String(row?.ticket_ref || "").trim().toUpperCase() === normalized);
+    const id = Number(exact?.id);
+    if (Number.isInteger(id) && id > 0) return id;
+  }
+  return null;
+}
 export default function Dashboard() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -604,7 +644,19 @@ export default function Dashboard() {
   const handleNotificationAction = async (notification, action) => {
     const payload = notification?.action_payload || {};
     const requestId = Number(payload.requestId || payload.request_id);
-    const ticketId = Number(payload.ticketId || payload.ticket_id);
+    const targetUrl = String(notification?.target_url || payload.targetUrl || payload.target_url || "");
+    const targetUrlTicketId = Number(targetUrl.match(/\/tickets\/(\d+)(?:[/?#]|$)/)?.[1]);
+    const targetTicketId =
+      notification?.target_type === "ticket" ? Number(notification?.target_id) : Number.NaN;
+    const ticketIdCandidates = [
+      payload.ticketId,
+      payload.ticket_id,
+      targetTicketId,
+      targetUrlTicketId,
+    ].map(Number);
+    const directTicketId = ticketIdCandidates.find(
+      (value) => Number.isInteger(value) && value > 0
+    );
     const isAccessRequest =
       notification?.target_type === "access_request" ||
       notification?.type === "access_request_approval" ||
@@ -661,8 +713,14 @@ export default function Dashboard() {
         return;
       }
 
+      const ticketId = await resolveNotificationTicketId(
+        notification,
+        payload,
+        targetUrl,
+        directTicketId
+      );
       if (!Number.isInteger(ticketId) || ticketId < 1) {
-        throw new Error("This notification does not contain a valid ticket action.");
+        throw new Error("The ticket linked to this notification could not be resolved safely.");
       }
 
       if (action === "accept") {

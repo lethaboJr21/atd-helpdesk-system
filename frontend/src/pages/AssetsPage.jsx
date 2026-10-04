@@ -261,8 +261,8 @@ export default function AssetsPage() {
   };
   return (
     <OperationsShell
-      breadcrumb="Helpdesk / Assets and CMDB"
-      title="Asset Register"
+      breadcrumb="Helpdesk / Assets Management"
+      title="Assets Management"
       subtitle="Operational view of AMS-managed devices across the organisation."
       actions={
         <>

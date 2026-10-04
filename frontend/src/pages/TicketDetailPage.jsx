@@ -185,7 +185,7 @@ function describeHistoryEntry(entry) {
   if (action === "closed" || action === "close") {
     return {
       title: "Closed",
-      detail: from && to ? `${from}  ->  ${to}` : "Ticket closed.",
+      detail: from && to ? `${from}  ->  ${to}` : "Ticket closed successfully.",
       actor,
     };
   }
@@ -628,7 +628,7 @@ export default function TicketDetailPage() {
         });
       }
       await ticketsApi.close(ticket.id);
-    }, "Ticket closed.");
+    }, "Ticket closed successfully.");
     setResolutionNote("");
   };
 

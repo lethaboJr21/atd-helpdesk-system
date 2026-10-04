@@ -22,7 +22,7 @@ export const DASHBOARD_TEMPLATES=Object.freeze({
  manager:{id:"manager",label:"Manager Overview",description:"Department, service performance, approvals and escalation oversight.",roles:["manager"],experience:"management",route:"/",widgets:[],preview:preview("#6d28d9","#0ea5e9",["metrics","chart","teams"])},
  admin:{id:"admin",label:"Administration Overview",description:"Users, groups, directory, communications and system governance.",roles:["admin"],experience:"administration",route:"/admin",widgets:[],preview:preview("#0f766e","#2563eb",["users","groups","health"])},
  superadmin:{id:"superadmin",label:"Platform Governance",description:"Global audited governance, emergency controls and platform health.",roles:["superadmin"],experience:"governance",route:"/admin",widgets:[],preview:preview("#991b1b","#7c3aed",["governance","audit","health"])},
- assets:{id:"assets",label:"Assets and CMDB",description:"Asset inventory and ownership workspace.",roles:ROLES.slice(1),experience:"operations",route:"/assets",widgets:[],preview:preview("#047857","#06b6d4",["metrics","assets","owners"])},
+ assets:{id:"assets",label:"Assets Management",description:"Asset inventory and ownership workspace.",roles:ROLES.slice(1),experience:"operations",route:"/assets",widgets:[],preview:preview("#047857","#06b6d4",["metrics","assets","owners"])},
  projects:{id:"projects",label:"Projects and Tasks",description:"Separate Project Management experience coming later.",roles:ROLES.slice(1),experience:"operations",route:"/projects",widgets:[],available:false,preview:preview("#64748b","#94a3b8",["disabled"])},
 });
 export const DEFAULT_EMPLOYEE_TEMPLATE_ID="employee";

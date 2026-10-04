@@ -30,7 +30,8 @@ const catalogRoutes = require("./routes/catalog");
 const emailIntakeRoutes = require("./routes/emailIntake");
 const productionSyncRoutes = require("./routes/productionSync");
 const productionEventRoutes = require("./routes/productionEvents");
-const workspaceRoutes = require("./routes/workspaces"); // BATCH1_WORKSPACE_ROUTE_REQUIRE
+const workspaceRoutes = require("./routes/workspaces"); // BATCH1_WORKSPACE_ROUT
+const financeWorkspaceRoutes = require("./routes/financeWorkspace");E_REQUIRE
 const companyCommunicationsRoutes = require("./routes/companyCommunications");
 const termsRoutes = require("./routes/terms");
 const employeeExperienceRoutes = require("./routes/employeeExperience");
@@ -130,6 +131,7 @@ app.use("/api/settings", settingsRoutes);
 app.use("/api/admin-controls", adminControlsRoutes);
 app.use("/api/assets", assetRoutes);
 app.use("/api/workspaces", workspaceRoutes);
+app.use("/api/finance-workspace", financeWorkspaceRoutes);
 app.use("/api/company-communications", companyCommunicationsRoutes);
 app.use("/api/catalog", catalogRoutes);
 app.use("/api/email-intake", emailIntakeRoutes);

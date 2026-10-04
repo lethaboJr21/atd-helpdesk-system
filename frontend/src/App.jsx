@@ -40,6 +40,7 @@ import { employeeExperienceApi, termsApi } from "./services/api";
 import GroupManagementPage from "./pages/GroupManagementPage";
 import Workspaces from "./pages/Workspaces";
 import WorkspaceDashboard from "./pages/WorkspaceDashboard";
+import FinanceWorkspace from "./pages/FinanceWorkspace";
 import KnowledgePage from "./pages/KnowledgePage";
 import RequestCatalogPage from "./pages/RequestCatalogPage";
 import { formPathForType } from "./data/requestModules";
@@ -581,6 +582,14 @@ function AppRoutes({ moduleBase }) {
       <Route
         path="*"
         element={<Navigate to="/" replace />}
+      />
+      <Route
+        path="/finance-workspace"
+        element={
+          <PrivateRoute>
+            <FinanceWorkspace />
+          </PrivateRoute>
+        }
       />
 </Routes>
   );

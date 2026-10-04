@@ -335,6 +335,11 @@ export const workspacesApi = {
   removeMember: (id, memberId, reason) => api.delete(`/workspaces/${id}/members/${memberId}`, { data: { reason } }),
   getActivity: (id) => api.get(`/workspaces/${id}/activity`),
 };
+export const financeWorkspaceApi = {
+  configuration: () => api.get("/finance-workspace/configuration"),
+  dashboard: () => api.get("/finance-workspace/dashboard"),
+  exportContract: () => api.get("/finance-workspace/export-contract"),
+};
 export default api;
 
 export const operationalMonitorApi = {

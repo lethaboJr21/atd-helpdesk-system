@@ -1,6 +1,6 @@
 {
     "schemaVersion":  1,
-    "updatedAt":  "2026-09-27T19:20:00+02:00",
+    "updatedAt":  "2026-09-27T23:56:36+02:00",
     "project":  "ATD Helpdesk",
     "currentMilestone":  {
                              "id":  "post-deployment-functional-validation-and-hardening",
@@ -281,6 +281,72 @@
                                                   "gitPush":  "pending-selective-staging",
                                                   "deployment":  "deferred"
                                               }
+                             },
+                             {
+                                 "id":  "post-forwarding-milestone-2026-09-27",
+                                 "recordedAt":  "2026-09-27T22:48:00+02:00",
+                                 "deliveredCommit":  "edf97e4876d09d6e8120377a35a39b55896e61a7",
+                                 "deliveredTree":  "904ce7c9027269fd22f8b5175425b86851c0a731",
+                                 "deployment":  {
+                                                    "status":  "blocked_pending_authorised_context",
+                                                    "requirements":  [
+                                                                         "deployment_target",
+                                                                         "database_backup",
+                                                                         "migration_status"
+                                                                     ]
+                                                },
+                                 "activeBatches":  [
+                                                       {
+                                                           "id":  "finance-workspace",
+                                                           "priority":  "accelerated",
+                                                           "functions":  [
+                                                                             "finance-intake",
+                                                                             "finance-workspace",
+                                                                             "finance-lifecycle-approvals",
+                                                                             "finance-dashboard-meeting-pack"
+                                                                         ]
+                                                       },
+                                                       {
+                                                           "id":  "responsive-layout",
+                                                           "priority":  "next",
+                                                           "functions":  [
+                                                                             "pinned-floating-panels",
+                                                                             "width-persistence",
+                                                                             "universal-header",
+                                                                             "zoom-no-omission"
+                                                                         ]
+                                                       },
+                                                       {
+                                                           "id":  "change-popup-lifecycle-navigation",
+                                                           "priority":  "next",
+                                                           "functions":  [
+                                                                             "global-overlay-popup",
+                                                                             "governed-undo",
+                                                                             "resolve-close-navigation",
+                                                                             "queue-synchronisation"
+                                                                         ]
+                                                       },
+                                                       {
+                                                           "id":  "assets-management-rebrand",
+                                                           "priority":  "scheduled",
+                                                           "functions":  [
+                                                                             "user-facing-naming",
+                                                                             "navigation-permissions-reports",
+                                                                             "documentation-notifications",
+                                                                             "data-route-compatibility"
+                                                                         ]
+                                                       }
+                                                   ],
+                                 "decisions":  {
+                                                   "closeLabel":  "Close",
+                                                   "prohibitedCloseLabel":  "Governed Close",
+                                                   "assetModuleName":  "Assets Management",
+                                                   "assetSidebarLabel":  "Assets",
+                                                   "obsoleteAssetLabels":  [
+                                                                               "CMDB",
+                                                                               "Assets / CMDB"
+                                                                           ]
+                                               }
                              }
                          ],
     "pendingBatchHistory":  [
@@ -600,5 +666,366 @@
                                                                            ]
                                                          }
                                                      ]
+                                     },
+    "currentDelivery":  {
+                            "id":  "post-forwarding-milestone-2026-09-27",
+                            "recordedAt":  "2026-09-27T22:48:00+02:00",
+                            "deliveredCommit":  "edf97e4876d09d6e8120377a35a39b55896e61a7",
+                            "deliveredTree":  "904ce7c9027269fd22f8b5175425b86851c0a731",
+                            "deployment":  {
+                                               "status":  "blocked_pending_authorised_context",
+                                               "requirements":  [
+                                                                    "deployment_target",
+                                                                    "database_backup",
+                                                                    "migration_status"
+                                                                ]
+                                           },
+                            "activeBatches":  [
+                                                  {
+                                                      "id":  "finance-workspace",
+                                                      "priority":  "accelerated",
+                                                      "functions":  [
+                                                                        "finance-intake",
+                                                                        "finance-workspace",
+                                                                        "finance-lifecycle-approvals",
+                                                                        "finance-dashboard-meeting-pack"
+                                                                    ]
+                                                  },
+                                                  {
+                                                      "id":  "responsive-layout",
+                                                      "priority":  "next",
+                                                      "functions":  [
+                                                                        "pinned-floating-panels",
+                                                                        "width-persistence",
+                                                                        "universal-header",
+                                                                        "zoom-no-omission"
+                                                                    ]
+                                                  },
+                                                  {
+                                                      "id":  "change-popup-lifecycle-navigation",
+                                                      "priority":  "next",
+                                                      "functions":  [
+                                                                        "global-overlay-popup",
+                                                                        "governed-undo",
+                                                                        "resolve-close-navigation",
+                                                                        "queue-synchronisation"
+                                                                    ]
+                                                  },
+                                                  {
+                                                      "id":  "assets-management-rebrand",
+                                                      "priority":  "scheduled",
+                                                      "functions":  [
+                                                                        "user-facing-naming",
+                                                                        "navigation-permissions-reports",
+                                                                        "documentation-notifications",
+                                                                        "data-route-compatibility"
+                                                                    ]
+                                                  }
+                                              ],
+                            "decisions":  {
+                                              "closeLabel":  "Close",
+                                              "prohibitedCloseLabel":  "Governed Close",
+                                              "assetModuleName":  "Assets Management",
+                                              "assetSidebarLabel":  "Assets",
+                                              "obsoleteAssetLabels":  [
+                                                                          "CMDB",
+                                                                          "Assets / CMDB"
+                                                                      ]
+                                          }
+                        },
+    "financeCommercialIntelligence":  {
+                                          "id":  "finance-commercial-intelligence-scope-2026-09-27",
+                                          "recordedAt":  "2026-09-27T20:48:00+02:00",
+                                          "priority":  "accelerated",
+                                          "target":  "reviewable-prototype-before-finance-manager-meeting",
+                                          "offices":  [
+                                                          {
+                                                              "id":  "main-cfo",
+                                                              "name":  "Finance Main and CFO Office",
+                                                              "kind":  "operational_and_executive"
+                                                          },
+                                                          {
+                                                              "id":  "accounts-payable",
+                                                              "name":  "Accounts Payable Office",
+                                                              "kind":  "operational",
+                                                              "ownManager":  true
+                                                          },
+                                                          {
+                                                              "id":  "boardroom",
+                                                              "name":  "Finance Boardroom",
+                                                              "kind":  "governed_meeting_and_decision_space",
+                                                              "defaultAssignee":  false
+                                                          }
+                                                      ],
+                                          "entraOrganogram":  {
+                                                                  "mode":  "read_only",
+                                                                  "fields":  [
+                                                                                 "department",
+                                                                                 "jobTitle",
+                                                                                 "manager",
+                                                                                 "officeLocation",
+                                                                                 "companyName",
+                                                                                 "employeeType",
+                                                                                 "accountEnabled",
+                                                                                 "objectId"
+                                                                             ],
+                                                                  "writeBack":  false,
+                                                                  "membershipReviewRequired":  true
+                                                              },
+                                          "productFamilies":  [
+                                                                  {
+                                                                      "code":  "RSB",
+                                                                      "name":  "Rear Step Bumpers"
+                                                                  },
+                                                                  {
+                                                                      "code":  "CF",
+                                                                      "name":  "Chassis Frames"
+                                                                  },
+                                                                  {
+                                                                      "code":  "TG",
+                                                                      "name":  "Tailgates"
+                                                                  },
+                                                                  {
+                                                                      "code":  "BL",
+                                                                      "name":  "Bedliners"
+                                                                  },
+                                                                  {
+                                                                      "code":  "BR",
+                                                                      "name":  "Box Rails"
+                                                                  },
+                                                                  {
+                                                                      "code":  "EC",
+                                                                      "name":  "Endcaps"
+                                                                  },
+                                                                  {
+                                                                      "code":  "OTHER",
+                                                                      "name":  "Other or uncategorised products"
+                                                                  }
+                                                              ],
+                                          "processCatalogue":  [
+                                                                   "supplier-invoice",
+                                                                   "supplier-payment",
+                                                                   "employee-payment",
+                                                                   "employee-reimbursement",
+                                                                   "sales-order-processing",
+                                                                   "purchase-order-matching",
+                                                                   "payment-exception",
+                                                                   "supplier-query",
+                                                                   "budget-review",
+                                                                   "financial-reporting",
+                                                                   "audit-request",
+                                                                   "boardroom-review",
+                                                                   "general-finance-request"
+                                                               ],
+                                          "functions":  [
+                                                            "finance-organisation-secure-intake",
+                                                            "finance-operations-workspace",
+                                                            "finance-lifecycle-controls",
+                                                            "finance-intelligence-reporting"
+                                                        ],
+                                          "reporting":  {
+                                                            "dashboards":  [
+                                                                               "executive-finance",
+                                                                               "product-performance",
+                                                                               "accounts-payable",
+                                                                               "finance-manager",
+                                                                               "boardroom"
+                                                                           ],
+                                                            "periods":  [
+                                                                            "daily",
+                                                                            "weekly",
+                                                                            "monthly",
+                                                                            "quarterly",
+                                                                            "year-to-date",
+                                                                            "financial-year",
+                                                                            "custom"
+                                                                        ],
+                                                            "drillDownToAuthorisedRecords":  true,
+                                                            "preserveFilters":  true,
+                                                            "boardroomSnapshots":  true
+                                                        },
+                                          "excelExports":  {
+                                                               "format":  "xlsx",
+                                                               "exports":  [
+                                                                               "detailed-finance",
+                                                                               "product-sales",
+                                                                               "accounts-payable",
+                                                                               "approvals",
+                                                                               "management-pack"
+                                                                           ],
+                                                               "sheets":  [
+                                                                              "Summary",
+                                                                              "Product Performance",
+                                                                              "Accounts Payable",
+                                                                              "Approvals",
+                                                                              "Overdue Items",
+                                                                              "Office Workload",
+                                                                              "Exceptions",
+                                                                              "Detailed Data",
+                                                                              "Data Dictionary",
+                                                                              "Export Metadata"
+                                                                          ],
+                                                               "cleanDataRulesRequired":  true,
+                                                               "columnLevelSecurity":  true,
+                                                               "exportAuditRequired":  true
+                                                           },
+                                          "security":  {
+                                                           "leastPrivilege":  true,
+                                                           "separationOfDuties":  true,
+                                                           "confidentialityLevels":  [
+                                                                                         "Internal",
+                                                                                         "Finance Restricted",
+                                                                                         "Confidential",
+                                                                                         "CFO Restricted",
+                                                                                         "Boardroom Restricted",
+                                                                                         "Payment Restricted",
+                                                                                         "Employee Financial Information",
+                                                                                         "Supplier Banking Information"
+                                                                                     ],
+                                                           "confidentialUploadsEnabled":  false,
+                                                           "uploadReadinessRequirements":  [
+                                                                                               "protected-storage",
+                                                                                               "extension-signature-validation",
+                                                                                               "generated-filenames",
+                                                                                               "size-limits",
+                                                                                               "malware-scanning",
+                                                                                               "csrf-protection",
+                                                                                               "retention",
+                                                                                               "authenticated-download"
+                                                                                           ],
+                                                           "identitySecurityRequirements":  [
+                                                                                                "mfa",
+                                                                                                "conditional-access",
+                                                                                                "trusted-or-compliant-device",
+                                                                                                "session-controls",
+                                                                                                "step-up-authentication"
+                                                                                            ]
+                                                       },
+                                          "dataQualityStatuses":  [
+                                                                      "Valid",
+                                                                      "Incomplete",
+                                                                      "Needs Review",
+                                                                      "Exception",
+                                                                      "Blocked"
+                                                                  ],
+                                          "noFabricatedFinancialData":  true,
+                                          "productionDeployment":  "blocked_pending_finance_review_and_security_readiness"
+                                      },
+    "financeReadinessRosterNaming":  {
+                                         "id":  "finance-readiness-roster-naming-2026-09-27",
+                                         "recordedAt":  "2026-09-27T23:56:36+02:00",
+                                         "financeReadiness":  {
+                                                                  "result":  "pass",
+                                                                  "failures":  0,
+                                                                  "warnings":  4,
+                                                                  "passes":  66,
+                                                                  "backendSyntax":  "passed",
+                                                                  "frontendBuild":  "passed",
+                                                                  "modulesTransformed":  2469,
+                                                                  "migrationExecuted":  false,
+                                                                  "confidentialUploadsEnabled":  false,
+                                                                  "xlsxGeneration":  "approved-service-pending",
+                                                                  "entraMapping":  "read-only-verification-pending"
+                                                              },
+                                         "accountsPayableOffice":  [
+                                                                       {
+                                                                           "name":  "Sibongile Jele",
+                                                                           "suppliedTitle":  "Accountant"
+                                                                       },
+                                                                       {
+                                                                           "name":  "Phindile Ntuli",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Lindokuhle Malevu",
+                                                                           "suppliedTitle":  "Accountant Assistant"
+                                                                       },
+                                                                       {
+                                                                           "name":  "Francina Tshabalala",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Mpho Mnisi",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Tshepo Maroga",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Hlengiwe Lubisi",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Bhekumuzi Thubana",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Sesihle Sanka",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Cynthia Cannela",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Suphaporn",
+                                                                           "suppliedTitle":  "Office Manager"
+                                                                       }
+                                                                   ],
+                                         "mainAndCfoOffice":  [
+                                                                  {
+                                                                      "name":  "Puseletso Sithole",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Ayanda Mbatha",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Lutho Mafunda",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Khumbudzo Mutheiwana",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Mncedisi Valashiya",
+                                                                      "suppliedTitle":  "Accountant Manager"
+                                                                  },
+                                                                  {
+                                                                      "name":  "Bongani Tshabalala",
+                                                                      "suppliedTitle":  "Finance Manager"
+                                                                  }
+                                                              ],
+                                         "entraVerification":  {
+                                                                   "required":  true,
+                                                                   "writeBack":  false,
+                                                                   "autoGrantAccess":  false,
+                                                                   "fields":  [
+                                                                                  "displayName",
+                                                                                  "userPrincipalName",
+                                                                                  "mail",
+                                                                                  "jobTitle",
+                                                                                  "department",
+                                                                                  "officeLocation",
+                                                                                  "employeeType",
+                                                                                  "accountEnabled",
+                                                                                  "id",
+                                                                                  "manager"
+                                                                              ]
+                                                               },
+                                         "naming":  {
+                                                        "sidebarAssets":  "Assets",
+                                                        "moduleTitle":  "Assets Management",
+                                                        "closeAction":  "Close",
+                                                        "closeConfirmation":  "Ticket closed successfully.",
+                                                        "technicalGovernedClosurePreserved":  true,
+                                                        "assetRoutesAndDataPreserved":  true,
+                                                        "staleLabelScan":  "passed",
+                                                        "frontendBuild":  "passed"
+                                                    },
+                                         "deployment":  "pending-selective-stage-commit-push-and-authorised-migration-review"
                                      }
 }
