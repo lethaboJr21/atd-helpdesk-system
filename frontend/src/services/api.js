@@ -336,9 +336,24 @@ export const workspacesApi = {
   getActivity: (id) => api.get(`/workspaces/${id}/activity`),
 };
 export const financeWorkspaceApi = {
-  configuration: () => api.get("/finance-workspace/configuration"),
+  administration: () => api.get("/finance-workspace/administration"),
+  updateOffice: (code, data) => api.put(`/finance-workspace/offices/${code}`, data),
+  updateEmployeeStatus: (userId, data) => api.patch(`/finance-workspace/employees/${userId}/status`, data),
+  updateExternalSender: (senderId, data) => api.put(`/finance-workspace/external-senders/${senderId}`, data),  configuration: () => api.get("/finance-workspace/configuration"),
   dashboard: () => api.get("/finance-workspace/dashboard"),
-  exportContract: () => api.get("/finance-workspace/export-contract"),
+  employees: () => api.get("/finance-workspace/employees"),
+  updateEmployee: (userId, data) => api.put(`/finance-workspace/employees/${userId}`, data),
+  mailboxes: () => api.get("/finance-workspace/mailboxes"),
+  saveMailbox: (data) => api.post("/finance-workspace/mailboxes", data),
+  queue: (type) => api.get("/finance-workspace/queues", { params: { type } }),
+  triage: (ticketId, data) => api.post(`/finance-workspace/tickets/${ticketId}/triage`, data),
+  delegate: (ticketId, data) => api.post(`/finance-workspace/tickets/${ticketId}/delegate`, data),
+  delegations: () => api.get("/finance-workspace/delegations"),
+  routingOptions: () => api.get("/finance-workspace/routing-options"),
+  updateMailbox: (mailboxId, data) => api.put(`/finance-workspace/mailboxes/${mailboxId}`, data),
+  saveExternalSender: (data) => api.post("/finance-workspace/external-senders", data),
+  triageConsole: (state = "triage_required") => api.get("/finance-workspace/triage-console", { params: { state } }),
+  bulkDelegate: (data) => api.post("/finance-workspace/tickets/bulk-delegate", data),  exportContract: () => api.get("/finance-workspace/export-contract"),
 };
 
 export default api;

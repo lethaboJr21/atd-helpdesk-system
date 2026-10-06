@@ -202,7 +202,13 @@ async function attachReplyFromMessage(message,settings=config()){
  await client.query("COMMIT");return {handled:true,duplicate:!inserted.rowCount,reason:"reply_attached",ticketId:match.ticket.id,intakeId,commentId:inserted.rows[0]?.id||null};
  }catch(error){await client.query("ROLLBACK").catch(()=>{});if(intakeId)await pool.query("UPDATE email_ticket_intake SET status='failed',error_message=$1,updated_at=NOW() WHERE id=$2",[error.message,intakeId]).catch(()=>{});throw error;}finally{client.release();}
 }
-async function createTicketFromMessage(message, settings = config()) {
+async function financeRouting(client,settings,sender){
+ const mailbox=(await client.query(`SELECT * FROM finance_mailboxes WHERE LOWER(email)=LOWER($1) AND active=TRUE LIMIT 1`,[settings.mailbox])).rows[0];
+ if(!mailbox||!mailbox.authorised||!mailbox.monitoring_enabled)return null;
+ const external=(await client.query(`SELECT * FROM finance_external_senders WHERE LOWER(email)=LOWER($1) AND active=TRUE LIMIT 1`,[sender.email])).rows[0]||null;
+ if(external?.blocked||external?.verification_status==="blocked")return {blocked:true,mailbox,external};
+ return {mailbox,external,priority:mailbox.default_priority||"Medium",groupId:mailbox.default_group_id||null,assigneeId:mailbox.default_assignee_id||null,financeFunction:external?.finance_function||mailbox.finance_function||"General Finance Administration",triageState:external?.verification_status==="trusted"?"actionable":"triage_required",riskLevel:external?.verification_status==="under_review"?"high":"normal"};
+}async function createTicketFromMessage(message, settings = config()) {
   const client = await pool.connect();
   let intakeId = null;
   try {
@@ -221,7 +227,11 @@ async function createTicketFromMessage(message, settings = config()) {
     const title = String(message.subject || "Email request").replace(/^\s*(re|fw|fwd)\s*:\s*/i, "").trim().slice(0, 500) || "Email request";
     const classification = classifyEmail({ subject: title, body: bodyText });
     const requester = await findRequester(client, sender.email);
-    const group = await findGroup(client, classification);
+    const finance = await financeRouting(client, settings, sender);
+    if (finance?.blocked) throw new Error("Finance sender is blocked by governance policy.");
+    const group = finance?.groupId
+      ? { id: finance.groupId, name: "Finance routing rule" }
+      : await findGroup(client, classification);
     const temporaryRef = `TMP-MAIL-${crypto.createHash("sha256").update(`${settings.mailbox}:${message.id}`).digest("hex").slice(0, 24)}`;
     const requestDetails = {
       module: classification.ticketType,
@@ -248,13 +258,13 @@ async function createTicketFromMessage(message, settings = config()) {
          created_by_user_id, assigned_group_id, category, source, ticket_type,
          origin, external_id, external_requester_name, external_requester_email,
          request_details, created_at, updated_at)
-       VALUES ($1,$2,$3,'Medium','Open',$4,$5,$5,$6,$7,'Email',$8,
+       VALUES ($1,$2,$3,$13,'Open',$4,$5,$5,$6,$7,'Email',$8,
                'email',$9,$10,$11,$12::jsonb,NOW(),NOW())
        RETURNING id`,
       [temporaryRef, title, bodyText || "Request received by email.", classification.workspace,
        requester?.id || null, group?.id || null, classification.category, classification.ticketType,
        message.internetMessageId || message.id, requester ? null : sender.name || null,
-       requester ? null : sender.email, JSON.stringify(requestDetails)]
+       requester ? null : sender.email, JSON.stringify(requestDetails), finance?.priority || "Medium"]
     );
     const ticketId = inserted.rows[0].id;
     const ticketRef = await allocateTicketRef(client, ticketId, classification.ticketType);
@@ -266,7 +276,12 @@ async function createTicketFromMessage(message, settings = config()) {
        WHERE id=$5`,
       [classification.ticketType, classification.confidence, group?.id || null, ticketId, intakeId]
     );
-    await client.query("COMMIT");
+    if(finance){
+      const responseDue=new Date(Date.now()+Number(finance.mailbox.first_response_minutes||1440)*60000);
+      const dueAt=finance.mailbox.due_minutes?new Date(Date.now()+Number(finance.mailbox.due_minutes)*60000):null;
+      await client.query(`UPDATE tickets SET workspace='Finance',assigned_group_id=COALESCE($1,assigned_group_id),assigned_to_user_id=$2,priority=$3,response_due_at=$4,due_at=COALESCE($5,due_at),status=CASE WHEN $2::bigint IS NULL THEN status ELSE 'Assigned' END WHERE id=$6`,[finance.groupId,finance.assigneeId,finance.priority,responseDue,dueAt,ticketId]);
+      await client.query(`INSERT INTO finance_ticket_operations(ticket_id,source_mailbox_id,external_sender_id,intake_id,triage_state,first_response_due_at,waiting_party,last_meaningful_update_at,finance_function,risk_level,sender_classification,external_organisation,unattended_since,routed_by_rule) VALUES($1,$2,$3,$4,$5,$6,'internal',NOW(),$7,$8,$9,$10,NOW(),TRUE) ON CONFLICT(ticket_id) DO UPDATE SET source_mailbox_id=EXCLUDED.source_mailbox_id,external_sender_id=EXCLUDED.external_sender_id,intake_id=EXCLUDED.intake_id,triage_state=EXCLUDED.triage_state,first_response_due_at=EXCLUDED.first_response_due_at,finance_function=EXCLUDED.finance_function,risk_level=EXCLUDED.risk_level,sender_classification=EXCLUDED.sender_classification,external_organisation=EXCLUDED.external_organisation,unattended_since=EXCLUDED.unattended_since,routed_by_rule=TRUE,updated_at=NOW()`,[ticketId,finance.mailbox.id,finance.external?.id||null,intakeId,finance.triageState,responseDue,finance.financeFunction,finance.riskLevel,finance.external?.sender_type||"unknown",finance.external?.organisation||null]);
+    }    await client.query("COMMIT");
 
     // History is best-effort and runs after COMMIT so a legacy history schema
     // cannot roll back a successfully created email ticket.

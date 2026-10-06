@@ -1329,3 +1329,33 @@ Before deployment, selectively stage, validate, commit and push the Finance prot
 6. Continue the responsive layout and universal-header batch. The required top-header New Request and Ticket Monitor controls remain pending.
 7. Preserve the broader unrelated local working tree outside this selective release.
 <!-- ATD-URGENT-RELEASE-CHECKPOINT-20261004-END -->
+
+<!-- ATD-SCRIPT-774-FINANCE-EMAIL-OPERATIONS-START -->
+## Script 774 urgent Finance email-ticketing operations batch
+- Finance employee responsibility registry: IMPLEMENTED LOCALLY.
+- Authorised Finance mailbox and external sender registry: IMPLEMENTED LOCALLY.
+- Actionable email triage foundation and Finance operational metadata: IMPLEMENTED LOCALLY.
+- Unattended queues and Finance Manager delegation history: IMPLEMENTED LOCALLY.
+- Migration execution, Graph mailbox activation, functional testing, commit, push and deployment: PENDING.
+<!-- ATD-SCRIPT-774-FINANCE-EMAIL-OPERATIONS-END -->
+<!-- ATD-SCRIPT-777-FINANCE-BATCH-2-START -->
+## Script 777 Finance operations batch 2
+- Mailbox administration and routing rules: IMPLEMENTED LOCALLY.
+- External sender governance and verification: IMPLEMENTED LOCALLY.
+- Finance Manager triage and bulk delegation API: IMPLEMENTED LOCALLY.
+- Email intake Finance enrichment and unattended timers: IMPLEMENTED LOCALLY.
+- Migration execution, Graph processing, functional testing, commit, push and deployment: PENDING.
+<!-- ATD-SCRIPT-777-FINANCE-BATCH-2-END -->
+<!-- ATD-SCRIPT-779-781-FINANCE-BATCH-3-START -->
+## Finance schema activation and operations batch 3
+- Script 779 local PostgreSQL backup and Finance operations migration: COMPLETE AND VERIFIED.
+- Finance office foundation and governed office records: APPLIED LOCALLY.
+- Finance employee responsibility and manager-governed duty administration: IMPLEMENTED LOCALLY.
+- Finance office administration and employee-office allocation: IMPLEMENTED LOCALLY.
+- Authorised Finance mailbox administration with routing ownership and response targets: IMPLEMENTED LOCALLY.
+- External sender verification, blocking and Finance-function governance: IMPLEMENTED LOCALLY.
+- Existing operational row counts preserved during migration: VERIFIED.
+- Email and Microsoft Graph processing: NOT RUN.
+- Broad Finance functional testing: DEFERRED TO FINANCE MILESTONE BOUNDARY.
+- Commit, push, server restart and production deployment: NOT PERFORMED.
+<!-- ATD-SCRIPT-779-781-FINANCE-BATCH-3-END -->
