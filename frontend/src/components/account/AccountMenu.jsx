@@ -8,6 +8,7 @@ import {
   Moon,
   Settings2,
   Sun,
+  WalletCards,
   User,
   X,
 } from "lucide-react";
@@ -134,6 +135,11 @@ export default function AccountMenu({
               <User className="h-4 w-4" /> My profile and employee home
             </button>
 
+            {(String(user?.department || "").toLowerCase().includes("finance") || user?.role === "superadmin") ? (
+              <button type="button" role="menuitem" onClick={() => { setOpen(false); navigate("/finance-workspace"); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-[var(--portal-text-soft)] hover:bg-[var(--portal-surface-muted)]">
+                <WalletCards className="h-4 w-4" /> Open Finance Workspace
+              </button>
+            ) : null}
             {operationsAccount ? (
               <button type="button" role="menuitem" onClick={switchExperience} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-[var(--portal-text-soft)] hover:bg-[var(--portal-surface-muted)]">
                 <LayoutDashboard className="h-4 w-4" />

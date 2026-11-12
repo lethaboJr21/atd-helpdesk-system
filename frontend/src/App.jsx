@@ -39,8 +39,10 @@ import FirstLoginOnboardingPage from "./pages/FirstLoginOnboardingPage";
 import { employeeExperienceApi, termsApi } from "./services/api";
 import GroupManagementPage from "./pages/GroupManagementPage";
 import Workspaces from "./pages/Workspaces";
+import WorkspaceCatalogueManager from "./pages/WorkspaceCatalogueManager";
 import WorkspaceDashboard from "./pages/WorkspaceDashboard";
 import FinanceWorkspace from "./pages/FinanceWorkspace";
+import ProcessEngineeringWorkspace from "./pages/ProcessEngineeringWorkspace";
 import KnowledgePage from "./pages/KnowledgePage";
 import RequestCatalogPage from "./pages/RequestCatalogPage";
 import { formPathForType } from "./data/requestModules";
@@ -78,7 +80,7 @@ function hasPortalAccess(user) {
     user?.status === "active" &&
     !user?.archived_at &&
     !user?.deactivated_at &&
-    user?.microsoft_account_enabled !== false &&
+    (user?.microsoft_account_enabled !== false || user?.authentication_mode === "local_password" || user?.account_purpose === "superadmin" || user?.account_purpose === "station_operator") &&
     (!user?.account_type || user.account_type === "person")
   );
 }
@@ -190,6 +192,18 @@ function RoleRoute({ allowedRoles, children }) {
     : <Navigate to="/" replace />;
 }
 
+function FinanceWorkspaceRoute({ children }) {
+  const [state, setState] = useState({ loading: true, allowed: false });
+  useEffect(() => {
+    let active = true;
+    import("./services/api").then(({ financeWorkspaceApi }) => financeWorkspaceApi.accessContext())
+      .then(() => active && setState({ loading: false, allowed: true }))
+      .catch(() => active && setState({ loading: false, allowed: false }));
+    return () => { active = false; };
+  }, []);
+  if (state.loading) return <LoadingScreen message="Verifying Finance Workspace access..." />;
+  return state.allowed ? children : <Navigate to="/" replace />;
+}
 function OperationsRoute({ children }) {
   return (
     <RoleRoute allowedRoles={OPERATIONS_ROLES}>
@@ -534,11 +548,20 @@ function AppRoutes({ moduleBase }) {
           </PrivateRoute>
         }
       />
-      <Route
+        <Route
+          path="/process-engineering-workspace"
+          element={
+            <PrivateRoute>
+              <ProcessEngineeringWorkspace />
+            </PrivateRoute>
+          }
+        />      <Route
         path="/finance-workspace"
         element={
           <PrivateRoute>
-            <FinanceWorkspace />
+            <FinanceWorkspaceRoute>
+              <FinanceWorkspace />
+            </FinanceWorkspaceRoute>
           </PrivateRoute>
         }
       />
@@ -553,7 +576,16 @@ function AppRoutes({ moduleBase }) {
           </PrivateRoute>
         }
       />
-
+        <Route
+          path="/workspaces/catalogue-manager"
+          element={
+            <PrivateRoute>
+              <AdminRoute>
+                <WorkspaceCatalogueManager />
+              </AdminRoute>
+            </PrivateRoute>
+          }
+        />
       <Route
         path="/workspaces/:id"
         element={

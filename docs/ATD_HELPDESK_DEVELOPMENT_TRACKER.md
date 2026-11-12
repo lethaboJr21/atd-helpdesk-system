@@ -1359,3 +1359,638 @@ Before deployment, selectively stage, validate, commit and push the Finance prot
 - Broad Finance functional testing: DEFERRED TO FINANCE MILESTONE BOUNDARY.
 - Commit, push, server restart and production deployment: NOT PERFORMED.
 <!-- ATD-SCRIPT-779-781-FINANCE-BATCH-3-END -->
+## Finance production activation and repair checkpoint - 8 October 2026
+<!-- ATD-TRACKER-CHECKPOINT-2026-10-08-FINANCE-PRODUCTION-REPAIRS -->
+
+### Completed and production-verified
+- Finance milestone activation completed and production health verified through Script 799.
+- Static JavaScript and CSS access failure diagnosed and repaired through Scripts 800-803. Active Helpdesk and Production frontend assets return HTTP 200.
+- Ticket-detail blank-screen defect repaired through Scripts 804-806 by removing the bare useRef(...) runtime failure, rebuilding the frontend and deploying the validated hashed assets.
+- Finance Workspace generic server error diagnosed through Scripts 807-808 against the actual atd_helpdesk database.
+- Finance Workspace dashboard and queue scope repaired through Script 809 by removing the invalid tickets.workspace_id dependency and using the existing tickets.workspace field.
+- Script 809 production validation passed: dashboard SQL passed, queue SQL passed, PM2 restart succeeded and API health returned HTTP 200.
+
+### Current Finance Workspace state
+- Finance schema is present in the atd_helpdesk database.
+- Three Finance offices are present.
+- Finance employee responsibility, mailbox, external sender, ticket operations and delegation tables are present and currently contain no operational records.
+- Finance dashboard and queues are expected to show zero until Finance employees, governed mailboxes, external senders and Finance-classified tickets are loaded.
+- Confidential uploads remain disabled and unattended-email processing remains inactive until the governed activation boundary.
+
+### Next Finance milestone work
+- Load and validate the complete Finance employee roster, offices and Finance Manager responsibility assignments.
+- Configure authorised business mailboxes, default routing, backup assignees, response targets and sender scope without enabling live email processing.
+- Load governed external senders and verification states.
+- Validate Finance ticket classification, delegation, unattended-item indicators, operational queues and management reporting with controlled test records.
+- Complete presentation-ready Finance reporting and clean Excel exports for Rear Step Bumpers, Chassis Frames, Tailgates, Bedliners, Box Rails and Endcaps.
+- Run one comprehensive Finance milestone test only after the remaining Finance functions are complete, followed by one controlled server push and one consolidated milestone report.
+
+### Deferred technical improvement
+- Split the large frontend production chunk. The current build is functional, but the main JavaScript bundle exceeds the Vite 500 kB warning threshold.
+
+### Guardrails retained
+- Do not enable live email or Microsoft Graph processing during routine development.
+- Preserve existing Helpdesk, Production, CMDB and ticket functionality.
+- Use atddev for production SSH and deployment operations.
+- Continue sequential script numbering from Script 810 and keep repair scripts in lowercase underscore naming format.
+- Keep tracker filenames, structure and historical content intact.
+
+## Script 818 - Global ticket governance 10-function batch
+Implemented locally: governed default support groups, assignee-derived locked groups, requester priority restrictions, governed Incident and Service Request catalogue evidence, external-email source and Important status, and hierarchy-based escalation with audit. Migration created but not executed. Testing remains deferred to the milestone boundary. No deployment performed.
+
+
+## Script 820 - Global ticket experience 10-function batch
+Implemented locally: global availability, assignment guards, configurable group alerts, collaboration and CC completion, Teams contract preparation, complete conversation feed, post-resolution surveys, attachment-preview validation, expanded audit confirmations, and popup/Undo activity coverage. Migration created but not executed. Testing deferred. No deployment performed.
+
+
+## Script 824 - Pre-deployment authentication, ticket visibility and Dark mode schedule
+
+**Status:** Scheduled before the next production deployment
+**Priority:** Launch-critical pre-deployment
+
+### Functions
+- 1. Validate the submitted sign-in identifier as an email address before authentication options are shown.
+- 2. For verified @atdalliance.co.za addresses, show Microsoft SSO as the only standard sign-in option.
+- 3. Hide and disable password entry for @atdalliance.co.za accounts unless the account has server-verified IT department membership.
+- 4. Prevent client-side department claims from unlocking password authentication; the exception must be authorised by backend directory/account data and audited.
+- 5. Sort Ticket Workspace lists by newest-created ticket first unless a user deliberately selects another supported sort.
+- 6. Sort Ticket Monitor lists by newest-created ticket first unless a user deliberately selects another supported sort.
+- 7. Sort Dashboard Priority Queue results by newest-created ticket first unless a user deliberately selects another supported sort.
+- 8. Display a consistent New ticket tag across Ticket Workspace, Ticket Monitor and Priority Queue, using one governed definition and expiry rule.
+- 9. Include New-ticket state and tag evidence in escalation workflow displays and preserve readable ticket descriptions in Dark mode.
+- 10. Place Ticket Monitor and the Light/Dark toggle beside the profile control, with responsive collision protection so the avatar never covers either control.
+
+### Acceptance criteria
+- SSO routing is determined from a normalised case-insensitive email domain.
+- The IT password exception requires verified active-account and department membership; changing page markup or request payloads cannot enable it.
+- Existing external/local account authentication remains available according to current policy.
+- New-ticket ordering is deterministic: created_at DESC with a stable secondary key.
+- The New tag uses one shared backend/frontend rule across all three ticket surfaces.
+- Dark-mode description text meets readable contrast and does not inherit light-mode translucent or blurred styling.
+- Header controls remain visible at supported desktop and responsive widths and do not sit behind the floating profile control.
+- Closed-ticket action restrictions, current access controls, audit history and existing ticket filters remain intact.
+- Implementation and focused validation must complete before the next production deployment.
+- Comprehensive milestone testing remains consolidated at the milestone boundary.
+
+No application, authentication, database, deployment, email, Microsoft Graph, Teams, service, or Git action was performed by Script 824.
+
+
+## Script 838 - Finance Department workspace completion and model-ready knowledge consolidation
+
+**Status:** Implemented locally; milestone validation and production deployment remain blocked.
+**Navigation:** Operations side navigation now presents **Workspaces** followed by **Finance Department**, routed through `/finance-workspace`.
+
+### Completed
+- Verified the Finance frontend workspace and its backend API surface for configuration, dashboard, employees, mailboxes, queues, prioritisation, delegation, delegation history and export contract.
+- Preserved verified Finance access controls based on department membership, approved Finance positions, manager-reporting scope, governed override and audit evidence.
+- Consolidated Scripts 836 and 837 outcomes into the existing tracker history.
+- Added model-ready implementation and failure-learning context to the existing governance and conversation-context documents.
+
+### Finance milestone validation gate
+- Validate Finance employee population and authorised reporting scope.
+- Validate actionable-email triage, unattended detection, delegation, priority and due-date controls without enabling live Graph processing.
+- Validate structured capture and reporting for Rear Step Bumpers, Chassis Frames, Tailgates, Bedliners, Box Rails and Endcaps.
+- Validate presentation-ready dashboards and reviewed Excel export before any download.
+- Validate confidentiality boundaries, audit evidence and manager-only reporting scope.
+- Implement governed catalogue-item administration, including default priority and whether requester editing is locked.
+- Expand SLA bar detail to show policy source, response/resolution targets, elapsed/remaining time, deadlines, pause status and breach state.
+
+### Deployment boundary
+Production migration, production data sync, email processing, Graph processing, service restart and server deployment were not performed. The next production action remains blocked until the Finance milestone receives one consolidated functional test and deployment-readiness report.
+
+## Script 841 username-first authentication and station operators
+- Server-authoritative username/email routing: implemented locally.
+- Verified company-domain employees route to Microsoft SSO.
+- Superadministrator and approved local identities use password authentication.
+- Plant operators may request username-based station accounts without email; plant and station are compulsory and approval remains required.
+- Migration created but not executed; production deployment and milestone functional testing not performed.
+
+
+## Script 845 - Shared workspace templates and no-code catalogue manager
+- Workspaces confirmed as the central IT/developer-governed departmental framework.
+- IT Workspace Template introduced as the reusable default for departmental workspaces.
+- Shared incident and service-request catalogue-item model created for all workspaces.
+- No-code Add, Edit, Duplicate, Activate, Deactivate, Archive and History APIs added.
+- Catalogue Manager interface added under Workspaces.
+- Other is a governed untemplated route: category/sub-category/workspace context is preserved while Short Summary, Description and Priority remain editable.
+- Existing tickets retain catalogue snapshots and are not silently rewritten when a template changes.
+- Migration created but not executed; milestone functional testing and production deployment remain pending.
+
+## Script 853 - Catalogue grid admin controls and icon picker
+- Admin/superadmin users receive an Add or manage catalogue items control directly above the requester catalogue item grid.
+- The control routes to the shared Catalogue Manager rather than introducing a second administration engine.
+- Catalogue Manager now exposes a portal icon picker using the existing catalogue icon library, with automatic item-name icon matching and an editable supported icon key.
+- Existing production-synchronised Incident and Service Request records, Other routes, and local-only items are preserved.
+- Requester catalogue remains managed-database-first with catalogService.js compatibility fallback.
+- Process Engineering and Finance remain next departmental consumers of the shared workspace/catalogue template architecture.
+
+## Script 854 - Request for Someone Else managed catalogue propagation
+- Added beneficiary=self|other propagation from Request Catalogue into catalogue-item ticket navigation.
+- Ticket creation now reads beneficiary context from URL/navigation state.
+- For Someone Else requires an explicit requester selection before submission.
+- requesterId remains the submitted beneficiary identity while backend requester_id and created_by_user_id remain separate.
+- Managed Service Catalogue and existing catalogue fallback are preserved.
+- Full milestone functional testing remains deferred until milestone completion.
+
+## Script 856 - Grouped Catalogue Manager explorer
+- Replaced the flat catalogue inventory with a workspace/type/category grouped explorer.
+- Added summary cards, full-text search, catalogue-type filter, priority filter and state filter.
+- Added collapsible category groups with item counts and compact item tables.
+- Preserved Add/Edit/Duplicate, icon picker, managed catalogue APIs and existing catalogue records.
+
+## Script 858 - Portal mouse-wheel scroll repair and catalogue UX close
+- Corrected Ticket Workspace vertical scroll ownership for mouse-wheel and trackpad input.
+- Removed vertical overscroll containment from the Ticket Workspace list chain while preserving horizontal Kanban containment and modal scrolling.
+- Added stable scrollbar gutter and explicit portal scroll-chain semantics.
+- Catalogue Manager grouped explorer from Script 856 remains complete and preserved.
+- This closes the catalogue/portal-UX implementation batch; Finance and Process Engineering (PDM) are next.
+
+## Script 860 - Finance and PDM shared catalogue completion
+- Finance consumes the shared managed workspace catalogue and exposes it inside Finance Workspace.
+- Existing Finance triage, delegation, employee, office, mailbox, external-sender, access-scope and product-family foundations are preserved.
+- PDM now consumes the shared managed workspace catalogue first with the existing PDM catalogue retained as fallback.
+- PDM exposes governed plant/line/station/machine/product/process ticket context endpoints backed by the existing pdm_ticket_context model.
+- Broad Finance/PDM milestone testing remains deferred until departmental implementation is fully complete.
+
+## Script 862 - Finance access-context API and local auth diagnostics
+- Restored financeWorkspaceApi.accessContext() to match FinanceWorkspace and the existing /finance-workspace/access-context backend route.
+- Improved development-only local-login failure diagnostics without changing passwords, hashes, account policy or authentication routing.
+- Local/company username-first routing and Microsoft SSO requirements remain governed by the existing authentication contract.
+
+## Script 863 - Sprinto-style login options and authentication repair batch
+- Added identifier-first Next flow with a dedicated server-authorised sign-in-options step.
+- Added Microsoft and Local password option cards, Use another account, Other sign-in options and clear busy/error states.
+- Company accounts remain Microsoft-routed unless the existing backend policy explicitly authorises local password.
+- Superadmin/local/station password behavior remains governed by backend account attributes.
+- Corrected AuthContext terminology so the login identifier may be an email address or username.
+- Preserved development-only detailed local-login diagnostics from Script 862.
+
+
+## Script 870 - PDM and Finance dashboard completion batch
+- Status: Implemented locally; milestone functional testing deferred.
+- Added governed PDM analytics, KPI drill-down, persistent department filters, catalogue-to-queue filtering, and direct ticket navigation.
+- Added Finance reporting-summary endpoint with unattended, overdue, email-origin, workload breakdowns, and structured product-family contract.
+- Preserved existing Finance triage, delegation, mailbox, external-sender, administration, catalogue, access, and export-contract behavior.
+
+
+## Script 871 - Finance correspondence monitoring
+- Status: Implemented locally; live Graph activation and milestone functional testing remain governed/deferred.
+- Added authorised mailbox delta-sync foundation, important/management/external classification, correspondence audit events, unattended and overdue flags, manager sync control, and Finance dashboard correspondence monitor.
+- Microsoft Graph secrets remain environment-only. Monitoring requires explicit mailbox authorisation and monitoring enablement.
+
+
+## Script 874 - Finance and PDM department completion
+- Status: Implemented locally; comprehensive functional testing remains deferred to the combined department milestone boundary.
+- Finance: correspondence actions, governed conversion through the existing email-ticket engine, configuration-aware monitoring status, mandatory export review and multi-sheet XLSX.
+- PDM: structured production context UI, recent activity, SLA breach reporting, mandatory export review and multi-sheet XLSX.
+
+## 2026-10-29 Finance Workspace, Authentication, Catalogue and Communications Checkpoint
+
+### Completed and locally validated
+
+- Scripts 888-893 established the Finance Workspace shell, Executive Overview, Finance request creation, ticket register, My Work, Finance email intake foundations, journals, reconciliations, Month-End Close, governance, evidence, access requests, notifications, people administration and KPI foundations.
+- Script 895 completed the username-first authentication repair:
+  - Active `@atdalliance.co.za` employee accounts use Microsoft SSO by default.
+  - Active non-company local accounts with passwords receive password login.
+  - Superadministrator and station/operator local-password access remains available.
+  - The authorised account `jeffreym@atdalliance.co.za` has governed Microsoft SSO and local-password options.
+- Script 896 completed after exact-schema corrections:
+  - All 24 verified active Finance employees were initialised for Finance Workspace configuration and selectors.
+  - Finance ticket assignment was isolated from IT support groups.
+  - Finance sender-automation and task-completion monitoring foundations were added.
+  - Incident and Service Request catalogues received governed `Other` entries for active workspaces.
+  - Company Communications gained delivery/read/interaction monitoring foundations.
+
+### Authoritative Finance assignment rules
+
+- Finance Workspace assignment is direct employee ownership and must not depend on IT support groups, IT queues, IT agent acceptance, or IT SLA activation.
+- All verified active Finance employees must appear in Team Administration and every Finance owner, manager, backup, reviewer and approver selector.
+- A missing Finance responsibility or Primary Function record must flag configuration as incomplete; it must not hide the employee.
+- Initial work-specialisation recommendations must be inferred from historical Finance ticket-assignment activity. Historical activity may rank suggestions but must never remove an eligible Finance employee.
+- Historical Finance assignment activity is currently empty, so new employees must display `Work profile not established` until sufficient activity exists.
+- Unassigned Finance work must be visibly flagged and included in Finance Manager correction and unattended-work queues.
+
+### Finance email-to-ticket and presentation objective
+
+- The immediate presentation objective is a controlled, clearly labelled demonstration using an authorised external sender address.
+- The demonstration must show: incoming email, governed rule match, automatic Finance ticket creation, direct Finance owner assignment, My Work visibility, completion, documentary evidence linkage, and Finance Management completion awareness.
+- Demonstration records must be excluded from ordinary operational reporting unless `Include demonstration data` is enabled.
+- Production mailbox addresses, HOD addresses, delegated-task mailboxes and high-risk senders must be added later through governed configuration, never hard-coded in source.
+- Important Finance emails should become tickets only when governed sender/content/risk rules match. Duplicate message and conversation identifiers must be preserved.
+- Completed Finance tasks must support shared-drive or SharePoint evidence references and management notification status.
+
+### Shared catalogue requirements
+
+- The shared workspace catalogue architecture remains authoritative for IT, Finance, Process Engineering and future workspaces.
+- Every Incident and Service Request catalogue branch must contain `Other`, opening a manual untemplated request while preserving workspace and request-type context.
+- Governed catalogue administration must support add, edit, enable, disable, archive/restore, workspace applicability, required fields, evidence requirements, routing and SLA references.
+- Disabled catalogue items remain available for historical records but must not appear for new requests.
+
+### Company Communications requirements
+
+- Company Communications must support company-wide, department, management-level, combined position-level and manually entered external audiences, including exclusions.
+- Monitoring must expose intended recipients, effective recipients, delivery attempts, sent/failed/skipped outcomes, first and latest read times, acknowledgements, comments and other recorded interactions.
+- Campaigns without delivery records must be visibly flagged as incomplete or not processed.
+- Production remains authoritative; monitoring access must follow the signed-in account's roles and scope rather than copying all server data into a personal account.
+
+### Current validation and environment state
+
+- Script 895 completed backend syntax checks, frontend production build and scoped Git validation.
+- Script 896 completed transactional migration, backend syntax checks, frontend production build and scoped Git validation after exact database-schema corrections.
+- No deployment, commit or push was performed by Scripts 895 or 896.
+- No Microsoft Directory, Microsoft Graph or SharePoint write was performed.
+- Live server communication deliveries and employee interaction history require production server/database access and must be validated during the next server session.
+
+### Next implementation and validation work
+
+1. Validate the complete Finance Workspace locally with all 24 Finance employees visible in Team Administration and owner selectors.
+2. Build and run the controlled external-email demonstration with explicit demonstration-data classification.
+3. Add the Finance Manager presentation dashboard for unattended emails, open tasks, completed tasks, evidence status and management notifications.
+4. Connect governed production Finance mailboxes and sender rules after approval and mailbox details are supplied.
+5. Validate Company Communications against the production server database, including missing delivery generation, recipient snapshots, reads, acknowledgements, comments and interaction reporting.
+6. Complete the cross-workspace Manage Services interface and verify `Other` in IT, Finance and Process Engineering request journeys.
+7. Perform one consolidated milestone test only after the current milestone functions are complete, then prepare deployment, server push and consolidated milestone reporting.
+
+## 2026-10-31 Finance/PDM major-batch implementation checkpoint
+- Preflight-first execution standard is mandatory: feasibility checks complete before implementation starts; blocked checks make zero implementation changes.
+- Finance and Process Engineering workspace route declarations and backend registrations were verified before changes.
+- Added Finance task collaboration lifecycle foundation for assistants, reviewers, collaborators, submission/review, ratings/KPI linkage, reminder configuration and classified task communications.
+- Database migration is generated but not executed locally by this implementation script; production DB execution requires its own schema/transaction/backup preflight.
+- Backend syntax and frontend production build passed after implementation.
+- Next work: connect UI controls and dashboards to the tasking APIs, then guarded DB migration/deployment and runtime Finance/PDM 404 validation.
+## 2026-11-01 Finance/PDM UI continuation completed
+- Finance participant/submission/review API client methods wired.
+- Finance task monitoring added for ownership, due dates, evidence, review, acknowledgement and KPI linkage.
+- PDM shared task surface inserted using a source-aware verified render boundary.
+- Both preflight and post-change frontend builds passed. Next: interactive task tables, reminders, evidence permissions, classified communication and guarded UI production deployment.
+
+## 2026-11-01 Finance work-control continuation
+- Added due/reminder controls, classified Finance task communications, participant visibility/edit permissions and consolidated task-control API.
+- Added Finance frontend API methods and dashboard guidance for assignment, reminders, communication and visibility.
+- Preflight/backend syntax/frontend build/post-change validation passed.
+- Next: production migration/API/UI deployment, interactive employee/manager drill-down tables and morning Finance reminder scheduling.
+
+## 2026-11-01 Weekly milestone transfer and reporting foundation
+- Completed task entries are transferred by copy/linkage into ATD_HELPDESK_MILESTONE_TRACKER.md/.json/.csv; original task history is preserved.
+- Milestones are grouped by week and include project, workstream, completion date, source, environment and production server scope.
+- JSON/CSV are reusable for Helpdesk reporting and preview-first Excel export.
+- Morning reminder enhancement queued as implementation priority: split New (<7 days) and Older (>=7 days), with due today, overdue, due soon, awaiting review and assignment counts.
+
+## 2026-11-01 Login-options repair + morning reminder reporting batch
+- Production login error 'Sign-in options could not be loaded' is included in the guarded production diagnosis/deployment gate and validates both /api/auth/login-options and /helpdesk/api/auth/login-options before source activation.
+- Morning reminder reporting now has a reusable 7-day age model: New <7 days and Older >=7 days, with overdue, due-today, awaiting-review and unassigned summaries.
+- The reminder structure is intended for email cards, dashboard preview, filtering and Excel/report exports.
+
+## 2026-11-02 Complete backend dependency sync and login deployment
+- The previous isolated-file deployment was replaced by complete backend/src synchronization after validating every JavaScript file and the previously missing Finance/workspace dependencies.
+- Production validates npm dependencies, PM2 stability, port 3001, direct/public login-options, and all required workspace routes before retaining changes.
+- Automatic rollback protects backend source, frontend roots, Apache configuration, and PM2 runtime.
+
+## 2026-11-02 Assignment and catalogue foundation repair
+- Restored and verified the agent work-preferences and shared workspace catalogue schema foundations.
+- Recovery validation skips already-present relations, checks the live PM2 process and non-5xx authenticated endpoints, and does not treat historical pre-migration PM2 log entries as fresh failures.
+- Follow-on batch: requester/beneficiary workflow, governed IT assignees, simplified assignee selector, and default IT Helpdesk landing with governed Finance switching.
+
+
+## 2026-11-07 closeout update
+- Preflight 975 PASS: backend DB and Node checks healthy. 166 unresolved tickets; 157 older than 21 days; 9 created in latest 7 days.
+- Closeout goals: Finance 403 cleanup, Finance dual IT/Finance workspace access, Finance management/KPI/email rules, long-range Ticket Monitor statistics, Ticket Workspace two-axis scroll, governed Monitor drag/drop, recurring branded communications, 08:00 grouped aging digest, project/agent contribution reporting and deployment validation.
+- Script 977 applies only low-risk UI changes and build validation. It does not deploy or mutate DB. Remaining backend/statistics/scheduler work must preserve ticket lifecycle, SLA, assignment, notifications and audit.
+- Continuity rule: preserve working tree and per-script backups; never reset unrelated modified files.
+
+
+## 2026-11-07 final pre-deployment closeout checkpoint
+- Script 975 preflight PASS: DB and Node route checks healthy. 166 unresolved tickets; 157 >21 days; 9 created in latest 7 days.
+- Script 977 PASS: Finance 403 cleanup, Finance Team dashboard mode, Finance Email Intake Settings, Ticket Workspace two-axis scrolling, tracker continuity; frontend production build passed.
+- Script 978 applies only idempotent current-state UI closeout safeguards and production build validation.
+- Deployment blockers that MUST NOT be guessed immediately before deployment: recurring company communications schema/scheduler; governed 08:00 aging digest sender; Ticket Monitor governed drag/drop lifecycle mutation; deep year/month/day/agent statistics endpoint; auditable project contribution endpoint. These require their exact current backend write contracts and regression tests.
+- Required deployment smoke: create Incident, Service Request, Asset Request; Major Incident Critical SLA; open employee ticket; Finance staff choose IT or Finance; Finance email intake/rules; Ticket Workspace scrolling; Ticket Monitor filters; communications immediate send; notifications; attachments; assignment acceptance.
+- Deployment status remains NOT DEPLOYED until smoke suite passes. Preserve modified working tree and per-script backups; do not whole-file git reset.
+
+
+## 2026-11-07 20:50 Production deployment checkpoint
+- Script: 979 production frontend deployment.
+- Status: DEPLOYMENT_FAILED.
+- Detail: DEPLOY_FRONTEND failed with exit code 1
+- Source validation: Script 978 PASS, frontend production build PASS, backend syntax checks PASS.
+- Deployment scope: frontend dist only to /var/www/helpdesk and /var/www/production. Backend source/services are NOT changed by this script.
+- Continuity: preserve modified working tree and per-script backups; verify production smoke tests before declaring deployment closed.
+
+
+## 2026-11-07 20:54 Production deployment checkpoint
+- Script: 979 production frontend deployment.
+- Status: DEPLOYMENT_FAILED.
+- Detail: VALIDATE_ACTIVATION failed with exit code 2
+- Source validation: Script 978 PASS, frontend production build PASS, backend syntax checks PASS.
+- Deployment scope: frontend dist only to /var/www/helpdesk and /var/www/production. Backend source/services are NOT changed by this script.
+- Continuity: preserve modified working tree and per-script backups; verify production smoke tests before declaring deployment closed.
+
+
+## 2026-11-07 20:59 Production deployment checkpoint
+- Script: 979 production frontend deployment.
+- Status: DEPLOYED_FRONTEND.
+- Detail: Bundle index-DJ6jfblV.js deployed to /var/www/helpdesk and /var/www/production with remote SHA-256 validation and rollback protection. Backend was not deployed by Script 979.
+- Source validation: Script 978 PASS, frontend production build PASS, backend syntax checks PASS.
+- Deployment scope: frontend dist only to /var/www/helpdesk and /var/www/production. Backend source/services are NOT changed by this script.
+- Continuity: preserve modified working tree and per-script backups; verify production smoke tests before declaring deployment closed.
+
+
+## 2026-11-07 22:20 Finance + IT workspace scan checkpoint
+- Script: 981 full Finance/IT workspace scan.
+- Status: READ-ONLY scan completed; no application/database writes.
+- Context: Production frontend deployment 979 V3 passed; backend parity and authenticated Finance endpoint failures remain under investigation.
+- Finance reference baseline: 33-page Finance Workspace dashboard pack includes Journal Approvals, Reconciliation Approvals, Audit Management, Monthly KPI Review, SharePoint Evidence, Notifications, Access Requests, Team Administration, Email Intake Settings, System Administration and User Manual flows.
+- Result/report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_981_finance_it_workspace_full_scan_20261107_221814.txt | FAILED: Exception calling "AppendAllText" with "3" argument(s): "The process cannot access the file 'C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_981_finance_it_workspace_full_scan_20261107_221814.txt' because it is being used by another process."
+- Continuity: inspect Script 981 report before any Finance/IT change or backend deployment. Preserve current working tree and per-script backups.
+
+
+## 2026-11-07 Workspace ticket isolation checkpoint
+- Problem: Finance workspace tickets were visible in the IT Ticket Workspace.
+- Script 983: scopes IT Ticket Workspace list requests to workspace IT and reinforces backend list filtering when a workspace filter is supplied; ticket detail authorization remains unchanged.
+- Validation: backend Node syntax PASS; frontend production build PASS.
+- Deployment: NOT DEPLOYED by Script 983. Backend + frontend parity deployment and role smoke tests still required.
+
+
+## 2026-11-08 Sidebar syntax recovery v3
+- Root cause: failed Finance navigation injection split the identifier operationsItems into operationsI + tems around the injected JSX. Removing only JSX exposed the second syntax defect.
+- Script 984 emergency v3 removes the exact malformed Finance button and rejoins the exact governedOperationsItems expression.
+- Validation requires frontend production build PASS. Finance navigation restoration remains a separate change after source is clean.
+
+
+## 2026-11-08 00:53 Script 985 V4 deployment checkpoint
+- Status: DEPLOYMENT_FAILED.
+- Detail: DEPLOY failed exit=1
+- V4 packaging is allow-listed: frontend dist + backend src/package manifests only; local backend node_modules/.env/uploads/backups are never staged.
+- Deployment uses remote candidate syntax/hash preflight, full frontend/backend backup, process restart, route smoke tests and automatic rollback on activation failure.
+
+
+## 2026-11-09 13:35 Regression workflow + encoding scan
+- Script 987 performed a read-only regression scan after later-conversation changes were suspected of undoing previously resolved workflows.
+- Current user-visible regressions: Service Catalog cannot resolve IT managed workspace; Incident creation says selected managed catalogue item is not valid; mojibake/encoding artifacts are visible in UI.
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_987_regression_workflow_encoding_scan_v2_20261109_133253.txt
+- No application/database writes were made by this scan. Use report before repairs; preserve successful workspace isolation, Finance separation, Major Incident, asset catalogue and employee ticket access behavior.
+
+
+## 2026-11-09 Managed catalogue regression recovery
+- Script 987 V2 PASS identified 84 suspicious mojibake lines and confirmed local DB/API syntax health.
+- Script 988 restores governed IT workspace eligibility for request-options, service catalogue managed-source identity, normalized selected managed IDs, and cleans only confirmed punctuation mojibake in active affected source files.
+- Preserved: Finance/IT queue isolation, Major Incident Critical behavior, Asset catalogue, assignment acceptance, ticket access and Finance governance.
+- Validation: backend syntax + frontend production build required before success. Deployment remains separate.
+
+
+## 2026-11-09 Incident summary/catalogue UX linkage
+- Script 989 moves Common Issues directly below Short Summary and links managed Category/Sub-category/Item selection to a classification-derived Short Summary.
+- Summary precedence: managed default_summary, managed item_name, selected item, selected sub-category, selected category.
+- Manual title edits are preserved unless the title is blank, still equals the previous classification-derived value, is governed/locked, or equals the initial prefill.
+- Script 988 catalogue/encoding repair remained build-clean before this change.
+
+
+## 2026-11-09 TicketCreate initialization-order hotfix
+- Script 989 introduced incidentSuggestedSummary before resolvedWorkspaceCatalogueItem was initialized, causing runtime ReferenceError at TicketCreatePage.jsx around line 439 despite the production build succeeding.
+- Script 990 moves the summary memo below resolvedWorkspaceCatalogueItem and preserves the Common Issues/Short Summary linkage.
+- Validation: frontend production build required; database/backend unchanged.
+
+
+## 2026-11-09 17:32 IT ticket-creation contract verification
+- Script 992 V2 validates the full IT create chain: routes, managed catalogue identity, Short Summary linkage, SLA/priority, requester identity, assignment proposal/acceptance, attachments, duplicate protection, submission payload, DB catalogue, local HTTP and production build.
+- It is read-only apart from this continuity entry. Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_992_it_ticket_creation_contract_verification_v2_20261109_173206.txt
+
+
+## 2026-11-09 IT managed catalogue runtime repair
+- Script 992 V2 PASS confirmed IT workspace UUID 68602ff0-718b-476b-b61d-b6488a72ad11 remains draft, with 44 active incident and 76 active service_request catalogue items, and ERP/Infrastructure support groups available.
+- Regression found: TicketCreatePage and RequestCatalogPage had reintroduced frontend workspacesApi directory resolution before request-options; employee visibility can return no managed workspace and block valid catalogues.
+- Script 993 makes both flows call the authenticated server-side request-options alias resolver directly and preserves managedCatalogueItemId resolution, Major Incident, assignment, attachments, duplicates and IT/Finance queue isolation.
+- Validation: production frontend build required. Database unchanged.
+
+
+## 2026-11-09 Canonical IT workflow recovery 996A
+- Canonical source: Helpdesk Ticket workflow.pdf.
+- Restored server-side managed workspace alias loading for Incident/Service/Asset catalogue access; removed employee-side abort on missing browser workspace directory resolution.
+- Preserved managedCatalogueItemId, Category/Sub-category/Item, governed Short Summary, Major Incident Critical SLA, assignment proposal/Accept and Action, attachments, duplicate protection and IT/Finance queue isolation.
+- Added requester 7-day reopen enforcement for Resolved/Closed tickets while retaining resolution-cycle history. 30-day operational expiry remains archive/reporting configuration work, not physical deletion.
+- Cleaned confirmed TicketCreate/RequestCatalog mojibake punctuation. Backend syntax and production frontend build required before success.
+
+
+## 2026-11-09 Service/Asset catalogue stabilization 998
+- User-visible defect: Request a Service and Request an Asset remained indefinitely on Loading catalog after canonical IT recovery.
+- Script 998 requires a clean baseline build before modification, reuses the existing managed /catalog/services endpoint to avoid client workspace-directory/alias dependencies, preserves managedCatalogueItemId, and adds a 15-second fail-visible loading guard.
+- The current RequestCatalog mapper receives a normalized managed-item shape, so Service and Asset filtering continue from the same authoritative IT service_request catalogue.
+- No database writes. Post-change production build required. Helpdesk Ticket workflow.pdf remains the canonical UX acceptance reference.
+
+
+## 2026-11-09 Managed catalogue exact-source repair 999 V4
+- Manual source inspection established catalogApi currently exposes getService (singular), getAssets and getFields, while RequestCatalogPage contains exactly one catalogApi.getServices() call introduced by Script 998. Earlier 999 preflights correctly stopped because they assumed a getServices helper existed in api.js.
+- V4 adds getManagedItServices adjacent to the confirmed getService entry; adds a bounded direct DB endpoint; changes only the one RequestCatalog call token while preserving Script 998 mapping/loading guards.
+- Baseline build, backend syntax and post-change build required. No DB writes.
+
+
+## 2026-11-09 21:54 Local backend/catalogue runtime recovery
+- Screenshot showed Vite ECONNREFUSED for /api/terms/current and /api/auth/me, proving port 3001 API was unavailable; this explains Service/Asset catalogue loading independently of frontend catalogue code.
+- Script 1000 verifies server syntax, PostgreSQL connectivity, managed IT service item count, starts backend directly via node src/server.js when port 3001 is not listening, and probes protected/catalogue endpoints.
+- No source or database writes. Runtime logs: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1000_backend_runtime_20261109_215453.log and C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1000_backend_runtime_20261109_215453.err.log
+
+
+## 2026-11-09 RequestCatalog baseline recovery 1002
+- Script 1001 v1 introduced an invalid finally block around RequestCatalogPage.jsx line 155. Although its report said rollback, the malformed marker remained in the live working file and caused Script 1001 v2 baseline build to fail.
+- Script 1002 removes only the exact SCRIPT_1001_FINALLY insertion and requires a full production frontend build before retaining the change.
+- No catalogue logic, backend or database behavior changed. This restores a clean baseline before any authenticated-loader change.
+
+
+## 2026-11-09 22:34 RequestCatalog exact runtime preflight 1005
+- Script 1004 baseline build passed and proved getManagedItServices helper and call already exist; its own PowerShell path variable was overwritten by a case-insensitive $r result variable, causing ReadAllText to receive a PSCustomObject. Script 1004 rolled back.
+- Script 1005 V2 is read-only, uses distinct descriptive variable names, captures exact RequestCatalog/API/backend loader source and authoritative DB Asset branch distribution before any further implementation.
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1005_requestcatalog_exact_runtime_preflight_v2_20261109_223420.txt
+
+
+## 2026-11-09 Service/Asset catalogue final filtering repair 1006
+- Script 1005 V2 PASS proved current wiring is correct: getManagedItServices helper=1, RequestCatalog managed call=1, managed backend route=1, baseline build PASS.
+- Database truth: 76 active IT service_request records; 11 Asset records. Asset rows are category Hardware /Equipment with sub-categories Asset Provisioning, Asset Maintenance, Asset Repair, Asset Replacement and Asset Lifecycle.
+- Script 1006 replaces only RequestCatalog's managedItems filter/map block. Service shows all 76 managed items; Asset shows only Hardware /Equipment rows whose sub-category starts with Asset. managedCatalogueItemId is explicitly preserved.
+- Baseline and post-change production builds required. No backend/database changes. IT should be frozen after authenticated Service/Asset acceptance.
+
+
+## 2026-11-09 RequestCatalog stale workspace gate removal 1007
+- Script 1005 V2 proved 76 managed service_request rows and 11 Asset rows, plus correct getManagedItServices helper/call/backend route.
+- Script 1006 corrected Asset filtering and passed baseline/post builds, but the UI still showed 0 items.
+- Root cause retained in RequestCatalog: before catalogApi.getManagedItServices executes, an obsolete if (!managedWorkspace?.id) branch clears items/categories, ends loading and returns. This reproduces the original employee workspace-directory dependency even though the new server endpoint resolves IT directly.
+- Script 1007 V2 removes only that exact early-return gate. It preserves the direct managed endpoint, 76/11 authoritative data, Script 1006 filter, loading timeout, managedCatalogueItemId, and all IT/Finance isolation.
+- Baseline and post-change production builds required. No DB/backend writes.
+
+
+## 2026-11-09 22:56 IT + Finance predeployment gate 1008
+- Script 1007 V2 passed: obsolete employee managedWorkspace early-return removed; frontend baseline/post-build passed; Service/Asset authoritative managed catalogue path may now execute for employee accounts.
+- Script 1008 validates backend syntax, production frontend build, catalogue counts, Asset count, ticket workspace distribution, Finance responsibility baseline, IT workspace isolation, Finance route and Major Incident Critical marker before deployment.
+- Deployment still requires authenticated production smoke after transfer.
+
+
+## 2026-11-09 Service catalogue generic Other-card cleanup 1010
+- User acceptance showed the managed Service Catalogue now loads successfully for the employee flow, but multiple generic 'Other' manual-request cards are repeated across catalogue branches.
+- Script 1010 removes generic Other/is_other records from employee Service and Asset catalogue card lists only. Catalogue Manager/manual administration data remains unchanged in PostgreSQL.
+- Existing real service items, direct managed endpoint, Script 1006 Asset filter, Script 1007 employee gate removal and managedCatalogueItemId are preserved.
+- Baseline and post-change frontend production builds required. No database/backend writes.
+
+
+## 2026-11-09 23:12 IT + Finance production deployment 1009
+- Status: FAILED.
+- Detail: DEPLOY_IT_FINANCE failed exit=1
+- Predeployment baseline: Script 1007 V2 PASS removed obsolete employee workspace-directory gate; authoritative Service/Asset catalogue path retained. Script 1005 V2 proved 76 Service Request records / 11 Asset records. Finance preflight 994 established Finance responsibilities/KPI/approval foundation.
+- Deployment package is allow-listed frontend dist + backend src/package manifests. Production .env/uploads are preserved. Database migrations are NOT executed by this script.
+- Production backend is supervised by pm2-atdadmin.service and runs /var/www/atd-helpdesk/backend/src/server.js on 127.0.0.1:3001.
+- After deployment run authenticated IT and Finance acceptance before freezing workspaces.
+
+
+## 2026-11-09 23:14 IT + Finance predeployment gate 1008
+- Script 1007 V2 passed: obsolete employee managedWorkspace early-return removed; frontend baseline/post-build passed; Service/Asset authoritative managed catalogue path may now execute for employee accounts.
+- Script 1008 validates backend syntax, production frontend build, catalogue counts, Asset count, ticket workspace distribution, Finance responsibility baseline, IT workspace isolation, Finance route and Major Incident Critical marker before deployment.
+- Deployment still requires authenticated production smoke after transfer.
+
+
+## 2026-11-09 23:24 HOD deployment staging 1011
+- Script 1009 passed all local/source/DB/upload/remote syntax preflights but stopped before production changes because the atddev sudo password was unavailable/incorrect. No production backup or implementation started.
+- Script 1008 separately passed full IT+Finance predeployment validation: IT service_request=76, Asset=11, Finance responsibilities=24, stale catalogue gate absent, managed call present, IT isolation/Finance route/Major Incident markers present.
+- Script 1010 passed and hides generic Other cards from employee Service/Asset catalogue lists.
+- Script 1011 stages the CURRENT post-1010 frontend/backend payload only; HOD must activate as atdadmin using /tmp/atd1011-20261109_232203/activate-as-hod.sh. No migrations are run.
+
+
+## 2026-11-10 09:01 Files-only deployment v3
+- Script 1013 v2 reached implementation but cp -a failed because atddev cannot preserve www-data/root timestamps/ownership metadata; rollback completed.
+- Script 1013 v3 uses ordinary cp -r / cp rather than archive-preserving cp -a, while retaining checksum/syntax validation and rollback backup. PM2 restart remains deliberately separate.
+- After success, remaining activation: sudo systemctl restart pm2-atdadmin.service, then HTTP/authenticated smoke.
+
+
+## 2026-11-10 09:07 PM2 restart verification 1014
+- Manual restart command returned pm2-atdadmin.service active, but immediate pgrep for /var/www/atd-helpdesk/backend/src/server.js produced no visible process output. Service-active only proves the PM2 daemon is running, not necessarily the Helpdesk application.
+- Script 1014 captures systemd status, atdadmin PM2 list/dump, port 3001, journal and unauthenticated API smoke before any further activation action.
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1014_post_pm2_restart_diagnostic_20261110_090719.txt
+
+
+## 2026-11-10 09:48 Backend runtime root-cause preflight 1018
+- Scripts 1016/1017 restored production backend/server.js and npm dependencies, but PM2 atd-helpdesk-api still returned 503 and historical PM2 logs continued showing MODULE_NOT_FOUND for server.js.
+- Script 1018 is read-only except for a bounded 12-second direct Node startup probe. It verifies filesystem traversal/readability as atdadmin, Node syntax/module resolution, current PM2 error tail and captures fresh direct-start stdout/stderr to distinguish stale logs from the current startup blocker.
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1018_backend_runtime_root_cause_preflight_20261110_094800.txt
+
+
+## 2026-11-10 09:55 Production backend permission recovery 1019 V2
+- Script 1019 V1 made no production change because SSH executed its inline shell under /bin/sh and rejected set -o pipefail immediately.
+- V2 uploads the exact recovery commands as an LF-only Bash script, validates bash -n remotely, then executes explicitly with bash.
+- Root cause remains Script 1018 finding: backend/src exists but is drwx------ atddev:atddev, preventing PM2 owner atdadmin from traversing src and making server.js appear MODULE_NOT_FOUND.
+- V2 normalizes source group/permissions, verifies atdadmin source access, targeted-restarts atd-helpdesk-api and requires port 3001 plus tickets/catalog/Finance APIs at 200/401/403.
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1019_fix_backend_permissions_pm2_20261110_095514.txt
+
+
+## 2026-11-10 10:00 Production frontend activation 1020 V2
+- Script 1019 V2 PASS recovered backend runtime by normalizing backend/src permissions for atdadmin, targeted-restarting atd-helpdesk-api, restoring port 3001, and returning 401 on tickets/catalog/Finance protected APIs.
+- Script 1020 V2 activates only the validated staged frontend into /var/www/helpdesk and /var/www/production. Backend is preflighted healthy and is not modified/restarted.
+- Frontend backup and checksum validation are mandatory; Service, Asset and Finance page routes are smoke-tested.
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1020_frontend_only_production_activation_v2_20261110_100040.txt
+
+
+## 2026-11-10 Incident catalogue/category cleanup 1023
+- Script 1022 PASS confirmed authoritative IT incident catalogue has multiple categories/subcategories (Application Software, Hardware /Equipment, Network, Office Applications, Other, Security) while production UI showed one/insufficient category and visible mojibake.
+- Script 1023 keeps the DB-driven CategoryCascade but makes category extraction accept canonical/raw mapped category fields and rewrites known visible priority/knowledge/attachment guidance to ASCII-safe wording.
+- Helpdesk Ticket workflow.pdf remains canonical: quick Incident/Service selection should drive managed item and lock related Category/Short Summary; expanded catalogue remains available.
+- Baseline and post-change frontend builds required; no DB/backend writes.
+
+
+## 2026-11-12 10:38 IT / Finance ticket workspace isolation preflight 1025
+- Requirement reaffirmed: IT Ticket Workspace and Finance Workspace ticket queues must remain separate while Finance employees may retain ordinary Helpdesk access.
+- Script 1025 records frontend/backend workspace-filter evidence and DB ticket counts without changing source/data. Canonical PDF workflow changes must preserve explicit IT filtering and Finance backend scope.
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1025_it_finance_workspace_isolation_preflight_20261112_103831.txt
+
+
+## 2026-11-12 11:18 Queued Catalogue Manager + canonical workflow batches 1026
+- Reference UX: Helpdesk Ticket workflow.pdf plus current Service Catalog page visual pattern (left category navigation, search, responsive managed-item cards, Catalogue Manager administrative entry).
+- 1027 P0: canonical request entry/Incident/Service flow; true blank Other; governed managed item locks; beneficiary picker; mojibake cleanup. Preserve IT/Finance isolation.
+- 1028 P0: managed catalogue fast path/cache shared by Service and Asset; one authenticated fetch per short TTL/session; non-blocking quick cards; invalidate on manager mutations.
+- 1029 P1: simplify Catalogue Manager around a workspace-first selector and immediate item inventory. Managers see and create items for their authorised workspace; editing/reorder/archive/duplicate remain governed.
+- 1030 P1: authorization. Workspace managers are scoped to authorised department/workspace. Superadmin receives All Workspaces and can switch across IT, Finance, PDM, Production, Facilities, HR and other configured service_workspaces. Backend permission checks remain authoritative.
+- 1031 P1: Catalogue Manager-to-employee catalogue parity and cache invalidation after create/update/status/reorder operations.
+- 1032 P0 regression: IT Ticket Workspace stays workspace=IT; Finance queue stays Finance-scoped; access rights do not merge operational queues.
+- 1033: resume Finance employee/manager dashboards, approval routing, evidence, timeliness/quality scoring and KPI periods after IT acceptance.
+- No application or DB changes in Script 1026. Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\script_1026_catalogue_manager_batch_queue_20261112_111822.txt
+
+## 2026-11-12 Consolidated delivery plan: two batches
+
+### Current validated baseline
+- Script 1024 V2: canonical PDF workflow alignment preflight passed and frontend production build passed.
+- Script 1025: IT/Finance workspace isolation preflight passed. Preserve explicit IT Ticket Workspace scope and Finance-only scope. Finance employees may retain ordinary Helpdesk access, but Finance tickets must not enter the IT operational queue.
+- Script 1026: earlier 1027-1033 queue was documentation-only. This entry supersedes that queue and combines the work into two controlled implementation batches.
+- Script 1027 preflight: current build is clean. RequestEntryMenu already supports beneficiary self/other choice and a quick Incident catalogue; TicketCreate already supports managedCatalogueItemId, governed title/priority locks, request-for-someone-else validation and workspace catalogue resolution. RequestCatalog uses getManagedItServices. Backend users route supports search. Tickets backend preserves requester_id as beneficiary and created_by_user_id as authenticated creator.
+- Outstanding visible defects: true employee selection is not yet performed before module navigation; catalogue=other&blank=true can still drift into a managed Incident classification; Service/Asset catalogue fetch remains slower than desired and has no shared session cache; remaining TicketCreate mojibake must be removed; Catalogue Manager needs workspace-centric simplification and scoped authorization.
+
+### BATCH A - Canonical Helpdesk Workflow + Catalogue Platform (combine former 1027-1032)
+Priority: P0/P1 combined implementation, local-first, one regression gate before deployment.
+
+1. Canonical New Request flow from Helpdesk Ticket workflow.pdf
+   - Step 1: Ticket for Myself / For Someone Else.
+   - For Someone Else: searchable employee selector BEFORE request type/module navigation; carry concrete beneficiary/requester user ID, not only beneficiary=other.
+   - Step 2: request type selection.
+2. Incident fast path
+   - Quick Incident choices backed by managed catalogue IDs where exact.
+   - Browse All Incidents: Category -> Sub-category -> Item.
+   - Managed selection coherently governs managedCatalogueItemId, Category, Sub-category, Item, Short Summary and locked Priority.
+   - Other is a true blank/manual IT Incident: no managed item, blank classification/title, editable fields.
+3. Service / Asset fast path
+   - Immediate common Service cards and Browse All Service Catalogue.
+   - One authenticated managed service_request fetch per short session/TTL cache; Service and Asset share the same cached records.
+   - Asset remains the Hardware /Equipment + Asset * subset.
+   - Catalogue UI must not block initial interaction while full catalogue loads.
+4. Catalogue Manager simplification
+   - Service Catalog-style UI: workspace selector, catalogue type, search, left category navigation, managed item cards, one obvious Add Item control.
+   - Workspace managers see items for authorised workspace(s) and can add/edit/duplicate/reorder/activate/archive there.
+   - Superadmin sees All Workspaces and can switch across every configured service_workspaces record.
+   - Backend authorization is authoritative; hiding options in React is not sufficient.
+   - Employee catalogue and Catalogue Manager use the same workspace_catalogue_items records; no shadow catalogue.
+   - Create/update/status/reorder operations invalidate/bump the managed catalogue cache.
+5. Encoding cleanup
+   - Replace remaining TicketCreate user-facing mojibake with intended ASCII-safe wording; no repository-wide transcoding.
+6. Hard workspace invariant
+   - New IT tickets use IT operational ownership; IT Ticket Workspace remains explicit workspace=IT.
+   - Finance creation/work remains Finance-scoped. Access rights never merge queues.
+   - Preserve Major Incident -> Critical, SLA, requester/creator attribution, Support Team/proposed Agent, Accept and Action, attachments, duplicate prevention and 7-day reopen.
+7. Batch A acceptance
+   - baseline build, post-build, backend syntax, DB catalogue counts, ordinary employee + operations acceptance, IT/Finance isolation preflight repeated.
+
+### BATCH B - Finance Workspace Dashboard + Approval/KPI Governance (combine former 1033 plus queued Finance requirements)
+Priority: starts immediately after Batch A acceptance/freeze.
+
+1. Finance access/navigation
+   - Finance employees get obvious Finance Workspace access while retaining ordinary Employee Helpdesk.
+   - Assigned Finance tickets/tasks are openable/respondable by authorised assignees without leaking Finance queue data into IT.
+2. Finance employee dashboard
+   - My Tickets/Tasks, Journals, Reconciliations, Month-End, returned items, evidence required, due soon, overdue, email attention and My KPI.
+3. Finance manager dashboard
+   - Team workload, overdue by employee, awaiting review, review-overdue, evidence queue, extensions/dependencies, quality ratings, timeliness, KPI risk and portfolio drill-down.
+4. Approval routing
+   - Journals/Recons/Month-End/Tickets use existing governed workflows and audit history.
+   - Portfolio first-review routing uses real directory identities/configuration rather than hard-coded UI names.
+   - Reject/Return sends work back to assignee with reason/history.
+   - No-review-required is a governed exemption with reason, approver and timestamp.
+   - Final approval paths support Finance Manager/AP Manager/CFO policy.
+5. KPI linkage
+   - Every Finance ticket/task, Journal, Recon and Month-End item links to a KPI objective/period where applicable.
+   - Item scoring: Timeliness 50% + Quality 50%.
+   - Late without approved extension loses timeliness component; approved external-department dependency can adjust effective due date/restore governed time credit.
+   - Reviewer timeliness is separately measurable and affects reviewer KPI where review is overdue.
+   - Periods: Monthly, Quarterly, Biannual, Annual, Custom.
+6. Existing KPI objective model to preserve/integrate
+   - Month-End Close 30%.
+   - Reconciliation Control 25%.
+   - Cut-off Accuracy 15%.
+   - Financial Reporting Quality 20%.
+   - Internal Finance Service Delivery 10%.
+7. Supporting evidence/reminders
+   - Reuse ticket attachments/Finance evidence infrastructure for Tickets, Journals, Recons and Month-End.
+   - Email reminders for assigned, due soon, overdue, awaiting review, review overdue, returned, extension decision and final approval.
+8. Batch B acceptance/deployment
+   - Finance employee + manager authenticated regression, IT isolation regression, then controlled production deployment and closeout report.
+   - After Finance deployment: move active development scope to Process Engineering.
+
+### Continuity / deployment lessons that must be retained
+- Production PM2 service: /etc/systemd/system/pm2-atdadmin.service; runtime user atdadmin; PM2_HOME=/home/atdadmin/.pm2; backend entry /var/www/atd-helpdesk/backend/src/server.js; listener 127.0.0.1:3001.
+- Production outage root cause during deployment: backend/src was restored as private drwx------ atddev:atddev, so atdadmin could not traverse/read server.js. Runtime recovered only after normalising backend/src group/traversal permissions and targeted-restarting atd-helpdesk-api.
+- Future deployment/rollback must preserve backend/src traversal for atdadmin (production group semantics) before PM2 restart.
+- Do not use cp -a as unprivileged atddev where preserving www-data/root metadata is not permitted.
+- Do not run npm audit fix --force during deployment. Production npm install reported 12 vulnerabilities (1 moderate, 10 high, 1 critical); remediate separately with regression testing.
+- Do not run historical DB migrations blindly. Current deployment/recovery intentionally skipped migrations.
+- Keep rollback backups and update trackers after every implementation/validation/deployment batch.

@@ -270,6 +270,7 @@ function TicketRowSkeleton() {
   );
 }
 
+// ATD_PORTAL_WHEEL_CHAIN_FIX: allow wheel/trackpad deltas to remain on the ticket list and naturally chain to portal scroll owners at boundaries.
 export default function TicketWorkspace() {
   const navigate = useNavigate();
   const toast = useToast();
@@ -410,7 +411,7 @@ export default function TicketWorkspace() {
         return;
       }
 
-      const response = await ticketsApi.getAll({
+      const response = await ticketsApi.getAll({ workspace: "IT", // WORKSPACE_ISOLATION_983
         page,
         per_page: pageSize,
         ...(selectedStatuses.length
@@ -739,7 +740,7 @@ export default function TicketWorkspace() {
   const pageTitle = employeeExperience ? "My Tickets" : "Ticket Workspace";
   const pageSubtitle = employeeExperience
     ? "Track support requests created for your account."
-    : "Review, triage, assign and manage all authorised tickets.";
+    : "Review, prioritise, assign and manage all authorised tickets.";
 
   return (
     <OperationsShell
@@ -820,7 +821,7 @@ export default function TicketWorkspace() {
             : "grid-cols-1"
         )}
       >
-        <div ref={listScrollRef} onScroll={(event)=>sessionStorage.setItem("atd-ticket-workspace-scroll",String(event.currentTarget.scrollTop))} className="min-h-0 overflow-auto"><StickyListShell label={employeeExperience ? "My tickets" : "Ticket workspace results"} className="xl:min-h-0">
+        <div ref={listScrollRef} onScroll={(event)=>sessionStorage.setItem("atd-ticket-workspace-scroll",String(event.currentTarget.scrollTop))} className="scroll-slim min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-auto" data-portal-wheel-scroll="ticket-workspace"><StickyListShell label={employeeExperience ? "My tickets" : "Ticket workspace results"} className="xl:min-h-0">
           {!employeeExperience ? <AdvancedTicketFilterBar value={advancedFilters} onChange={setAdvancedFilters} onApply={()=>{const presets={unresolved:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},mine:{assignment:"mine",statuses:[...UNRESOLVED_STATUSES]},"my-groups":{assignment:"my-groups",statuses:[...UNRESOLVED_STATUSES]},today:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},overdue:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-seven":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-overdue":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},high:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},all:{assignment:"all",statuses:[]}};const preset=presets[advancedFilters.view]||presets.unresolved;setAssignmentScope(preset.assignment);setDraftAssignmentScope(preset.assignment);setSelectedStatuses(preset.statuses);setDraftStatuses(preset.statuses);const next=new URLSearchParams(searchParams);next.delete("status");if(preset.assignment==="all")next.delete("assignment");else next.set("assignment",preset.assignment);if(preset.statuses.length)next.set("statuses",preset.statuses.join(","));else next.delete("statuses");Object.entries(advancedFilters).forEach(([key,value])=>value?next.set(key,value):next.delete(key));setQuery(advancedFilters.search||"");setAppliedQuery((advancedFilters.search||"").trim());next.delete("page");setPage(1);setSearchParams(next,{replace:true});}} onReset={()=>{const reset={view:"unresolved",search:"",requester:"",department:"",source:"",type:"",priority:"",sort:"created_at",direction:"desc"};setAdvancedFilters(reset);setQuery("");setAppliedQuery("");setPage(1);setSearchParams(new URLSearchParams(),{replace:true});}} /> : null}
           <div className="shrink-0 border-b border-slate-200 px-3 py-2.5 xl:px-4 xl:py-3">
             <div className="relative min-w-[200px]">
@@ -1059,7 +1060,7 @@ export default function TicketWorkspace() {
                 </span>
               </div>
             ) : null}
-            {workspaceView === "kanban" && !loading ? <div className="scroll-slim flex min-h-0 snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain p-3 pb-4">{STATUS_OPTIONS.map((columnStatus) => { const columnTickets = tickets.filter((ticket) => (ticket.status || "Open") === columnStatus); return <section key={columnStatus} onDragOver={(event) => { if (!canOperate || actionLoading) return; event.preventDefault(); setDropTarget(columnStatus); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTarget(""); }} onDrop={(event) => { event.preventDefault(); const ticket=draggedTicket; setDropTarget(""); if (ticket) moveTicketToStatus(ticket,columnStatus); }} className={classNames("portal-surface-muted flex max-h-full w-[min(88vw,22rem)] min-w-[min(88vw,22rem)] shrink-0 snap-start flex-col rounded-xl border p-2 md:w-[20rem] md:min-w-[20rem] xl:w-[calc((100%-1.5rem)/3)] xl:min-w-[18rem]",dropTarget===columnStatus&&"ring-2 ring-[var(--portal-primary)]")}><header className="portal-surface-muted sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-[var(--portal-border)] px-1 py-2"><h3 className="portal-title text-sm font-black">{columnStatus}</h3><span className="portal-accent-soft rounded-full px-2 py-0.5 text-xs font-black">{columnTickets.length}</span></header><div className="scroll-slim min-h-0 flex-1 space-y-2 overflow-y-auto pt-2">{columnTickets.map((item) => { const gauge=slaState(item); return <article key={item.id} draggable={canOperate&&!actionLoading&&!selectMode} onDragStart={(event)=>{setDraggedTicket(item);event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",String(item.id));}} onDragEnd={()=>{setDraggedTicket(null);setDropTarget("");}} className={classNames("portal-surface-raised rounded-xl border p-3",draggedTicket?.id===item.id&&"opacity-50")}><div className="flex items-start gap-2">{selectMode ? <input type="checkbox" checked={selection.has(item.id)} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/> : null}<button type="button" onClick={() => setSelectedTicket(item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><span className="portal-ticket-reference text-xs font-black">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={classNames("rounded-full border px-2 py-0.5 text-[11px] font-bold",priorityClass(item.priority))}>{item.priority||"Medium"}</span></div><p className="portal-title mt-2 line-clamp-2 text-sm font-bold">{item.title}</p><div className="mt-3 flex items-center gap-2"><span className="portal-avatar-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black">{initialsFor(item.assigned_to_name)||"?"}</span><div className="min-w-0"><p className="portal-title truncate text-xs font-bold">{item.assigned_to_name||"Unassigned"}</p><p className="portal-muted text-[10px]">Assignee</p></div></div><p className={classNames("mt-3 text-xs font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-copy")}>Ticket Due: {formatDue(item.due_at)}</p>{gauge.percent===null?<p className="portal-muted mt-1 text-[11px]">SLA countdown unavailable</p>:<><div className="portal-sla-bar mt-2 h-2" role="progressbar" aria-label={gauge.label} aria-valuemin="0" aria-valuemax="100" aria-valuenow={gauge.percent}><span className={`portal-sla-${gauge.tone}`} style={{width:`${gauge.percent}%`}}/></div><p className={classNames("mt-1 text-[11px] font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-muted")}>{gauge.label}</p></>}</button></div></article>})}</div></section>})}</div> : loading ? (
+            {workspaceView === "kanban" && !loading ? <div data-feature="SCRIPT_977_SCROLL" className="atd-kanban-board scroll-slim flex min-h-0 snap-x snap-mandatory gap-3 overflow-x-auto overscroll-x-contain p-3 pb-4 max-h-[calc(100vh-18rem)] overflow-x-auto overflow-y-auto overscroll-contain">{STATUS_OPTIONS.map((columnStatus) => { const columnTickets = tickets.filter((ticket) => (ticket.status || "Open") === columnStatus); return <section key={columnStatus} onDragOver={(event) => { if (!canOperate || actionLoading) return; event.preventDefault(); setDropTarget(columnStatus); }} onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDropTarget(""); }} onDrop={(event) => { event.preventDefault(); const ticket=draggedTicket; setDropTarget(""); if (ticket) moveTicketToStatus(ticket,columnStatus); }} className={classNames("portal-surface-muted flex max-h-full w-[min(88vw,22rem)] min-w-[min(88vw,22rem)] shrink-0 snap-start flex-col rounded-xl border p-2 md:w-[20rem] md:min-w-[20rem] xl:w-[calc((100%-1.5rem)/3)] xl:min-w-[18rem]",dropTarget===columnStatus&&"ring-2 ring-[var(--portal-primary)]")}><header className="portal-surface-muted sticky top-0 z-20 flex shrink-0 items-center justify-between border-b border-[var(--portal-border)] px-1 py-2"><h3 className="portal-title text-sm font-black">{columnStatus}</h3><span className="portal-accent-soft rounded-full px-2 py-0.5 text-xs font-black">{columnTickets.length}</span></header><div className="scroll-slim min-h-0 flex-1 space-y-2 overflow-y-auto pt-2">{columnTickets.map((item) => { const gauge=slaState(item); return <article key={item.id} draggable={canOperate&&!actionLoading&&!selectMode} onDragStart={(event)=>{setDraggedTicket(item);event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",String(item.id));}} onDragEnd={()=>{setDraggedTicket(null);setDropTarget("");}} className={classNames("portal-surface-raised rounded-xl border p-3",draggedTicket?.id===item.id&&"opacity-50")}><div className="flex items-start gap-2">{selectMode ? <input type="checkbox" checked={selection.has(item.id)} onChange={() => toggleTicketSelection(item.id)} aria-label={`Select ${item.ticket_ref || item.id}`}/> : null}<button type="button" onClick={() => setSelectedTicket(item)} onDoubleClick={() => navigate(`/tickets/${item.id}`)} className="min-w-0 flex-1 text-left"><div className="flex flex-wrap items-center justify-between gap-2"><span className="portal-ticket-reference text-xs font-black">{item.ticket_ref || `TICKET-${item.id}`}</span><span className={classNames("rounded-full border px-2 py-0.5 text-[11px] font-bold",priorityClass(item.priority))}>{item.priority||"Medium"}</span></div><p className="portal-title mt-2 line-clamp-2 text-sm font-bold">{item.title}</p><div className="mt-3 flex items-center gap-2"><span className="portal-avatar-accent flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-black">{initialsFor(item.assigned_to_name)||"?"}</span><div className="min-w-0"><p className="portal-title truncate text-xs font-bold">{item.assigned_to_name||"Unassigned"}</p><p className="portal-muted text-[10px]">Assignee</p></div></div><p className={classNames("mt-3 text-xs font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-copy")}>Ticket Due: {formatDue(item.due_at)}</p>{gauge.percent===null?<p className="portal-muted mt-1 text-[11px]">SLA countdown unavailable</p>:<><div className="portal-sla-bar mt-2 h-2" role="progressbar" aria-label={gauge.label} aria-valuemin="0" aria-valuemax="100" aria-valuenow={gauge.percent}><span className={`portal-sla-${gauge.tone}`} style={{width:`${gauge.percent}%`}}/></div><p className={classNames("mt-1 text-[11px] font-bold",gauge.overdue?"text-[var(--portal-danger)]":"portal-muted")}>{gauge.label}</p></>}</button></div></article>})}</div></section>})}</div> : loading ? (
               Array.from({ length: 8 }, (_, index) => (
                 <TicketRowSkeleton key={index} />
               ))
@@ -1121,6 +1122,15 @@ export default function TicketWorkspace() {
                         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs font-semibold text-slate-500">
                           <span className="portal-ticket-reference font-bold">
                             {item.ticket_ref || `TICKET-${item.id}`}
+                            {/* ATD-SCRIPT-828-FIX-NEW-TAG */}
+                            {item.is_new ? (
+                              <span
+                                className="inline-flex rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white"
+                                title={item.new_expires_at ? `New until ${new Date(item.new_expires_at).toLocaleString("en-ZA")}` : "Created within the last 24 hours"}
+                              >
+                                New
+                              </span>
+                            ) : null}
                           </span>
                           <span className="text-slate-300">·</span>
                           <span>{module.shortLabel}</span>
@@ -1187,6 +1197,15 @@ export default function TicketWorkspace() {
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="portal-ticket-reference font-bold">
                           {item.ticket_ref || `TICKET-${item.id}`}
+                          {/* ATD-SCRIPT-828-FIX-NEW-TAG */}
+                          {item.is_new ? (
+                            <span
+                              className="inline-flex rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white"
+                              title={item.new_expires_at ? `New until ${new Date(item.new_expires_at).toLocaleString("en-ZA")}` : "Created within the last 24 hours"}
+                            >
+                              New
+                            </span>
+                          ) : null}
                         </span>
                         <span
                           className={classNames(

@@ -30,7 +30,9 @@ import {
   formPathForType,
 } from "../data/requestModules";
 import { catalogIconSrc } from "../data/catalogIcons";
-import { catalogApi } from "../services/api";
+import { catalogApi , workspaceCatalogueApi,
+  workspacesApi
+} from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
 const BRAND = "#172b57";
@@ -78,22 +80,28 @@ function iconForItem(item) {
 
 /**
  * Freshservice-style catalog portal.
- * Used separately for Service Catalog and Asset Requests — never mixed.
+ * Used separately for Service Catalog and Asset Requests  -  never mixed.
  */
 export default function RequestCatalogPage({ moduleKey }) {
   const navigate = useNavigate();
   const { user, employeeView } = useAuth();
+  const canManageCatalogue = !employeeView && ["admin", "superadmin"].includes(user?.role);
   const [searchParams] = useSearchParams();
   const module = REQUEST_MODULES[moduleKey];
+  const beneficiary = searchParams.get("beneficiary") === "other" ? "other" : "self";
 
   const initialCategory = searchParams.get("category") || "popular";
   const [categoryId, setCategoryId] = useState(initialCategory);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  // SCRIPT_998_LOADING_GUARD: fail visibly instead of spinning forever.
+  useEffect(() => { if (!loading) return; const timer=setTimeout(() => { setLoading(false); setWorkspaceLoadError((x) => x || "The catalogue took too long to load. Refresh or contact IT if this continues."); }, 15000); return () => clearTimeout(timer); }, [loading]);
   const [error, setError] = useState("");
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
 
+  const [managedWorkspace, setManagedWorkspace] = useState(null);
+  const [workspaceLoadError, setWorkspaceLoadError] = useState("");
   const homePath =
     user?.role === "user" || employeeView
       ? user?.role === "user"
@@ -106,39 +114,95 @@ export default function RequestCatalogPage({ moduleKey }) {
     if (fromQuery) setCategoryId(fromQuery);
   }, [searchParams]);
 
+  // MANAGED_REQUEST_WORKSPACE_LOADER
   useEffect(() => {
     let cancelled = false;
-
-    const load = async () => {
-      setLoading(true);
-      setError("");
+    const loadManagedWorkspace = async () => {
       try {
-        const response =
-          moduleKey === "asset"
-            ? await catalogApi.getAssets()
-            : await catalogApi.getService();
-        if (cancelled) return;
-        setCategories(Array.isArray(response.data?.categories) ? response.data.categories : []);
-        setItems(Array.isArray(response.data?.items) ? response.data.items : []);
-      } catch (loadError) {
+        const response = await workspacesApi.getAll();
+        const rows = Array.isArray(response.data)
+          ? response.data
+          : Array.isArray(response.data?.items)
+            ? response.data.items
+            : [];
+        const workspace =
+          rows.find((row) => String(row.code || "").trim().toUpperCase() === "IT") ||
+          rows.find((row) => String(row.name || "").trim().toLowerCase() === "information technology") ||
+          null;
         if (!cancelled) {
-          setError(
-            loadError?.response?.data?.error ||
-              "The catalog could not be loaded. Please try again."
-          );
-          setCategories([]);
-          setItems([]);
+          setManagedWorkspace(workspace);
+          setWorkspaceLoadError("");
         }
-      } finally {
-        if (!cancelled) setLoading(false);
+      } catch (error) {
+        if (!cancelled) {
+          setManagedWorkspace(null);
+          setWorkspaceLoadError(error?.response?.data?.error || "The managed workspace directory could not be loaded.");
+        }
       }
     };
-
-    load();
-    return () => {
-      cancelled = true;
+    loadManagedWorkspace();
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const loadCatalogue = async () => {
+      // SCRIPT_1007_V2: server-side managed endpoint resolves the canonical IT workspace; do not gate employee catalogue loading on browser workspace enumeration.
+      try {
+        const managedResponse = await Promise.race([
+          catalogApi.getManagedItServices(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("The managed service catalogue request timed out after 12 seconds.")), 12000)),
+        ]).then((response) => ({
+          ...response,
+          data: {
+            ...(response.data || {}),
+            items: (response.data?.items || []).map((item) => ({
+              ...item,
+              id: item.managedCatalogueItemId || item.id,
+              category: item.categoryName || item.ticketCategory || item.category,
+              sub_category: item.ticketSubCategory || item.subCategory || item.sub_category || null,
+              item_name: item.name || item.item_name,
+              user_description: item.description || item.user_description || "",
+              default_priority: item.priority || item.default_priority || "Medium",
+            })),
+          },
+        }));
+        const managedItems = (managedResponse.data?.items || [])
+        .filter((item) => {
+          const itemName = String(item.item_name || item.name || "").trim().toLowerCase();
+          const isOther = item.is_other === true || itemName === "other";
+          if (isOther) return false;
+          if (moduleKey !== "asset") return true;
+          const category = String(item.category || item.categoryName || item.ticketCategory || "").trim().toLowerCase();
+          const subCategory = String(item.sub_category || item.subCategory || item.ticketSubCategory || "").trim().toLowerCase();
+          return category === "hardware /equipment" && subCategory.startsWith("asset ");
+        })
+        .map((item) => ({
+          ...item,
+          id: item.managedCatalogueItemId || item.id,
+          managedCatalogueItemId: item.managedCatalogueItemId || item.id,
+          category: item.category || item.categoryName || item.ticketCategory || "Other",
+          sub_category: item.sub_category || item.subCategory || item.ticketSubCategory || null,
+          item_name: item.item_name || item.name || "Other",
+          user_description: item.user_description || item.description || "",
+          default_priority: item.default_priority || item.priority || "Medium",
+        }));
+      const categoryNames = [...new Set(managedItems.map((item) => item.categoryName).filter(Boolean))];
+        if (!cancelled) {
+          setItems(managedItems);
+          setCategories(categoryNames.map((name) => ({ id: name, name })));
+          setError("");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setItems([]);
+          setCategories([]);
+          setError(error?.response?.data?.error || error?.message || "The managed request catalogue could not be loaded.");
+        }
+      }
     };
-  }, [moduleKey]);
+    loadCatalogue();
+    return () => { cancelled = true; };
+  }, [moduleKey, managedWorkspace?.id, workspaceLoadError])
 
   const navCategories = useMemo(() => {
     const dynamic = categories.map((category) => ({
@@ -165,7 +229,7 @@ export default function RequestCatalogPage({ moduleKey }) {
         categoryId === "all"
           ? true
           : categoryId === "popular"
-            ? item.popular
+            ? true
             : item.categoryId === categoryId;
 
       if (!matchesCategory) return false;
@@ -186,11 +250,13 @@ export default function RequestCatalogPage({ moduleKey }) {
           itemId: item.id,
           assetItem: item.name,
           prefillTitle: item.name,
+          beneficiary,
         }),
         {
           state: {
             createMode: "asset_request",
             catalogItem: item,
+            beneficiary,
             assetItem: item.name,
             prefillTitle: item.name,
           },
@@ -201,13 +267,16 @@ export default function RequestCatalogPage({ moduleKey }) {
 
     navigate(
       formPathForType("service_request", {
+        managedCatalogueItemId: item.managedCatalogueItemId || item.id,
         itemId: item.id,
         prefillTitle: item.name,
+        beneficiary,
       }),
       {
         state: {
           createMode: "service_request",
           catalogItem: item,
+          beneficiary,
           prefillTitle: item.name,
         },
       }
@@ -281,8 +350,8 @@ export default function RequestCatalogPage({ moduleKey }) {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder={
                     moduleKey === "asset"
-                      ? "Search assets…"
-                      : "Search services…"
+                      ? "Search assets..."
+                      : "Search services..."
                   }
                   className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
                 />
@@ -347,7 +416,7 @@ export default function RequestCatalogPage({ moduleKey }) {
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   {loading
-                    ? "Loading catalog…"
+                    ? "Loading catalog..."
                     : categoryId === "popular"
                       ? moduleKey === "asset"
                         ? "Most requested equipment"
@@ -364,10 +433,20 @@ export default function RequestCatalogPage({ moduleKey }) {
                 ) : loading ? (
                   <div className="flex items-center justify-center gap-3 py-20 text-slate-500">
                     <Loader2 className="h-5 w-5 animate-spin" />
-                    Loading catalog…
+                    Loading catalog...
                   </div>
                 ) : filtered.length > 0 ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {canManageCatalogue ? (
+                      <button
+                        type="button"
+                        onClick={() => navigate("/workspaces/catalogue-manager")}
+                        className="mb-4 flex w-full items-center justify-between rounded-2xl border-2 border-dashed border-blue-300 bg-blue-50/70 px-5 py-4 text-left text-blue-900 transition hover:border-blue-500 hover:bg-blue-50"
+                      >
+                        <span><span className="block font-bold">+ Add or manage catalogue items</span><span className="mt-1 block text-xs text-blue-700">Create, edit, reorder, activate or archive service templates and choose their portal icons.</span></span>
+                        <span className="rounded-lg bg-blue-700 px-3 py-2 text-xs font-bold text-white">Catalogue manager</span>
+                      </button>
+                    ) : null}
                     {filtered.map((item) => {
                       const ItemIcon = iconForItem(item);
                       const artSrc = catalogIconSrc(item.name);

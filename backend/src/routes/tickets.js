@@ -1,5 +1,6 @@
 
 const express = require("express");
+// REQUESTER_CREATOR_ATTRIBUTION_CONTRACT: requester_id identifies the beneficiary while created_by_user_id identifies the authenticated creator.
 const fs = require("fs");
 
 const pool = require("../db/pool");
@@ -18,6 +19,8 @@ const {
 } = require("../services/ticketAttachments");
 const { getPersonalizedModules } = require("../services/personalization");
 const { getSlaPolicy, calculateSla } = require("../services/slaPolicy");
+const ticketGovernance = require("../services/ticketGovernance");
+const ticketExperience = require("../services/ticketExperienceGovernance");
 
 const router = express.Router();
 router.use(auth);
@@ -54,9 +57,9 @@ function priority(value){ return PRIORITY_MAP.get(text(value,50).toLowerCase())|
 function status(value){ return STATUS_MAP.get(text(value,50).toLowerCase())||null; }
 function operations(user){ return OPERATIONS_ROLES.has(text(user?.role,50).toLowerCase()); }
 function age(value){ const created=new Date(value).getTime(); if(!Number.isFinite(created))return "N/A"; const m=Math.max(0,Math.floor((Date.now()-created)/60000)); if(m<60)return `${m}m`; const h=Math.floor(m/60); return h<24?`${h}h ${m%60}m`:`${Math.floor(h/24)}d ${h%24}h`; }
-function decorate(ticket){ const active=!['Resolved','Closed'].includes(ticket.status); const now=Date.now(); return {...ticket,age:age(ticket.created_at),overdue:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active),response_overdue:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now&&active),sla:{policyKey:ticket.sla_policy_key||null,policyVersion:ticket.sla_policy_version||null,responseDueAt:ticket.response_due_at||null,resolutionDueAt:ticket.due_at||null,responseMinutes:ticket.sla_response_minutes||null,resolutionMinutes:ticket.sla_resolution_minutes||null,responseBreached:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now),resolutionBreached:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active)}}; }
+function decorate(ticket){ const active=!['Resolved','Closed'].includes(ticket.status); const now=Date.now(); const createdAt=new Date(ticket.created_at).getTime(); const isNew=Number.isFinite(createdAt)&&now-createdAt>=0&&now-createdAt<24*60*60*1000; return {...ticket,is_new:isNew,new_expires_at:isNew?new Date(createdAt+24*60*60*1000).toISOString():null,age:age(ticket.created_at),overdue:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active),response_overdue:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now&&active),sla:{policyKey:ticket.sla_policy_key||null,policyVersion:ticket.sla_policy_version||null,responseDueAt:ticket.response_due_at||null,resolutionDueAt:ticket.due_at||null,responseMinutes:ticket.sla_response_minutes||null,resolutionMinutes:ticket.sla_resolution_minutes||null,responseBreached:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now),resolutionBreached:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active)}}; }
 function prefix(typeValue,title,workspace){ const normalized=text(typeValue,50).toLowerCase().replace(/[\s-]+/g,"_"); if(TYPE_PREFIX[normalized])return TYPE_PREFIX[normalized]; const context=`${title} ${workspace}`.toLowerCase(); if(context.includes("change"))return "CHG"; if(context.includes("request")||context.includes("asset"))return "REQ"; return "INC"; }
-async function canView(user,ticket,database=pool){if(operations(user)||Number(ticket.requester_id)===Number(user?.id))return true;try{const r=await database.query(`SELECT 1 FROM ticket_participants WHERE ticket_id=$1 AND user_id=$2 AND is_active=TRUE AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>NOW()) LIMIT 1`,[ticket.id,user?.id]);return Boolean(r.rowCount);}catch(error){if(error.code==="42P01")return false;throw error;}}
+async function canView(user,ticket,database=pool){if(operations(user)||Number(ticket.requester_id)===Number(user?.id)||Number(ticket.created_by_user_id)===Number(user?.id))return true;try{const r=await database.query(`SELECT 1 FROM ticket_participants WHERE ticket_id=$1 AND user_id=$2 AND is_active=TRUE AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>NOW()) LIMIT 1`,[ticket.id,user?.id]);return Boolean(r.rowCount);}catch(error){if(error.code==="42P01")return false;throw error;}}
 async function canContribute(user,ticket,database=pool){
   if(operations(user)||Number(ticket.requester_id)===Number(user?.id))return true;
   try{
@@ -109,7 +112,7 @@ async function notify(ticket){ try{ await createTicketAssignmentNotifications({t
 router.get("/sla-policy",async(req,res)=>{
   try{const policy=await getSlaPolicy();return res.json(policy);}catch(error){console.error("SLA policy fetch failed:",error);return res.status(500).json({error:"SLA policy could not be loaded."});}
 });
-router.get("/employee-view",async(req,res)=>{ try{const result=await pool.query(`${TICKET_SELECT} WHERE t.requester_id=$1 ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){console.error(error);return res.status(500).json({error:"Failed to fetch your tickets."});}});
+router.get("/employee-view",async(req,res)=>{ try{const result=await pool.query(`${TICKET_SELECT} WHERE (t.requester_id=$1 OR t.created_by_user_id=$1) ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC,t.id DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){console.error(error);return res.status(500).json({error:"Failed to fetch your tickets."});}});
 router.get("/participant-view",async(req,res)=>{try{const result=await pool.query(`${TICKET_SELECT} JOIN ticket_participants participant_scope ON participant_scope.ticket_id=t.id WHERE participant_scope.user_id=$1 AND participant_scope.is_active=TRUE AND participant_scope.revoked_at IS NULL AND (participant_scope.expires_at IS NULL OR participant_scope.expires_at>NOW()) AND t.requester_id<>$1 ORDER BY ${ACTIVE_FIRST},t.updated_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(row=>({...decorate(row),participation:true})));}catch(error){if(error.code==="42P01")return res.status(503).json({code:"PARTICIPATION_SCHEMA_PENDING",error:"Ticket participation requires the pending migration."});return res.status(500).json({error:"Failed to fetch participated tickets."});}});
 router.get("/my-modules",async(req,res)=>{
   try{
@@ -120,7 +123,7 @@ router.get("/my-modules",async(req,res)=>{
     return res.status(500).json({error:"Failed to load personalized modules."});
   }
 });
-router.get("/my-tickets",async(req,res)=>{const condition=req.user.role==='user'?`t.requester_id=$1`:`(t.requester_id=$1 OR t.assigned_to_user_id=$1 OR t.assigned_group_id IN(SELECT group_id FROM support_group_members WHERE user_id=$1))`;try{const result=await pool.query(`${TICKET_SELECT} WHERE ${condition} ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){return res.status(500).json({error:"Failed to fetch your tickets."});}});
+router.get("/my-tickets",async(req,res)=>{const condition=req.user.role==='user'?`(t.requester_id=$1 OR t.created_by_user_id=$1)`:`(t.requester_id=$1 OR t.assigned_to_user_id=$1 OR t.assigned_group_id IN(SELECT group_id FROM support_group_members WHERE user_id=$1))`;try{const result=await pool.query(`${TICKET_SELECT} WHERE ${condition} ORDER BY ${ACTIVE_FIRST},CASE WHEN t.due_at<NOW() AND t.status NOT IN ('Resolved','Closed') THEN 0 ELSE 1 END,t.created_at DESC,t.id DESC LIMIT 200`,[req.user.id]);return res.json(result.rows.map(decorate));}catch(error){return res.status(500).json({error:"Failed to fetch your tickets."});}});
 
 // Freshservice-style inbox query: filter + paginate on the server, return real
 // queue counts for the full authorised set (not just the current page).
@@ -389,6 +392,8 @@ router.post("/:id/reopen",async(req,res)=>{
     if(!ticket)throw Object.assign(new Error("Ticket not found."),{status:404,code:"TICKET_NOT_FOUND"});
     if(Number(ticket.requester_id)!==Number(req.user.id))throw Object.assign(new Error("Only the requester may reopen this ticket."),{status:403,code:"REOPEN_REQUESTER_ONLY"});
     if(!["Resolved","Closed"].includes(ticket.status))throw Object.assign(new Error("Only a Resolved or Closed ticket can be reopened."),{status:409,code:"REOPEN_STATUS_INVALID"});
+    const finalAt=new Date(ticket.closed_at||ticket.resolved_at||ticket.updated_at).getTime();
+    if(!Number.isFinite(finalAt)||Date.now()-finalAt>7*24*60*60*1000)throw Object.assign(new Error("The 7-day ticket revival window has expired."),{status:409,code:"REOPEN_WINDOW_EXPIRED_7_DAYS"});
     const cycle=Number(ticket.reopen_count||0)+1;
     await client.query(`INSERT INTO ticket_resolution_cycles(ticket_id,cycle_number,prior_status,resolved_at,closed_at,reopened_by_user_id,recurrence_reason)
       VALUES($1,$2,$3,$4,$5,$6,$7)`,[ticket.id,cycle,ticket.status,ticket.resolved_at,ticket.closed_at,req.user.id,reason]);
@@ -587,7 +592,8 @@ router.post("/",optionalAttachments,async(req,res)=>{
   const files=Array.isArray(req.files)?req.files:[];
   const title=text(req.body.title,180);
   const description=text(req.body.description);
-  const ticketPriority=priority(req.body.priority)||"Medium";
+  let ticketPriority=priority(req.body.priority)||"Medium";
+  try{ticketPriority=ticketGovernance.requesterPriority(req.user,ticketPriority);}catch(error){cleanupFiles(files);return res.status(error.status||400).json({code:error.code,error:error.message});}
   const workspace=text(req.body.workspace||"IT",100);
   const ticketType=text(req.body.ticketType,50).toLowerCase().replace(/[\s-]+/g,"_")||null;
   const category=text(req.body.category,120)||null;
@@ -597,18 +603,23 @@ router.post("/",optionalAttachments,async(req,res)=>{
   const urgency=level(req.body.urgency,["Low","Medium","High"]);
   const source=text(req.body.source,50)||"Portal";
   const details=parseDetails(req.body.requestDetails||req.body.request_details);
+  let catalogue=null;
+  try{catalogue=ticketGovernance.catalogueRequirement(ticketType,details,category,subCategory);}catch(error){cleanupFiles(files);return res.status(error.status||400).json({code:error.code,error:error.message});}
   let groupId=id(req.body.assignedGroupId);
   let assigneeId=id(req.body.assignedToUserId);
   let requesterId=req.user.id;
 
   if(!title){ cleanupFiles(files); return res.status(400).json({error:"A ticket title is required."}); }
   if(!description){ cleanupFiles(files); return res.status(400).json({error:"A ticket description is required."}); }
-  if(!assigneeId){ cleanupFiles(files); return res.status(400).json({code:"AGENT_REQUIRED",error:"Select an eligible agent before submitting this ticket."}); }
-  if(!groupId){ cleanupFiles(files); return res.status(400).json({code:"SUPPORT_GROUP_REQUIRED",error:"Select the support team for the chosen agent."}); }
+  const financeWorkspace=workspace.trim().toLowerCase()==="finance";
+  if(!assigneeId&&!financeWorkspace){ cleanupFiles(files); return res.status(400).json({code:"AGENT_REQUIRED",error:"Select an eligible agent before submitting this ticket."}); }
+  if(!groupId&&!financeWorkspace){ cleanupFiles(files); return res.status(400).json({code:"SUPPORT_GROUP_REQUIRED",error:"Select the support team for the chosen agent."}); }
+  if(financeWorkspace)groupId=null;
 
   const requestedFor=id(req.body.requesterId||req.body.requestedForUserId);
   if(requestedFor&&requestedFor!==req.user.id){
-    if(!operations(req.user)){ cleanupFiles(files); return res.status(403).json({error:"You are not authorised to create a ticket for another person."}); }
+    const beneficiary=await validRequester(pool,requestedFor);
+    if(!beneficiary){ cleanupFiles(files); return res.status(400).json({error:"The selected beneficiary is not an active employee account."}); }
     requesterId=requestedFor;
   }
 
@@ -634,8 +645,17 @@ router.post("/",optionalAttachments,async(req,res)=>{
       await client.query("ROLLBACK"); open=false; cleanupFiles(files);
       return res.status(400).json({error:"The selected requester is not an active person account."});
     }
-    // New portal tickets require an explicit eligible agent and support group.
-    await validateAssignment(client,groupId,assigneeId);
+    if(financeWorkspace){
+      if(assigneeId){
+        const eligible=await client.query(`SELECT u.id FROM users u WHERE u.id=$1 AND u.approved=TRUE AND u.status='active' AND u.archived_at IS NULL AND COALESCE(u.account_type,'person')='person' AND LOWER(COALESCE(u.department,''))='finance' LIMIT 1`,[assigneeId]);
+        if(!eligible.rows[0])throw Object.assign(new Error("The selected owner is not an active verified Finance employee."),{status:400});
+      }
+      groupId=null;
+    }else{
+      const governed=await ticketGovernance.governedAssignment(client,groupId,assigneeId);
+      groupId=governed.groupId;
+      await validateAssignment(client,groupId,assigneeId);
+    }
     const duplicate=await client.query(
       `SELECT id,ticket_ref FROM tickets
         WHERE requester_id=$1 AND LOWER(title)=LOWER($2) AND created_at>NOW()-INTERVAL '30 seconds'
@@ -655,12 +675,12 @@ router.post("/",optionalAttachments,async(req,res)=>{
       `INSERT INTO tickets(
          id,ticket_ref,title,description,requester_id,created_by_user_id,priority,status,workspace,
          assigned_group_id,assigned_to_user_id,ticket_type,category,sub_category,item_category,
-         impact,urgency,source,request_details,response_due_at,due_at,sla_policy_key,sla_policy_version,sla_calculated_at,sla_response_minutes,sla_resolution_minutes
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21,$22,$23,NOW(),$24,$25)`,
+         impact,urgency,source,request_details,response_due_at,due_at,sla_policy_key,sla_policy_version,sla_calculated_at,sla_response_minutes,sla_resolution_minutes,catalogue_item_id,catalogue_item_name
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21,$22,$23,NOW(),$24,$25,$26,$27)`,
       [
         nextId,reference,title,description,requesterId,req.user.id,ticketPriority,openStatus,workspace,
         groupId,assigneeId,ticketType,category,subCategory,itemCategory,
-        impact,urgency,source,JSON.stringify(details),sla.responseDueAt,sla.resolutionDueAt,sla.policyKey,sla.policyVersion,sla.responseMinutes,sla.resolutionMinutes,
+        impact,urgency,source,JSON.stringify(details),sla.responseDueAt,sla.resolutionDueAt,sla.policyKey,sla.policyVersion,sla.responseMinutes,sla.resolutionMinutes,catalogue?.itemId||null,catalogue?.itemName||null,
       ]
     );
 
@@ -929,21 +949,34 @@ router.post("/:id/assign-agent",async(req,res)=>{
     if(["Resolved","Closed"].includes(existing.status)){
       return res.status(400).json({error:"This ticket is already resolved. Ask IT to reopen it before reassigning."});
     }
-    const assigneeId=id(req.body.assignedToUserId);
-    let groupId=existing.assigned_group_id;
-    if(assigneeId){
-      const membership=await pool.query(
-        `SELECT gm.group_id FROM support_group_members gm
-          JOIN support_groups g ON g.id=gm.group_id AND COALESCE(g.is_active,TRUE)=TRUE
-         WHERE gm.user_id=$1 ORDER BY gm.group_id`,
-        [assigneeId]
-      );
-      const groupIds=membership.rows.map((row)=>Number(row.group_id));
-      if(groupIds.length&&!groupIds.includes(Number(groupId)))groupId=groupIds[0];
-      if(!groupId&&groupIds.length)groupId=groupIds[0];
+    const assigneeId =
+      id(req.body.assignedToUserId);
+
+    let groupId =
+      id(req.body.assignedGroupId);
+
+    if (groupId === undefined) {
+      groupId = existing.assigned_group_id;
     }
-    if(!groupId)groupId=await defaultGroup(pool);
-    await validateAssignment(pool,groupId,assigneeId);
+
+    if (assigneeId) {
+      const governed =
+        await ticketGovernance.governedAssignment(
+          pool,
+          groupId,
+          assigneeId
+        );
+
+      groupId = governed.groupId;
+    } else if (!groupId) {
+      groupId = await defaultGroup(pool);
+    }
+
+    await validateAssignment(
+      pool,
+      groupId,
+      assigneeId
+    );
     await pool.query(
       `UPDATE tickets SET assigned_group_id=$1,assigned_to_user_id=$2,
        status=CASE WHEN $2::bigint IS NOT NULL AND status IN ('Open','Pending') THEN 'Assigned' ELSE status END,
@@ -1017,4 +1050,15 @@ router.patch("/:id/close",allowRoles("agent","operator","manager","admin","super
   finally{client.release();}
 });
 
+
+router.get("/:id/escalation-targets",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{return res.json({targets:await ticketGovernance.escalationTargets(pool,req.params.id)});}catch(error){return res.status(error.status||500).json({code:error.code||"ESCALATION_TARGETS_FAILED",error:error.message});}});
+router.post("/:id/escalate",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{const reason=text(req.body.reason,1000);if(reason.length<10)return res.status(400).json({code:"ESCALATION_REASON_REQUIRED",error:"Provide an escalation reason of at least 10 characters."});const client=await pool.connect();try{await client.query("BEGIN");const escalation=await ticketGovernance.escalate(client,{ticketId:req.params.id,actorId:req.user.id,targetUserId:req.body.targetUserId,targetLevel:req.body.targetLevel,reason,requestedAction:req.body.requestedAction,source:req.body.source||"helpdesk"});await history(client,req.params.id,req.user.id,"governed_escalation",null,JSON.stringify(escalation));await client.query("COMMIT");return res.status(201).json(escalation);}catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(error.status||500).json({code:error.code||"ESCALATION_FAILED",error:error.message});}finally{client.release();}});
+router.patch("/:id/important",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const important=req.body.important!==false;const result=await pool.query("UPDATE tickets SET is_important=$1,importance_source=$2,important_marked_at=CASE WHEN $1 THEN NOW() ELSE NULL END,important_marked_by_user_id=CASE WHEN $1 THEN $3 ELSE NULL END,updated_at=NOW() WHERE id=$4 AND status NOT IN ('Resolved','Closed') RETURNING *",[important,text(req.body.source||"manual",40),req.user.id,req.params.id]);if(!result.rowCount)return res.status(409).json({code:"IMPORTANT_FINAL_TICKET_DISABLED",error:"Important status cannot be changed on Resolved or Closed tickets."});await history(pool,req.params.id,req.user.id,"important_changed",String(!important),String(important));return res.json(decorate(result.rows[0]));}catch(error){return res.status(500).json({error:"Important status could not be updated."});}});
+
+router.get("/:id/conversation",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(!await canView(req.user,ticket))return res.status(403).json({error:"Access denied."});return res.json({ticketId:ticket.id,conversation:await ticketExperience.conversation(pool,ticket.id,operations(req.user)),internalNotesVisible:operations(req.user)});}catch(error){return res.status(500).json({error:"Conversation could not be loaded."});}});
+router.get("/:id/teams-conversation",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});const result=await pool.query("SELECT * FROM ticket_teams_conversations WHERE ticket_id=$1",[ticket.id]);return res.json(result.rows[0]||{ticketId:ticket.id,status:"contract_ready",liveActionPerformed:false});}catch(error){return res.status(500).json({error:"Teams conversation contract could not be loaded."});}});
+router.post("/:id/teams-conversation/prepare",allowRoles("manager","admin","superadmin"),async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(["Resolved","Closed"].includes(ticket.status))return res.status(409).json({error:"Closed work cannot start a Teams conversation."});const result=await pool.query("INSERT INTO ticket_teams_conversations(ticket_id,status,created_by_user_id) VALUES($1,'pending_authorisation',$2) ON CONFLICT(ticket_id) DO UPDATE SET status='pending_authorisation',updated_at=NOW() RETURNING *",[ticket.id,req.user.id]);await history(pool,ticket.id,req.user.id,"teams_conversation_prepared",null,"pending_authorisation");return res.status(201).json({...result.rows[0],liveActionPerformed:false});}catch(error){return res.status(500).json({error:"Teams conversation preparation failed."});}});
+router.get("/:id/survey",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});const survey=await ticketExperience.surveyFor(pool,ticket,req.user.id);return res.json(survey);}catch(error){return res.status(error.status||500).json({code:error.code,error:error.message});}});
+router.post("/:id/survey",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});await ticketExperience.surveyFor(pool,ticket,req.user.id);const rating=Number(req.body.rating);if(!Number.isInteger(rating)||rating<1||rating>5)return res.status(400).json({error:"Choose a rating from 1 to 5."});const result=await pool.query("UPDATE ticket_satisfaction_surveys SET rating=$1,resolution_confirmed=$2,comments=$3,invitation_status='completed',submitted_at=NOW(),updated_at=NOW() WHERE ticket_id=$4 AND requester_user_id=$5 RETURNING *",[rating,req.body.resolutionConfirmed!==false,text(req.body.comments,2000)||null,ticket.id,req.user.id]);await history(pool,ticket.id,req.user.id,"satisfaction_survey_submitted",null,JSON.stringify({rating,resolutionConfirmed:req.body.resolutionConfirmed!==false}));return res.json(result.rows[0]);}catch(error){return res.status(error.status||500).json({code:error.code,error:error.message});}});
+router.get("/:id/change-confirmations",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(!await canView(req.user,ticket))return res.status(403).json({error:"Access denied."});const result=await pool.query("SELECT * FROM ticket_change_confirmations WHERE ticket_id=$1 ORDER BY created_at DESC LIMIT 100",[ticket.id]);return res.json(result.rows);}catch(error){return res.status(500).json({error:"Change confirmations could not be loaded."});}});
 module.exports = router;

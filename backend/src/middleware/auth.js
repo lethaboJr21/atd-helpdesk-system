@@ -96,7 +96,7 @@ module.exports = async function authMiddleware(request, response, next) {
     const result = await pool.query(
       `SELECT id, name, email, role, department, status, approved, microsoft_id,
          microsoft_account_enabled, archived_at, last_login_at,
-         account_type, deactivated_at
+         account_type, authentication_mode, account_purpose, deactivated_at
        FROM users WHERE id = $1 LIMIT 1`,
       [payload.id]
     );
@@ -105,7 +105,16 @@ module.exports = async function authMiddleware(request, response, next) {
     if (user.archived_at) return response.status(403).json({ code: "ACCOUNT_ARCHIVED", error: "This account has been archived" });
     if (!user.approved || user.role === "pending") return response.status(403).json({ code: "ACCOUNT_PENDING", error: "This account is awaiting approval" });
     if (user.status !== "active" || user.deactivated_at) return response.status(403).json({ code: "ACCOUNT_DEACTIVATED", error: "This account is inactive or deactivated" });
-    if (user.microsoft_account_enabled === false) return response.status(403).json({ code: "MICROSOFT_ACCOUNT_DISABLED", error: "The linked Microsoft account is disabled" });
+    const localPasswordAccount =
+      user.account_purpose === "superadmin" ||
+      user.account_purpose === "station_operator" ||
+      user.authentication_mode === "local_password";
+    if (user.microsoft_account_enabled === false && !localPasswordAccount) {
+      return response.status(403).json({
+        code: "MICROSOFT_ACCOUNT_DISABLED",
+        error: "The linked Microsoft account is disabled",
+      });
+    }
     if (user.account_type !== "person") return response.status(403).json({ code: "NON_PERSON_ACCOUNT", error: "This account is not permitted to sign in interactively" });
     let overrides = {};
     try { overrides = await getFeatureEntitlements(user.id); }

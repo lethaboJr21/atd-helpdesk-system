@@ -1674,6 +1674,15 @@ function TicketQueue({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-bold text-[var(--portal-primary)]">
                       {ticketItem.ticket_ref || `TICKET-${ticketItem.id}`}
+                      {/* ATD-SCRIPT-828-FIX-NEW-TAG */}
+                      {ticketItem.is_new ? (
+                        <span
+                          className="inline-flex rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white"
+                          title={ticketItem.new_expires_at ? `New until ${new Date(ticketItem.new_expires_at).toLocaleString("en-ZA")}` : "Created within the last 24 hours"}
+                        >
+                          New
+                        </span>
+                      ) : null}
                     </span>
 
                     <span
@@ -1782,6 +1791,15 @@ function TicketPreview({
 
       <p className="mt-2 text-sm font-bold text-[var(--portal-primary)]">
         {ticket.ticket_ref || `TICKET-${ticket.id}`}
+        {/* ATD-SCRIPT-828-FIX-NEW-TAG */}
+        {ticket.is_new ? (
+          <span
+            className="inline-flex rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-white"
+            title={ticket.new_expires_at ? `New until ${new Date(ticket.new_expires_at).toLocaleString("en-ZA")}` : "Created within the last 24 hours"}
+          >
+            New
+          </span>
+        ) : null}
       </p>
 
       <p className="mt-1 text-base font-semibold text-slate-950">

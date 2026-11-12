@@ -493,3 +493,46 @@ body { background: var(--portal-page); color: var(--portal-text); }
   .dashboard-priority-controls > select,
   .dashboard-priority-controls > button { width: 100%; flex-basis: 100%; }
 }
+\n/* ATD-SCRIPT-831: incident form dark contrast and responsive header */
+.dark .ticket-create-page .bg-white { background-color: var(--portal-surface) !important; }
+.dark .ticket-create-page .bg-slate-50,
+.dark .ticket-create-page .bg-slate-50\/70,
+.dark .ticket-create-page .bg-slate-100 { background-color: var(--portal-surface-muted) !important; }
+.dark .ticket-create-page .text-slate-950,
+.dark .ticket-create-page .text-slate-900,
+.dark .ticket-create-page .text-slate-800,
+.dark .ticket-create-page .text-slate-700 { color: var(--portal-text) !important; }
+.dark .ticket-create-page .text-slate-600,
+.dark .ticket-create-page .text-slate-500,
+.dark .ticket-create-page .text-slate-400 { color: var(--portal-text-soft) !important; }
+.dark .ticket-create-page .border-slate-100,
+.dark .ticket-create-page .border-slate-200,
+.dark .ticket-create-page .border-slate-200\/80 { border-color: var(--portal-border) !important; }
+.dark .ticket-create-page input,
+.dark .ticket-create-page textarea,
+.dark .ticket-create-page select { background: var(--portal-control-bg) !important; color: var(--portal-text) !important; border-color: var(--portal-border-strong) !important; }
+.dark .ticket-create-page input::placeholder,
+.dark .ticket-create-page textarea::placeholder { color: var(--portal-text-muted) !important; opacity: 1; }
+.operations-header-actions > * { flex-shrink: 0; }
+.operations-header-actions [data-account-menu],
+.operations-header-actions .account-menu { min-width: 0; max-width: min(19rem, 100%); }
+@media (max-width: 900px) { .operations-header-actions { width: 100%; justify-content: flex-start; } }
+\n/* ATD-SCRIPT-832-KANBAN: reachable columns, independent scroll and pinned controls */
+.atd-kanban-board,.atd-monitor-columns{scrollbar-gutter:stable both-edges;overscroll-behavior-x:contain;scroll-snap-type:x proximity;}
+.atd-kanban-board>section,.atd-monitor-columns>section{scroll-snap-align:start;min-width:clamp(15rem,24vw,21rem);max-width:clamp(17rem,28vw,24rem);}
+.atd-kanban-board>section>header,.atd-monitor-columns>section>header{position:sticky;top:0;z-index:20;}
+.atd-kanban-board>section>div,.atd-monitor-columns>section>div{overscroll-behavior:contain;scrollbar-gutter:stable;}
+[data-sticky-list-footer]{position:sticky;bottom:0;z-index:40;flex-shrink:0;background:var(--portal-surface);}
+@media(max-width:700px){.atd-kanban-board>section,.atd-monitor-columns>section{min-width:min(82vw,19rem);max-width:min(88vw,21rem);}}
+
+/* ATD-SCRIPT-858-PORTAL-WHEEL-SCROLL
+   Shared fixed portal shells use explicit scroll owners. Keep vertical wheel/trackpad
+   chaining enabled; containment is reserved for true dialogs and horizontal boards. */
+html, body, #root { height: 100%; }
+body { overflow: auto; overscroll-behavior-y: auto; }
+.portal-shell { overscroll-behavior-y: auto; }
+.portal-shell [data-portal-wheel-scroll="ticket-workspace"] { overscroll-behavior-y: auto; scrollbar-gutter: stable; }
+.portal-shell [data-portal-wheel-scroll="ticket-workspace"] [role="region"] { overscroll-behavior-y: auto; }
+@media (pointer: fine) {
+  .portal-shell [data-portal-wheel-scroll="ticket-workspace"] { scroll-behavior: auto; }
+}

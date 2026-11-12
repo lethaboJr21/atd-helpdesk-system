@@ -1,5 +1,11 @@
 import axios from "axios";
 
+const resolveApiBaseUrl = () => {
+  if (typeof window === "undefined") return "/helpdesk/api";
+  const isLocal = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  return isLocal ? "/api" : "/helpdesk/api";
+};
+
 function getModuleBase() {
   return window.location.pathname.toLowerCase().startsWith("/production")
     ? "/production"
@@ -13,7 +19,7 @@ const API_BASE = import.meta.env.MODE === "production"
   : "/api";
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: resolveApiBaseUrl(),
   timeout: 30000,
   headers: { "Content-Type": "application/json" },
 });
@@ -35,8 +41,21 @@ api.interceptors.response.use(
 export const ticketsApi = {
   getAll: (params) => api.get("/tickets", { params }),
   getMine: () => api.get("/tickets/my-tickets"),
-  assignAgent: (ticketId, assignedToUserId) =>
-    api.post(`/tickets/${ticketId}/assign-agent`, { assignedToUserId }),
+  getEscalationTargets: (ticketId) => api.get(`/tickets/${ticketId}/escalation-targets`),
+  escalate: (ticketId, data) => api.post(`/tickets/${ticketId}/escalate`, data),
+  setImportant: (ticketId, important, source="manual") => api.patch(`/tickets/${ticketId}/important`, { important, source }),
+  assignAgent: (
+  ticketId,
+  assignedToUserId,
+  assignedGroupId = undefined
+) =>
+  api.post(
+    `/tickets/${ticketId}/assign-agent`,
+    {
+      assignedToUserId,
+      assignedGroupId,
+    }
+  ),
   getEmployeeView: () =>api.get("/tickets/employee-view"),
   getParticipantView: () => api.get("/tickets/participant-view"),
   getMyModules: () => api.get("/tickets/my-modules"),
@@ -54,7 +73,7 @@ export const ticketsApi = {
           body.append(key, String(value));
         }
       });
-      files.forEach((file) => body.append("attachments", file));
+      files.forEach((file) => { if (file instanceof File) body.append("attachments", file, file.name); });
       return api.post("/tickets", body, {
         headers: { "Content-Type": undefined },
         transformRequest: [(payload, headers) => {
@@ -86,7 +105,7 @@ export const ticketsApi = {
     }),
   uploadAttachments: (id, files = []) => {
     const body = new FormData();
-    (files || []).forEach((file) => body.append("attachments", file));
+    (files || []).forEach((file) => { if (file instanceof File) body.append("attachments", file, file.name); });
     return api.post(`/tickets/${id}/attachments`, body, {
       headers: { "Content-Type": undefined },
       transformRequest: [
@@ -100,6 +119,12 @@ export const ticketsApi = {
     });
   },
   getComments: (id) => api.get(`/tickets/${id}/comments`),
+  getConversation: (id) => api.get(`/tickets/${id}/conversation`),
+  getSurvey: (id) => api.get(`/tickets/${id}/survey`),
+  submitSurvey: (id, data) => api.post(`/tickets/${id}/survey`, data),
+  getTeamsConversation: (id) => api.get(`/tickets/${id}/teams-conversation`),
+  prepareTeamsConversation: (id) => api.post(`/tickets/${id}/teams-conversation/prepare`, {}),
+  getChangeConfirmations: (id) => api.get(`/tickets/${id}/change-confirmations`),
   addComment: (id, data) => api.post(`/tickets/${id}/comments`, data),
   replyAction: (id, data) => api.post(`/tickets/${id}/reply-action`, data),
   getEmailParticipants: (id) => api.get(`/assignment-acceptance/${id}/email-participants`),
@@ -112,6 +137,9 @@ export const groupsApi = {
   getAll: () => api.get("/groups"),
   getCatalogue: () => api.get("/groups/catalogue"),
   getAgents: (params) => api.get("/groups/agents", { params }),
+  getCatalogueAgents: () => api.get("/groups/catalogue-agents"),
+  getRequesters: () => api.get("/groups/requesters"),
+  getRequestBeneficiaries: () => api.get("/groups/request-beneficiaries"),
   getMembers: (groupId) => api.get(`/groups/${groupId}/members`),
   getEligibleAgents: () => api.get("/groups/eligible-agents"),
   create: (data) => api.post("/groups", data),
@@ -158,10 +186,12 @@ export const settingsApi = {
 };
 export const archiveRulesApi = { getAll:()=>api.get("/archive-rules"), create:(data)=>api.post("/archive-rules",data) };
 export const companyCommunicationsApi = {
+  communicationMonitoring: () => api.get("/company-communications/monitoring/summary"),
+  recordInteraction: (id,data) => api.post(`/company-communications/${id}/interactions`,data),
   getAll: () => api.get("/company-communications"),
   preview: (data) => api.post("/company-communications/preview", data),
   audienceOptions: () => api.get("/company-communications/audience-options"),
-  create: (data, files = []) => { const body = new FormData(); Object.entries(data || {}).forEach(([key,value]) => body.append(key, typeof value === "object" ? JSON.stringify(value) : String(value))); files.forEach((file) => body.append("attachments", file)); return api.post("/company-communications", body, { headers: { "Content-Type": undefined }, transformRequest: [(payload,headers) => { if (payload instanceof FormData && headers) delete headers["Content-Type"]; return payload; }] }); },
+  create: (data, files = []) => { const body = new FormData(); Object.entries(data || {}).forEach(([key,value]) => body.append(key, typeof value === "object" ? JSON.stringify(value) : String(value))); files.forEach((file) => { if (file instanceof File) body.append("attachments", file, file.name); }); return api.post("/company-communications", body, { headers: { "Content-Type": undefined }, transformRequest: [(payload,headers) => { if (payload instanceof FormData && headers) delete headers["Content-Type"]; return payload; }] }); },
   attachments: (id) => api.get(`/company-communications/${id}/attachments`),
   downloadAttachment: (id, attachmentId) => api.get(`/company-communications/${id}/attachments/${attachmentId}/download`, { responseType: "blob" }),
   removeAttachment: (id, attachmentId) => api.delete(`/company-communications/${id}/attachments/${attachmentId}`),
@@ -198,6 +228,7 @@ export const assetsApi = {
 
 export const catalogApi = {
   getService: () => api.get("/catalog/service"),
+  getManagedItServices: () => api.get("/catalog/managed-it-services", { timeout: 8000 }),
   getAssets: () => api.get("/catalog/assets"),
   getFields: () => api.get("/catalog/fields"),
 };
@@ -234,6 +265,7 @@ export const employeeExperienceApi = {
   accept: (documentIds) => api.post("/terms/accept", { documentIds }),
 };
 export const authApi = {
+  loginOptions: (identifier) => api.post("/auth/login-options", { identifier }),
   login: (credentials) =>
      api.post("/auth/login", credentials),
   signup: (data) =>
@@ -249,10 +281,23 @@ export const authApi = {
 export const userApi = {
   getUsers: (params) => api.get("/users", { params }),
   unwrapUsers: (payload) => {
-    if (Array.isArray(payload)) return { users: payload, pagination: null };
+    const source = payload?.data && !Array.isArray(payload) ? payload.data : payload;
+    const users = Array.isArray(source)
+      ? source
+      : Array.isArray(source?.users)
+        ? source.users
+        : Array.isArray(source?.accounts)
+          ? source.accounts
+          : Array.isArray(source?.items)
+            ? source.items
+            : Array.isArray(source?.rows)
+              ? source.rows
+              : Array.isArray(source?.results)
+                ? source.results
+                : [];
     return {
-      users: Array.isArray(payload?.users) ? payload.users : [],
-      pagination: payload?.pagination || null,
+      users,
+      pagination: source?.pagination || source?.meta?.pagination || null,
     };
   },
   getMeta: () => api.get("/users/meta"),
@@ -320,6 +365,16 @@ export const productionEventsApi = {
 };
 
 
+export const workspaceCatalogueApi = {
+  getItems: (params = {}) => api.get("/workspace-catalogue/items", { params }),
+  getHistory: (id) => api.get(`/workspace-catalogue/items/${id}/history`),
+  createItem: (data) => api.post("/workspace-catalogue/items", data),
+  updateItem: (id, data) => api.put(`/workspace-catalogue/items/${id}`, data),
+  duplicateItem: (id) => api.post(`/workspace-catalogue/items/${id}/duplicate`, {}),
+  changeStatus: (id, data) => api.patch(`/workspace-catalogue/items/${id}/status`, data),
+  ensureOther: (data) => api.post("/workspace-catalogue/ensure-other", data),
+  requestOptions: (params) => api.get("/workspace-catalogue/request-options", { params }),
+};
 export const workspacesApi = {
   getAll: (params) => api.get("/workspaces", { params }),
   getById: (id) => api.get(`/workspaces/${id}`),
@@ -335,12 +390,66 @@ export const workspacesApi = {
   removeMember: (id, memberId, reason) => api.delete(`/workspaces/${id}/members/${memberId}`, { data: { reason } }),
   getActivity: (id) => api.get(`/workspaces/${id}/activity`),
 };
+export const processEngineeringWorkspaceApi = {
+  accessContext: () => api.get("/process-engineering-workspace/access-context"),
+  dashboard: () => api.get("/process-engineering-workspace/dashboard"),
+  catalogue: () => api.get("/process-engineering-workspace/catalogue"),
+  tickets: () => api.get("/process-engineering-workspace/tickets"),
+  activity: () => api.get("/process-engineering-workspace/activity"),
+  completionReport: () => api.get("/process-engineering-workspace/completion-report"),
+  downloadExport: () => api.get("/process-engineering-workspace/export.xlsx?reviewed=true",{responseType:"blob"}),
+    ticketContext: (ticketId) => api.get(`/process-engineering-workspace/ticket-context/${ticketId}`),
+    saveTicketContext: (ticketId, data) => api.put(`/process-engineering-workspace/ticket-context/${ticketId}`, data),
+};
+export const financeWorkspaceManagementApi = {
+  financeFunctions: () => api.get("/finance-workspace/management/functions"),
+  addFinanceFunction: data => api.post("/finance-workspace/management/functions",data),
+  updateFinanceFunction: (id,data) => api.put(`/finance-workspace/management/functions/${id}`,data),
+  retireFinanceFunction: (id,data) => api.post(`/finance-workspace/management/functions/${id}/retire`,data),
+  restoreFinanceFunction: id => api.post(`/finance-workspace/management/functions/${id}/restore`),
+  updateEmployeeResponsibility: (userId,data) => api.put(`/finance-workspace/management/employees/${userId}/responsibility`,data),
+  setEmployeeScopeStatus: (userId,data) => api.post(`/finance-workspace/management/employees/${userId}/scope-status`,data),
+  previewDutyDelegation: data => api.post("/finance-workspace/management/duty-delegations/preview",data),
+  createDutyDelegation: data => api.post("/finance-workspace/management/duty-delegations",data),
+  financeLocations: () => api.get("/finance-workspace/management/locations"),
+  governedEmployees: () => api.get("/finance-workspace/management/employees"),
+  assignmentSelectors: () => api.get("/finance-workspace/management/assignment-selectors"),
+  addEmployee: (userId,data) => api.post(`/finance-workspace/management/employees/${userId}/add`,data),
+  removeEmployee: (userId,data) => api.post(`/finance-workspace/management/employees/${userId}/remove`,data),
+  restoreEmployee: (userId,data) => api.post(`/finance-workspace/management/employees/${userId}/restore`,data),
+  refreshManagerSuggestions: () => api.post("/finance-workspace/management/manager-suggestions/refresh",{}),
+  overrideManager: (userId,data) => api.put(`/finance-workspace/management/manager-suggestions/${userId}/override`,data),
+  positionDutyTemplates: () => api.get("/finance-workspace/management/position-duty-templates"),
+  duties: params => api.get("/finance-workspace/management/duties",{params}),
+  addDuty: data => api.post("/finance-workspace/management/duties",data),
+  updateDuty: (id,data) => api.put(`/finance-workspace/management/duties/${id}`,data),
+  kpis: () => api.get("/finance-workspace/management/kpis"),
+  addKpi: data => api.post("/finance-workspace/management/kpis",data),
+  updateKpi: (id,data) => api.put(`/finance-workspace/management/kpis/${id}`,data),
+  executiveDashboard: () => api.get("/finance-workspace/management/executive-dashboard"),
+  boardroomBookings: () => api.get("/finance-workspace/management/boardroom-bookings"),
+  bookBoardroom: data => api.post("/finance-workspace/management/boardroom-bookings",data),
+};
 export const financeWorkspaceApi = {
+  financeTaskControl: ticketId => api.get(`/finance-workspace/tasking/${ticketId}/control`),
+  updateFinanceTaskReminder: (ticketId,data) => api.put(`/finance-workspace/tasking/${ticketId}/reminders`,data),
+  classifyFinanceCommunication: (ticketId,data) => api.post(`/finance-workspace/tasking/${ticketId}/communications`,data),
+  updateFinanceParticipantAccess: (ticketId,participantId,data) => api.put(`/finance-workspace/tasking/participants/${ticketId}/${participantId}/access`,data),
+  taskParticipants: ticketId => api.get(`/finance-workspace/tasking/participants/${ticketId}`),
+  addTaskParticipant: (ticketId,data) => api.post(`/finance-workspace/tasking/participants/${ticketId}`,data),
+  submitFinanceTask: (ticketId,data={}) => api.post(`/finance-workspace/tasking/${ticketId}/submit`,data),
+  reviewFinanceTask: (ticketId,data) => api.post(`/finance-workspace/tasking/${ticketId}/review`,data),
+  financeSenderAutomation: () => api.get("/finance-workspace/sender-automation"),
+  createFinanceSenderAutomation: data => api.post("/finance-workspace/sender-automation",data),
+  financeCompletionMonitor: () => api.get("/finance-workspace/completion-monitor"),
+    accessContext: () => api.get("/finance-workspace/access-context"),
+    catalogue: () => api.get("/finance-workspace/catalogue"),
   administration: () => api.get("/finance-workspace/administration"),
   updateOffice: (code, data) => api.put(`/finance-workspace/offices/${code}`, data),
   updateEmployeeStatus: (userId, data) => api.patch(`/finance-workspace/employees/${userId}/status`, data),
   updateExternalSender: (senderId, data) => api.put(`/finance-workspace/external-senders/${senderId}`, data),  configuration: () => api.get("/finance-workspace/configuration"),
   dashboard: () => api.get("/finance-workspace/dashboard"),
+  reportingSummary: () => api.get("/finance-workspace/reporting-summary"),
   employees: () => api.get("/finance-workspace/employees"),
   updateEmployee: (userId, data) => api.put(`/finance-workspace/employees/${userId}`, data),
   mailboxes: () => api.get("/finance-workspace/mailboxes"),
@@ -353,7 +462,52 @@ export const financeWorkspaceApi = {
   updateMailbox: (mailboxId, data) => api.put(`/finance-workspace/mailboxes/${mailboxId}`, data),
   saveExternalSender: (data) => api.post("/finance-workspace/external-senders", data),
   triageConsole: (state = "triage_required") => api.get("/finance-workspace/triage-console", { params: { state } }),
-  bulkDelegate: (data) => api.post("/finance-workspace/tickets/bulk-delegate", data),  exportContract: () => api.get("/finance-workspace/export-contract"),
+  bulkDelegate: (data) => api.post("/finance-workspace/tickets/bulk-delegate", data),
+  correspondence: (params) => api.get("/finance-workspace/correspondence", { params }),
+  emailTickets: (params={}) => api.get("/finance-workspace/correspondence", { params: { filter: "all", ...params } }),
+  mailboxHealth: () => api.get("/finance-workspace/email-intake/health"),
+  intakeExceptions: (params={}) => api.get("/finance-workspace/email-intake/exceptions", { params }),
+  reprocessIntakeException: (id,data={}) => api.post(`/finance-workspace/email-intake/exceptions/${id}/reprocess`,data),
+  resolveIntakeException: (id,data) => api.post(`/finance-workspace/email-intake/exceptions/${id}/resolve`,data),
+  emailRoutingRules: () => api.get("/finance-workspace/email-intake/rules"),
+  approvalRecords: (type,params={}) => api.get(`/finance-workspace/approvals/${type}`,{params}),
+  monthEndPeriod: period => api.get(`/finance-workspace/month-end/${period}`),
+  governanceRecords: area => api.get(`/finance-workspace/governance/${area}`),
+  peoplePerformanceDashboard: period => api.get("/finance-workspace/people-performance/dashboard",{params:{period}}),
+  financeDuties: params => api.get("/finance-workspace/people-performance/duties",{params}),
+  createFinanceDuty: data => api.post("/finance-workspace/people-performance/duties",data),
+  updateFinanceDuty: (id,data) => api.put(`/finance-workspace/people-performance/duties/${id}`,data),
+  financeKpis: period => api.get("/finance-workspace/people-performance/kpis",{params:{period}}),
+  createFinanceKpi: data => api.post("/finance-workspace/people-performance/kpis",data),
+  reviewFinanceKpi: (id,data) => api.post(`/finance-workspace/people-performance/kpis/${id}/review`,data),
+  teamAdminAction: (userId,data) => api.post(`/finance-workspace/people-performance/team/${userId}/action`,data),
+  createAudit: data => api.post("/finance-workspace/governance/audits",data),
+  createAuditItem: (id,data) => api.post(`/finance-workspace/governance/audits/${id}/items`,data),
+  createFinanceEvidence: data => api.post("/finance-workspace/governance/evidence",data),
+  reviewFinanceEvidence: (id,data) => api.post(`/finance-workspace/governance/evidence/${id}/review`,data),
+  financeNotificationAction: (id,data) => api.post(`/finance-workspace/governance/notifications/${id}/action`,data),
+  createFinanceAccessRequest: data => api.post("/finance-workspace/governance/access",data),
+  decideFinanceAccessRequest: (id,data) => api.post(`/finance-workspace/governance/access/${id}/decision`,data),
+  openMonthEndPeriod: data => api.post("/finance-workspace/month-end/periods",data),
+  monthEndTemplates: () => api.get("/finance-workspace/month-end/templates/all"),
+  createMonthEndTemplate: data => api.post("/finance-workspace/month-end/templates",data),
+  generateMonthEndTasks: period => api.post(`/finance-workspace/month-end/${period}/generate`,{}),
+  createMonthEndTask: (period,data) => api.post(`/finance-workspace/month-end/${period}/tasks`,data),
+  monthEndTaskAction: (id,data) => api.post(`/finance-workspace/month-end/tasks/${id}/action`,data),
+  bulkMonthEndTasks: data => api.post("/finance-workspace/month-end/tasks/bulk",data),
+  createJournal: data => api.post("/finance-workspace/approvals/journals",data),
+  createReconciliation: data => api.post("/finance-workspace/approvals/reconciliations",data),
+  approvalAction: (type,id,data) => api.post(`/finance-workspace/approvals/${type}/${id}/action`,data),
+  approvalHistory: (type,id) => api.get(`/finance-workspace/approvals/${type}/${id}/history`),
+  createEmailRoutingRule: data => api.post("/finance-workspace/email-intake/rules",data),
+  updateEmailRoutingRule: (id,data) => api.put(`/finance-workspace/email-intake/rules/${id}`,data),
+  syncCorrespondence: () => api.post("/finance-workspace/correspondence/sync"),
+  updateCorrespondence: (id, data) => api.patch(`/finance-workspace/correspondence/${id}`, data),
+  exportContract: () => api.get("/finance-workspace/export-contract"),
+  monitoringStatus: () => api.get("/finance-workspace/monitoring-status"),
+  convertCorrespondence: (id,data={}) => api.post(`/finance-workspace/correspondence/${id}/convert-to-ticket`,data),
+  exportPreview: (params={}) => api.get("/finance-workspace/export-preview",{params}),
+  downloadExport: () => api.get("/finance-workspace/export.xlsx?reviewed=true",{responseType:"blob"}),
 };
 
 export default api;
@@ -376,7 +530,7 @@ export const profileMediaApi = {
     const data = new FormData();
     data.append("image", file);
     data.append("visibility", visibility);
-    return api.post(`/profile-media/users/${userId}/${mediaType}`, data, { headers: { "Content-Type": "multipart/form-data" } });
+    return api.post(`/profile-media/users/${userId}/${mediaType}`, data, { });
   },
   remove: (userId, mediaType, reason) => api.delete(`/profile-media/users/${userId}/${mediaType}`, { data: { reason } }),
 };

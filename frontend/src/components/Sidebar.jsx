@@ -3,6 +3,7 @@ import {
   Archive,
   BriefcaseBusiness,
   WalletCards,
+    DraftingCompass,
   ChevronLeft,
   ChevronRight,
   ExternalLink,
@@ -106,11 +107,11 @@ export default function Sidebar({
       label: "Workspaces",
       path: "/workspaces",
     },
-    {
-      icon: WalletCards,
-      label: "Finance Workspace",
-      path: "/finance-workspace",
-    },
+      {
+        icon: DraftingCompass,
+        label: "Process Engineering (PDM)",
+        path: "/process-engineering-workspace",
+      },
     {
       icon: HardDrive,
       label: "Assets",
@@ -146,12 +147,24 @@ export default function Sidebar({
   }
 
   if (["manager","admin","superadmin"].includes(user?.role)) {
-    operationsItems.push({
+    operationsItems.push(
+{
+      icon: User,
+      label: "IT Agents & Groups",
+      path: "/helpdesk/admin/groups",
+    },
+{
       icon: User,
       label: "Switch to Employee View",
       path: "/employee",
       action: "enter-employee-view",
-    });
+    },
+{
+      icon: User,
+      label: "Finance Department",
+        path: "/helpdesk/finance-workspace",
+        onClick: () => window.location.assign(`${window.location.origin}/helpdesk/finance-workspace`)
+      });
   }
 
   const agentAllowed = new Set(["Operations Dashboard","Ticket Workspace","Solutions"]);
@@ -415,7 +428,7 @@ export default function Sidebar({
                 <div className="min-w-[12rem]">
                   <p className="flex items-center gap-2 whitespace-nowrap text-sm font-bold text-blue-100">
                     <Zap className="h-4 w-4 shrink-0" />
-                    {employeeExperience ? "Something broken?" : "Smart Triage"}
+                    {employeeExperience ? "Something broken?" : "Smart Prioritisation"}
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-slate-300">
                     {employeeExperience

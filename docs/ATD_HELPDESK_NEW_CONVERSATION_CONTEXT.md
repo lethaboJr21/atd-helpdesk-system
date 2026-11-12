@@ -334,3 +334,88 @@ Updated: 2026-09-13 22:07:08
 - Database, email, notification delivery, Git, server restart, and deployment actions: NONE.
 - Script 516 failed safely and rolled back before this exact-source implementation.
 <!-- ATD-SCRIPT-519-FIX-VERIFIED-ROUTING-END -->
+
+## Model-ready continuation context - Finance Workspace through Script 838
+
+### Current state after Script 838
+- Scripts 836 and 837 are locally complete and frontend-build validated.
+- New Request uses beneficiary-first selection, includes an incident catalogue and keeps Other as a blank editable incident.
+- Catalogue items are clickable, use coloured icons and can govern locked Short Summary and Priority values.
+- Verified ATD employee accounts follow server-validated Microsoft SSO routing; local password entry is reserved for eligible local accounts under backend authority.
+- Finance Workspace is available at `/finance-workspace` and is presented as **Finance Department** beneath **Workspaces** in Operations navigation.
+- Finance Workspace already contains the local foundation for configuration, Finance employee duties, authorised mailboxes, external-sender handling, queues, prioritisation, delegation, delegation history, dashboard reporting and export contract.
+
+### Do not assume
+- Do not assume production contains the latest Finance migrations or frontend bundle.
+- Do not assume live Microsoft Graph email intake is authorised or enabled.
+- Do not assume confidential Finance uploads are enabled.
+- Do not assume a local build validates role scope, manager hierarchy, email idempotency, Excel output or production deployment.
+- Do not copy unrestricted production data into local development. Use an approved, read-only, minimised, pseudonymised reporting replica with outbound actions disabled.
+- Do not hard-code future catalogue items only in the request modal. Catalogue administration must be governed, persistent and consumed by request creation.
+- Do not show an SLA percentage without exposing the governing target and whether the percentage represents response or resolution time.
+
+### Next Finance milestone gate
+Perform one consolidated Finance milestone test covering access scope, employee population, mailbox controls, external senders, actionable-email conversion, unattended detection, delegation, audit evidence, structured product capture, dashboard drill-down and reviewed Excel export. After the test passes, prepare one controlled production deployment and one consolidated milestone report.
+
+## Script 841 username-first authentication and station operators
+- Server-authoritative username/email routing: implemented locally.
+- Verified company-domain employees route to Microsoft SSO.
+- Superadministrator and approved local identities use password authentication.
+- Plant operators may request username-based station accounts without email; plant and station are compulsory and approval remains required.
+- Migration created but not executed; production deployment and milestone functional testing not performed.
+
+
+## Shared workspace catalogue architecture - Script 845
+Workspaces is the reusable departmental framework. IT is the default template, while Finance, Process Engineering (PDM) and future departments consume the same capabilities. Categories, field types, permissions, SLA policies, routing, functions and capability definitions remain IT/developer governed. Authorised administrators manage incident and service-request items without code. Catalogue items are ticket templates. Other opens a manual untemplated ticket while preserving workspace, catalogue type, category and sub-category, and records the original Other route for later reclassification.
+
+## 2026-10-29 Finance Workspace, Authentication, Catalogue and Communications Checkpoint
+
+### Current continuation brief
+
+- Authentication repair is locally complete. Company accounts use Microsoft SSO by default, non-company active local accounts use password login, and the authorised account has both methods.
+- Finance Workspace direct assignment is locally isolated from IT support groups.
+- All 24 verified Finance employees have Finance profile foundations and must remain visible in every Finance selector.
+- Finance email automation, completion events, catalogue `Other` entries and Company Communications interaction monitoring foundations are locally implemented.
+- The next conversation must begin with local runtime validation and Finance Manager demonstration preparation, not another broad implementation.
+- Use a governed external-email demonstration with visible `Demonstration data` classification. Add real Finance mailboxes and sender addresses only after they are supplied and approved.
+- Production Company Communications delivery and interaction records must be inspected on the server before final operational claims.
+
+## 2026-10-31 Finance/PDM major-batch implementation checkpoint
+- Preflight-first execution standard is mandatory: feasibility checks complete before implementation starts; blocked checks make zero implementation changes.
+- Finance and Process Engineering workspace route declarations and backend registrations were verified before changes.
+- Added Finance task collaboration lifecycle foundation for assistants, reviewers, collaborators, submission/review, ratings/KPI linkage, reminder configuration and classified task communications.
+- Database migration is generated but not executed locally by this implementation script; production DB execution requires its own schema/transaction/backup preflight.
+- Backend syntax and frontend production build passed after implementation.
+- Next work: connect UI controls and dashboards to the tasking APIs, then guarded DB migration/deployment and runtime Finance/PDM 404 validation.
+## 2026-11-01 Finance/PDM UI continuation completed
+- Finance participant/submission/review API client methods wired.
+- Finance task monitoring added for ownership, due dates, evidence, review, acknowledgement and KPI linkage.
+- PDM shared task surface inserted using a source-aware verified render boundary.
+- Both preflight and post-change frontend builds passed. Next: interactive task tables, reminders, evidence permissions, classified communication and guarded UI production deployment.
+
+## 2026-11-01 Finance work-control continuation
+- Added due/reminder controls, classified Finance task communications, participant visibility/edit permissions and consolidated task-control API.
+- Added Finance frontend API methods and dashboard guidance for assignment, reminders, communication and visibility.
+- Preflight/backend syntax/frontend build/post-change validation passed.
+- Next: production migration/API/UI deployment, interactive employee/manager drill-down tables and morning Finance reminder scheduling.
+
+## 2026-11-01 Weekly milestone transfer and reporting foundation
+- Completed task entries are transferred by copy/linkage into ATD_HELPDESK_MILESTONE_TRACKER.md/.json/.csv; original task history is preserved.
+- Milestones are grouped by week and include project, workstream, completion date, source, environment and production server scope.
+- JSON/CSV are reusable for Helpdesk reporting and preview-first Excel export.
+- Morning reminder enhancement queued as implementation priority: split New (<7 days) and Older (>=7 days), with due today, overdue, due soon, awaiting review and assignment counts.
+
+## 2026-11-01 Login-options repair + morning reminder reporting batch
+- Production login error 'Sign-in options could not be loaded' is included in the guarded production diagnosis/deployment gate and validates both /api/auth/login-options and /helpdesk/api/auth/login-options before source activation.
+- Morning reminder reporting now has a reusable 7-day age model: New <7 days and Older >=7 days, with overdue, due-today, awaiting-review and unassigned summaries.
+- The reminder structure is intended for email cards, dashboard preview, filtering and Excel/report exports.
+
+## 2026-11-02 Complete backend dependency sync and login deployment
+- The previous isolated-file deployment was replaced by complete backend/src synchronization after validating every JavaScript file and the previously missing Finance/workspace dependencies.
+- Production validates npm dependencies, PM2 stability, port 3001, direct/public login-options, and all required workspace routes before retaining changes.
+- Automatic rollback protects backend source, frontend roots, Apache configuration, and PM2 runtime.
+
+## 2026-11-02 Assignment and catalogue foundation repair
+- Restored and verified the agent work-preferences and shared workspace catalogue schema foundations.
+- Recovery validation skips already-present relations, checks the live PM2 process and non-5xx authenticated endpoints, and does not treat historical pre-migration PM2 log entries as fresh failures.
+- Follow-on batch: requester/beneficiary workflow, governed IT assignees, simplified assignee selector, and default IT Helpdesk landing with governed Finance switching.

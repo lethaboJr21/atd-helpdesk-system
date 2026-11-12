@@ -24,7 +24,7 @@ import {
   moduleForTicketType,
   suggestPriority,
 } from "../data/requestModules";
-import { catalogApi, groupsApi, ticketsApi, userApi } from "../services/api";
+import { catalogApi, groupsApi, ticketsApi, userApi, workspaceCatalogueApi, workspacesApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
 const OPERATIONS_ROLES = new Set([
@@ -35,12 +35,7 @@ const OPERATIONS_ROLES = new Set([
   "superadmin",
 ]);
 
-const ALLOWED = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/pdf",
-];
+const ALLOWED = ["image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain", "text/csv", "application/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
 
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
@@ -65,7 +60,7 @@ const DEFAULT_FIELDS = {
     categories: [],
     impact: ["Low", "Medium", "High"],
     urgency: ["Low", "Medium", "High"],
-    priority: ["Low", "Medium", "High", "Critical"],
+    priority: ["Low", "Medium"],
     majorIncidentTypes: [
       "Full outage",
       "Partial outage",
@@ -84,7 +79,7 @@ const DEFAULT_FIELDS = {
 
 /**
  * Locked single-type create form.
- * Type comes from route / query / state — never a tab switcher.
+ * Type comes from route / query / state ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never a tab switcher.
  */
 export default function TicketCreatePage({ lockedType = null }) {
   const navigate = useNavigate();
@@ -96,6 +91,8 @@ export default function TicketCreatePage({ lockedType = null }) {
   const employee = user?.role === "user" || employeeView;
 
   const catalogItem = location.state?.catalogItem || null;
+  const beneficiary = params.get("beneficiary") || location.state?.beneficiary || "self";
+  const requestingForSomeoneElse = beneficiary === "other";
 
   const resolved = useMemo(() => {
     const catalogueKey =
@@ -122,6 +119,10 @@ export default function TicketCreatePage({ lockedType = null }) {
   const ticketType = resolved.ticketType;
   const catalogueKey = resolved.catalogueKey;
   const catalogue = resolved.catalogue;
+  const isBlankOtherIncident = params.get("blank") === "true" || params.get("catalogue") === "other";
+  const lockCatalogueTitle = params.get("lockTitle") === "true" && !isBlankOtherIncident;
+  const lockCataloguePriority = params.get("lockPriority") === "true" && !isBlankOtherIncident;
+  const cataloguePriority = params.get("priority") || "Medium";
   const module = moduleForTicketType(ticketType);
   const Icon = catalogue?.icon || module.icon;
   const linkedAsset = location.state?.asset || null;
@@ -158,11 +159,20 @@ export default function TicketCreatePage({ lockedType = null }) {
   const [reviewing, setReviewing] = useState(false);
   const errorRef = useRef(null);
   const [fields, setFields] = useState(DEFAULT_FIELDS);
+
+  const [workspaces, setWorkspaces] = useState([]);
+  const [workspaceResolutionError, setWorkspaceResolutionError] =
+  useState("");
+
+  const [workspaceCatalogueItems, setWorkspaceCatalogueItems] = useState([]);
+
+  const [catalogueResolutionError, setCatalogueResolutionError] = useState("");
+  // REQUEST_FOR_SOMEONE_ELSE_CONTEXT: 'other' requires an explicit requester; 'self' retains the existing authenticated-requester behavior.
   const [form, setForm] = useState({
     requesterId: "",
     title: prefillTitle,
     description: "",
-    priority: "Medium",
+    priority: cataloguePriority,
     workspace: module.workspace,
     assignedGroupId: "",
     assignedToUserId: "",
@@ -280,13 +290,9 @@ export default function TicketCreatePage({ lockedType = null }) {
 
   useEffect(() => {
     if (ticketType !== "incident") return;
-    const suggested = suggestPriority(form.impact, form.urgency);
-    setForm((current) =>
-      current.priority === suggested
-        ? current
-        : { ...current, priority: suggested }
-    );
-  }, [form.impact, form.urgency, ticketType]);
+    const suggested = form.isMajorIncident ? "Critical" : suggestPriority(form.impact, form.urgency);
+    setForm((current) => current.priority === suggested ? current : { ...current, priority: suggested });
+  }, [form.impact, form.urgency, form.isMajorIncident, ticketType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -319,27 +325,26 @@ export default function TicketCreatePage({ lockedType = null }) {
         }
 
         if (
-          (catalogueKey === "create_for_other" ||
-            ticketType === "service_request" ||
-            ticketType === "asset_request") &&
-          operational
+          requestingForSomeoneElse ||
+          ((ticketType === "service_request" || ticketType === "asset_request") && operational)
         ) {
-          const users = await userApi.getActiveUsers({ limit: 1000 });
+          const users = requestingForSomeoneElse
+            ? await groupsApi.getRequestBeneficiaries()
+            : await groupsApi.getRequesters();
           if (!cancelled) {
             const payload = users.data;
-            setRequesters(
-              Array.isArray(payload)
-                ? payload
-                : Array.isArray(payload?.users)
-                  ? payload.users
-                  : []
-            );
+            setRequesters(userApi.unwrapUsers(payload).users);
           }
         }
       } catch (loadError) {
         if (!cancelled) {
           setError(
-            message(loadError, "Supporting information could not be loaded.")
+            loadError?.response?.status === 404
+              ? "Some optional supporting information is not configured. Available form sections remain usable."
+              : message(
+                  loadError,
+                  "Supporting information could not be loaded."
+                )
           );
         }
       }
@@ -349,24 +354,35 @@ export default function TicketCreatePage({ lockedType = null }) {
     return () => {
       cancelled = true;
     };
-  }, [employee, operational, catalogueKey, ticketType]);
+  }, [employee, operational, catalogueKey, ticketType, requestingForSomeoneElse]);
 
   useEffect(() => {
     let cancelled = false;
     setLoadingAgents(true);
 
-    groupsApi
-      .getAgents({
-        category: form.category || undefined,
-        subCategory: form.subCategory || undefined,
-      })
-      .then((response) => {
-        if (!cancelled) {
-          setAgents(Array.isArray(response.data) ? response.data : []);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAgents([]);
+    const loadEligibleAgents = async () => {
+      try {
+        const primary = employee ? await groupsApi.getCatalogueAgents() : await groupsApi.getAgents({
+          category: form.category || undefined,
+          subCategory: form.subCategory || undefined,
+        });
+        const primaryAgents = Array.isArray(primary.data) ? primary.data : [];
+        if (primaryAgents.length > 0) return primaryAgents;
+      } catch (primaryError) {
+        // Continue to the authoritative eligible-agent directory below.
+      }
+
+      try {
+        const fallback = await groupsApi.getEligibleAgents();
+        return Array.isArray(fallback.data) ? fallback.data : [];
+      } catch (fallbackError) {
+        return [];
+      }
+    };
+
+    loadEligibleAgents()
+      .then((availableAgents) => {
+        if (!cancelled) setAgents(availableAgents);
       })
       .finally(() => {
         if (!cancelled) setLoadingAgents(false);
@@ -377,25 +393,10 @@ export default function TicketCreatePage({ lockedType = null }) {
     };
   }, [form.category, form.subCategory]);
 
-  const recommendedAgents = useMemo(() => {
-    const scored = agents.filter(
-      (agent) => agent.resolvedSub > 0 || agent.resolvedCategory > 0
-    );
-    const pool = scored.length
-      ? scored
-      : agents.filter((agent) => agent.resolvedTotal > 0);
-    const available = pool.filter((agent) => agent.onShift !== false);
-    return (available.length ? available : pool).slice(0, 3);
-  }, [agents]);
-
-  const otherAgents = useMemo(() => {
-    const recommendedIds = new Set(recommendedAgents.map((agent) => agent.id));
-    return agents
-      .filter((agent) => !recommendedIds.has(agent.id))
-      .slice()
-      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  }, [agents, recommendedAgents]);
-
+  const eligibleAgents = useMemo(
+    () => agents.slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [agents]
+  );
   const selectAgent = (value) => {
     if (!value) {
       setForm((current) => ({ ...current, assignedToUserId: "" }));
@@ -407,28 +408,25 @@ export default function TicketCreatePage({ lockedType = null }) {
       const keepGroup = memberGroups.some(
         (group) => String(group.id) === String(current.assignedGroupId)
       );
-      return {
-        ...current,
-        assignedToUserId: value,
-        assignedGroupId: keepGroup
-          ? current.assignedGroupId
-          : memberGroups[0]
-            ? String(memberGroups[0].id)
-            : current.assignedGroupId,
-      };
+      const defaultGroups = memberGroups.filter(
+        (group) => group.isDefaultAssignment === true || group.is_default_assignment === true
+      );
+      let nextGroupId = current.assignedGroupId;
+      if (!keepGroup) {
+        nextGroupId =
+          defaultGroups.length === 1
+            ? String(defaultGroups[0].id)
+            : memberGroups.length === 1
+              ? String(memberGroups[0].id)
+              : "";
+      }
+      return { ...current, assignedToUserId: value, assignedGroupId: nextGroupId };
     });
   };
 
-  const agentOptionLabel = (agent) => {
-    const title = agent.job_title ? ` — ${agent.job_title}` : "";
-    if (agent.onShift === false) return `${agent.name}${title} (off shift)`;
-    if (agent.onShift === true && agent.shiftLabel) {
-      return `${agent.name}${title} (on ${agent.shiftLabel.toLowerCase()})`;
-    }
-    return `${agent.name}${title}`;
-  };
-
-  const descriptionBody = useMemo(() => {
+  const agentOptionLabel = (agent) =>
+    `${agent.name}${agent.job_title ? ` - ${agent.job_title}` : ""}`;
+    const descriptionBody = useMemo(() => {
     const lines = [form.description.trim()];
 
     if (linkedAsset) {
@@ -444,11 +442,220 @@ export default function TicketCreatePage({ lockedType = null }) {
     return lines.filter(Boolean).join("\n").trim();
   }, [form.description, linkedAsset]);
 
+  useEffect(() => {
+        let cancelled = false;
+
+        const loadWorkspaces = async () => {
+          try {
+            const response = await workspacesApi.getAll();
+
+            const rows = Array.isArray(response.data)
+              ? response.data
+              : Array.isArray(response.data?.items)
+                ? response.data.items
+                : Array.isArray(response.data?.workspaces)
+                  ? response.data.workspaces
+                  : [];
+
+            if (!cancelled) {
+              setWorkspaces(rows);
+              setWorkspaceResolutionError("");
+            }
+          } catch (workspaceError) {
+            if (!cancelled) {
+              setWorkspaces([]);
+
+              setWorkspaceResolutionError(
+                workspaceError.response?.data?.error ||
+                  "The managed workspace directory could not be loaded."
+              );
+            }
+          }
+        };
+
+        loadWorkspaces();
+
+        return () => {
+          cancelled = true;
+        };
+      }, []);
+
+      const resolvedWorkspace = useMemo(() => {
+        const requestedWorkspace = String(
+          form.workspace || ""
+        )
+          .trim()
+          .toLowerCase();
+
+        if (!requestedWorkspace) {
+          return null;
+        }
+
+        const normalizeWorkspace = (value) =>
+          String(value || "")
+            .trim()
+            .toLowerCase()
+            .replace(/&/g, "and")
+            .replace(/[^a-z0-9]+/g, " ")
+            .replace(
+              /\b(service request|service requests|request service|helpdesk)\b/g,
+              " "
+            )
+            .replace(/\s+/g, " ")
+            .trim();
+
+        const normalizedRequestedWorkspace =
+          normalizeWorkspace(requestedWorkspace);
+
+        return (
+          workspaces.find(
+            (workspace) =>
+              String(workspace.code || "")
+                .trim()
+                .toLowerCase() === requestedWorkspace
+          ) ||
+          workspaces.find(
+            (workspace) =>
+              normalizeWorkspace(workspace.name) ===
+                normalizedRequestedWorkspace ||
+              normalizeWorkspace(workspace.code) ===
+                normalizedRequestedWorkspace
+          ) ||
+          null
+        );
+      }, [workspaces, form.workspace]);
+
+      useEffect(() => {
+      if (
+        !["incident", "service_request"].includes(
+          ticketType
+        )
+      ) {
+        setWorkspaceCatalogueItems([]);
+        setCatalogueResolutionError("");
+        return;
+      }
+
+      let cancelled = false;
+
+      const loadCatalogue = async () => {
+        try {
+          const response =
+            await workspaceCatalogueApi.requestOptions({
+          workspace: form.workspace,
+          catalogueType: ticketType,
+          managedCatalogueItemId: catalogItem?.managedCatalogueItemId || undefined,
+        });
+
+          if (!cancelled) {
+            setWorkspaceCatalogueItems(
+              Array.isArray(response.data?.items)
+                ? response.data.items
+                : []
+            );
+
+            setCatalogueResolutionError("");
+          }
+        } catch (catalogueError) {
+          if (!cancelled) {
+            setWorkspaceCatalogueItems([]);
+
+            setCatalogueResolutionError(
+              catalogueError.response?.data?.error ||
+                "The active workspace catalogue could not be loaded."
+            );
+          }
+        }
+      };
+
+      loadCatalogue();
+
+      return () => {
+        cancelled = true;
+      };
+    }, [
+      ticketType,
+      resolvedWorkspace?.id,
+      catalogItem?.managedCatalogueItemId,
+      workspaceResolutionError,
+      workspaces.length,
+      form.workspace,
+    ]);
+
+  const resolvedWorkspaceCatalogueItem = useMemo(() => {
+    if (!["incident", "service_request"].includes(ticketType)) return null;
+    const norm = (value) => String(value ?? "").trim().toLowerCase();
+    const requestedId = String(
+      catalogItem?.managedCatalogueItemId ||
+      params.get("managedCatalogueItemId") ||
+      params.get("catalogueItemId") ||
+      ""
+    );
+    if (requestedId) {
+      const exact = requestedId ? workspaceCatalogueItems.find((item) => String(item.id) === String(requestedId)) : null;
+      if (exact) return exact;
+    }
+    if (!form.category || !form.itemCategory) return null;
+    const matches = workspaceCatalogueItems.filter(
+      (item) =>
+        norm(item.category) === norm(form.category) &&
+        norm(item.sub_category) === norm(form.subCategory) &&
+        norm(item.item_name) === norm(form.itemCategory)
+    );
+    return matches.length === 1 ? matches[0] : null;
+  }, [
+    workspaceCatalogueItems,
+    ticketType,
+    form.category,
+    form.subCategory,
+    form.itemCategory,
+    catalogItem?.managedCatalogueItemId,
+    params,
+  ]);
+  const incidentSuggestedSummary = useMemo(() => {
+    if (ticketType !== "incident") return "";
+    return String(
+      resolvedWorkspaceCatalogueItem?.default_summary ||
+      resolvedWorkspaceCatalogueItem?.item_name ||
+      form.itemCategory ||
+      form.subCategory ||
+      form.category ||
+      ""
+    ).trim();
+  }, [ticketType, resolvedWorkspaceCatalogueItem, form.itemCategory, form.subCategory, form.category]);
+
   const requestDetails = useMemo(() => {
     const details = {};
 
     if (ticketType === "incident") {
       details.module = "incident";
+      details.catalogItemId =
+      resolvedWorkspaceCatalogueItem?.id ||
+      catalogItem?.id ||
+      params.get("catalogueItemId") ||
+      null;
+
+      details.catalogItemName =
+      resolvedWorkspaceCatalogueItem?.item_name ||
+      catalogItem?.name ||
+      params.get("itemName") ||
+      form.itemCategory ||
+      prefillTitle ||
+      null;
+
+      details.catalogCategory =
+      resolvedWorkspaceCatalogueItem?.category ||
+      catalogItem?.categoryName ||
+      form.category ||
+      null;
+
+      details.catalogSubCategory =
+      resolvedWorkspaceCatalogueItem?.sub_category ||
+       catalogItem?.subCategory ||
+       catalogItem?.sub_category ||
+       form.subCategory ||
+       null;
+
       if (form.isMajorIncident) {
         details.majorIncident = true;
         details.majorIncidentType = form.majorIncidentType || null;
@@ -460,32 +667,69 @@ export default function TicketCreatePage({ lockedType = null }) {
 
     if (ticketType === "service_request") {
       details.module = "service";
-      details.catalogItemId = catalogItem?.id || params.get("itemId") || null;
-      details.catalogItemName = catalogItem?.name || prefillTitle || null;
-      details.catalogCategory = catalogItem?.categoryName || null;
+
+      details.catalogItemId =
+        resolvedWorkspaceCatalogueItem?.id || null;
+
+      details.catalogItemName = resolvedWorkspaceCatalogueItem?.item_name || catalogItem?.name || params.get("itemName") || prefillTitle || null;
+      details.catalogCategory = resolvedWorkspaceCatalogueItem?.category || catalogItem?.categoryName || null;
+      details.catalogSubCategory = resolvedWorkspaceCatalogueItem?.sub_category || catalogItem?.subCategory || catalogItem?.sub_category || null;
     }
 
     if (ticketType === "asset_request") {
       details.module = "asset";
-      details.catalogItemId = catalogItem?.id || params.get("itemId") || null;
-      details.assetItem = form.assetItem || catalogItem?.name || null;
-      details.quantity = Number(form.quantity) || 1;
-      details.requestReason = form.requestReason;
-      details.neededBy = form.neededBy || null;
-      details.deliveryLocation = form.deliveryLocation || null;
-      details.eta = catalogItem?.eta || null;
+
+      details.catalogItemId =
+        catalogItem?.id ||
+        params.get("itemId") ||
+        params.get("catalogueItemId") ||
+        null;
+
+      details.assetItem =
+      form.assetItem ||
+      catalogItem?.name ||
+      null;
+
+      details.quantity =
+      Number(form.quantity) ||
+      1;
+
+      details.requestReason =
+      form.requestReason;
+
+      details.neededBy =
+      form.neededBy ||
+      null;
+
+      details.deliveryLocation =
+      form.deliveryLocation ||
+      null;
+
+      details.eta =
+      catalogItem?.eta ||
+      null;
     }
 
     if (ticketType === "change") {
       details.module = "change";
-      details.changeType = form.changeType;
-      details.impact = form.changeImpact;
-      details.risk = form.changeRisk;
-      details.plannedStart = form.plannedStart || null;
-      details.plannedEnd = form.plannedEnd || null;
-      details.changeReason = form.changeReason.trim();
-      details.changePlan = form.changePlan.trim();
-      details.backoutPlan = form.backoutPlan.trim();
+      details.changeType =
+      form.changeType;
+      details.impact =
+      form.changeImpact;
+      details.risk =
+      form.changeRisk;
+      details.plannedStart =
+      form.plannedStart ||
+      null;
+      details.plannedEnd =
+      form.plannedEnd ||
+      null;
+      details.changeReason =
+      form.changeReason.trim();
+      details.changePlan =
+      form.changePlan.trim();
+      details.backoutPlan =
+      form.backoutPlan.trim();
       details.requiresApproval = ["Major", "Emergency"].includes(form.changeType);
       details.approvalStatus = ["Major", "Emergency"].includes(form.changeType)
         ? "pending"
@@ -504,20 +748,34 @@ export default function TicketCreatePage({ lockedType = null }) {
       details.deliverables = form.projectDeliverables.trim();
     }
     return details;
-  }, [form, ticketType, catalogItem, prefillTitle, params]);
+  }, [form, ticketType, catalogItem, prefillTitle, params, resolvedWorkspaceCatalogueItem]);
+
+  // SCRIPT_989_CLASSIFICATION_SUMMARY_SYNC
+  const priorSuggestedSummaryRef = useRef("");
+  useEffect(() => {
+    if (ticketType !== "incident" || !incidentSuggestedSummary) return;
+    setForm((current) => {
+      const currentTitle = String(current.title || "").trim();
+      const prior = priorSuggestedSummaryRef.current;
+      const shouldSync = !currentTitle || currentTitle === prior || lockCatalogueTitle || currentTitle === prefillTitle;
+      if (!shouldSync || currentTitle === incidentSuggestedSummary) return current;
+      return { ...current, title: incidentSuggestedSummary };
+    });
+    priorSuggestedSummaryRef.current = incidentSuggestedSummary;
+  }, [ticketType, incidentSuggestedSummary, lockCatalogueTitle, prefillTitle]);
 
   const changeGuidance = useMemo(() => {
     switch (form.changeType) {
       case "Emergency":
         return {
           tone: "red",
-          title: "Emergency change — CAB approval required",
+          title: "Emergency change ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â CAB approval required",
           body: "Use only for production-restoring changes. IT will fast-track CAB review after submission.",
         };
       case "Major":
         return {
           tone: "amber",
-          title: "Major change — CAB approval required",
+          title: "Major change ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â CAB approval required",
           body: "High-impact changes are held in Waiting Approval until CAB (or change manager) authorises rollout.",
         };
       case "Standard":
@@ -537,6 +795,12 @@ export default function TicketCreatePage({ lockedType = null }) {
 
   const submit = async (event) => {
     event.preventDefault();
+
+    if (requestingForSomeoneElse && !form.requesterId) {
+      setError("Select the employee this ticket is for before submitting.");
+      return;
+    }
+
     setError("");
     setDuplicateTicket(null);
     setReviewing(false);
@@ -558,6 +822,17 @@ export default function TicketCreatePage({ lockedType = null }) {
     if (ticketType === "incident" && !form.category) {
       return setError("Select an incident category.");
     }
+
+    if (
+  ticketType === "incident" &&
+  form.subCategory &&
+  !form.itemCategory &&
+  !resolvedWorkspaceCatalogueItem
+) {
+  return setError(
+    "Select the specific catalogue item for this incident before reviewing the request."
+    );
+  }
 
     if (ticketType === "asset_request" && !form.assetItem.trim()) {
       return setError("Select the asset you are requesting.");
@@ -595,6 +870,12 @@ export default function TicketCreatePage({ lockedType = null }) {
       setReviewing(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
+    }
+    if (["incident", "service_request"].includes(ticketType) && !resolvedWorkspaceCatalogueItem) {
+      return setError(
+  catalogueResolutionError ||
+    "Select a valid active catalogue item before submitting this request."
+);
     }
     setSubmitting(true);
 
@@ -639,7 +920,7 @@ export default function TicketCreatePage({ lockedType = null }) {
           requesterId: form.requesterId || undefined,
           title: form.title.trim(),
           description: descriptionBody,
-          priority: form.priority,
+          priority: employee && !form.isMajorIncident && ["High", "Critical"].includes(form.priority) ? "Medium" : form.priority,
           workspace: form.workspace,
           assignedGroupId: form.assignedGroupId || null,
           assignedToUserId: form.assignedToUserId,
@@ -666,7 +947,7 @@ export default function TicketCreatePage({ lockedType = null }) {
       if (submitError?.response?.status === 409 && existing) {
         setDuplicateTicket(existing);
         setError(
-          "A similar ticket was created moments ago — it may already be in progress."
+          "A similar ticket was created moments ago ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it may already be in progress."
         );
       } else {
         setError(message(submitError, "The ticket could not be created."));
@@ -736,7 +1017,82 @@ export default function TicketCreatePage({ lockedType = null }) {
         ? catalogItem.description || module.description
         : module.description;
 
-  const incidentCategories = fields.incident.categories || [];
+  const incidentCategories = useMemo(() => {
+    if (ticketType !== "incident" || workspaceCatalogueItems.length === 0) {
+      return fields.incident.categories || [];
+    }
+
+    const categoryMap = new Map();
+
+    for (const item of workspaceCatalogueItems) {
+      const category = String(item.category || item.categoryName || item.ticketCategory || "").trim();
+      const subCategory = String(item.sub_category || "").trim();
+      const itemName = String(item.item_name || "").trim();
+      if (!category) continue;
+
+      if (!categoryMap.has(category)) categoryMap.set(category, new Map());
+      const subCategoryMap = categoryMap.get(category);
+      if (!subCategoryMap.has(subCategory)) subCategoryMap.set(subCategory, new Set());
+      if (itemName) subCategoryMap.get(subCategory).add(itemName);
+    }
+
+    return Array.from(categoryMap.entries(), ([category, subCategoryMap]) => ({
+      value: category,
+      children: Array.from(subCategoryMap.entries(), ([subCategory, itemNames]) => ({
+        value: subCategory,
+        children: Array.from(itemNames)
+          .sort((a, b) => a.localeCompare(b))
+          .map((itemName) => ({ value: itemName })),
+      })),
+    }));
+  }, [fields.incident.categories, ticketType, workspaceCatalogueItems]);
+
+  useEffect(() => {
+    if (ticketType !== "incident" || workspaceCatalogueItems.length === 0) return;
+
+    const norm = (value) => String(value ?? "").trim().toLowerCase();
+    const categoryItems = workspaceCatalogueItems.filter(
+      (item) => norm(item.category) === norm(form.category)
+    );
+
+    if (form.category && categoryItems.length === 0) {
+      setForm((current) => ({
+        ...current,
+        category: "",
+        subCategory: "",
+        itemCategory: "",
+      }));
+      return;
+    }
+
+    const subCategoryItems = categoryItems.filter(
+      (item) => norm(item.sub_category) === norm(form.subCategory)
+    );
+
+    if (form.subCategory && subCategoryItems.length === 0) {
+      setForm((current) => ({
+        ...current,
+        subCategory: "",
+        itemCategory: "",
+      }));
+      return;
+    }
+
+    if (
+      form.itemCategory &&
+      !subCategoryItems.some(
+        (item) => norm(item.item_name) === norm(form.itemCategory)
+      )
+    ) {
+      setForm((current) => ({ ...current, itemCategory: "" }));
+    }
+  }, [
+    ticketType,
+    workspaceCatalogueItems,
+    form.category,
+    form.subCategory,
+    form.itemCategory,
+  ]);
   const changeCategories = fields.change.categories?.length
     ? fields.change.categories
     : incidentCategories;
@@ -756,7 +1112,7 @@ export default function TicketCreatePage({ lockedType = null }) {
   const slaPreview = SLA_PREVIEW[form.priority] || SLA_PREVIEW.Medium;
   const reviewCategory =
     ticketType === "service_request"
-      ? catalogItem?.ticketCategory || catalogItem?.categoryName || "Service Catalog"
+      ? resolvedWorkspaceCatalogueItem?.category || catalogItem?.ticketCategory || catalogItem?.categoryName || "Service Catalog"
       : ticketType === "asset_request"
         ? "Hardware Provisioning"
         : ticketType === "project"
@@ -766,7 +1122,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     ticketType === "incident"
       ? form.subCategory || null
       : ticketType === "service_request"
-        ? catalogItem?.ticketSubCategory || catalogItem?.name || prefillTitle || null
+        ? resolvedWorkspaceCatalogueItem?.sub_category || catalogItem?.ticketSubCategory || catalogItem?.name || prefillTitle || null
         : ticketType === "asset_request"
           ? catalogItem?.name || form.assetItem || prefillTitle || null
           : ticketType === "project"
@@ -778,7 +1134,7 @@ export default function TicketCreatePage({ lockedType = null }) {
       <OperationsShell
         breadcrumb={`Home > ${module.label} > Review`}
         title={`Review ${module.shortLabel}`}
-        contentClassName="bg-[#eef2f7] px-4 py-4 lg:px-6"
+        contentClassName="ticket-create-page bg-[var(--portal-bg)] px-4 py-4 lg:px-6"
       >
         <div className="mx-auto max-w-6xl pb-10">
           <div className="overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-soft">
@@ -803,6 +1159,16 @@ export default function TicketCreatePage({ lockedType = null }) {
               <ReviewSection title="Classification and routing">
                 <ReviewRow label="Category" value={reviewCategory || "Not specified"} />
                 <ReviewRow label="Subcategory" value={reviewSubCategory || "Not specified"} />
+                {ticketType === "incident" ? (
+                  <ReviewRow
+                    label="Item"
+                    value={
+                      resolvedWorkspaceCatalogueItem?.item_name ||
+                      form.itemCategory ||
+                      "Not selected"
+                    }
+                  />
+                ) : null}
                 {ticketType === "incident" ? <ReviewRow label="Impact / urgency" value={`${form.impact} / ${form.urgency}`} /> : null}
                 <ReviewRow label="Support group" value={selectedGroup?.name || "Not selected"} />
                 <ReviewRow label="Selected agent" value={selectedAgent?.name || "Not selected"} />
@@ -868,7 +1234,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     <OperationsShell
       breadcrumb={`Home > ${module.label}`}
       title={module.label}
-      contentClassName="bg-[#eef2f7] px-4 py-4 lg:px-6"
+      contentClassName="ticket-create-page bg-[var(--portal-bg)] px-4 py-4 lg:px-6"
     >
       <div className="mx-auto max-w-6xl pb-10">
         {created ? (
@@ -1020,7 +1386,7 @@ export default function TicketCreatePage({ lockedType = null }) {
               </div>
             ) : null}
 
-            {catalogueKey === "create_for_other" && operational ? (
+            {requestingForSomeoneElse ? (
               <Field label="Requester">
                 <select
                   value={form.requesterId}
@@ -1039,7 +1405,7 @@ export default function TicketCreatePage({ lockedType = null }) {
 
             {(ticketType === "service_request" || ticketType === "asset_request") &&
             operational &&
-            catalogueKey !== "create_for_other" ? (
+            !requestingForSomeoneElse ? (
               <Field label="Requested for">
                 <select
                   value={form.requesterId}
@@ -1081,7 +1447,10 @@ export default function TicketCreatePage({ lockedType = null }) {
               <input
                 value={form.title}
                 onChange={(event) => update("title", event.target.value)}
-                className="input"
+                disabled={lockCatalogueTitle}
+                readOnly={lockCatalogueTitle}
+                aria-describedby={lockCatalogueTitle ? "catalogue-title-lock" : undefined}
+                className="input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700"
                 required
                 placeholder={
                   ticketType === "incident"
@@ -1091,36 +1460,13 @@ export default function TicketCreatePage({ lockedType = null }) {
                       : "Brief summary of your request"
                 }
               />
+              {lockCatalogueTitle ? (
+                <p id="catalogue-title-lock" className="mt-1 text-xs font-semibold text-slate-500">
+                  Short Summary is governed by the selected catalogue item.
+                </p>
+              ) : null}
             </Field>
-
-            <Field
-              label={
-                ticketType === "change"
-                  ? "Description"
-                  : "Detailed Description"
-              }
-            >
-              <textarea
-                rows={ticketType === "change" ? 4 : 5}
-                value={form.description}
-                onChange={(event) => update("description", event.target.value)}
-                className="input"
-                required
-                placeholder={
-                  ticketType === "incident"
-                    ? "What happened, when it started, and who is affected…"
-                    : ticketType === "change"
-                      ? "Summarise the change and the systems or services involved…"
-                      : ticketType === "asset_request"
-                        ? "Why do you need this asset, and any specification notes…"
-                        : "Provide the details IT needs to fulfil this request…"
-                }
-              />
-            </Field>
-
-            {ticketType === "incident" ? (
-              <Section title="Classification">
-                <div className="mb-4">
+            {ticketType === "incident" ? (<div className="mb-4">
                   <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
                     Common issues
                   </p>
@@ -1152,7 +1498,35 @@ export default function TicketCreatePage({ lockedType = null }) {
                       );
                     })}
                   </div>
-                </div>
+                </div>) : null}
+
+            <Field
+              label={
+                ticketType === "change"
+                  ? "Description"
+                  : "Detailed Description"
+              }
+            >
+              <textarea
+                rows={ticketType === "change" ? 4 : 5}
+                value={form.description}
+                onChange={(event) => update("description", event.target.value)}
+                className="input"
+                required
+                placeholder={
+                  ticketType === "incident"
+                    ? "What happened, when it started, and who is affected..."
+                    : ticketType === "change"
+                      ? "Summarise the change and the systems or services involved..."
+                      : ticketType === "asset_request"
+                        ? "Why do you need this asset, and any specification notes..."
+                        : "Provide the details IT needs to fulfil this request..."
+                }
+              />
+            </Field>
+
+            {ticketType === "incident" ? (
+              <Section title="Classification">
                 <CategoryCascade
                   tree={incidentCategories}
                   category={form.category}
@@ -1187,14 +1561,16 @@ export default function TicketCreatePage({ lockedType = null }) {
                     <select
                       value={form.priority}
                       onChange={(event) => update("priority", event.target.value)}
-                      className="input"
+                      disabled={lockCataloguePriority || form.isMajorIncident}
+                      aria-describedby={lockCataloguePriority ? "catalogue-priority-lock" : undefined}
+                      className="input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700"
                     >
                       {(fields.incident.priority || []).map((value) => (
                         <option key={value}>{value}</option>
                       ))}
                     </select>
                     <p className="mt-1 text-xs text-slate-500">
-                      Suggested from impact × urgency — adjust if needed.
+                      {lockCataloguePriority ? "Priority is governed by the selected catalogue item." : "Suggested from impact and urgency - adjust if needed."}
                     </p>
                   </Field>
                 </div>
@@ -1354,37 +1730,7 @@ export default function TicketCreatePage({ lockedType = null }) {
             ) : null}
 
 
-            {ticketType === "project" ? (
-              <div className="space-y-4 rounded-2xl border border-purple-200 bg-purple-50/40 p-4">
-                <div>
-                  <h3 className="font-bold text-slate-900">Project initiation</h3>
-                  <p className="mt-1 text-sm text-slate-600">Define the business outcome, ownership, schedule, scope and deliverables.</p>
-                </div>
-                <Field label="Business Objective">
-                  <textarea rows="3" value={form.projectObjective} onChange={(event) => update("projectObjective", event.target.value)} className="input" required placeholder="What business outcome should this project achieve?" />
-                </Field>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Field label="Project Sponsor">
-                    <input value={form.projectSponsor} onChange={(event) => update("projectSponsor", event.target.value)} className="input" required placeholder="Executive or business sponsor" />
-                  </Field>
-                  <Field label="Project Owner">
-                    <input value={form.projectOwner} onChange={(event) => update("projectOwner", event.target.value)} className="input" required placeholder="Accountable project owner" />
-                  </Field>
-                  <Field label="Proposed Start Date">
-                    <input type="date" value={form.projectStart} onChange={(event) => update("projectStart", event.target.value)} className="input" required />
-                  </Field>
-                  <Field label="Target Completion Date">
-                    <input type="date" min={form.projectStart || undefined} value={form.projectEnd} onChange={(event) => update("projectEnd", event.target.value)} className="input" required />
-                  </Field>
-                </div>
-                <Field label="Project Scope">
-                  <textarea rows="4" value={form.projectScope} onChange={(event) => update("projectScope", event.target.value)} className="input" required placeholder="What is included and excluded from the project?" />
-                </Field>
-                <Field label="Deliverables">
-                  <textarea rows="4" value={form.projectDeliverables} onChange={(event) => update("projectDeliverables", event.target.value)} className="input" required placeholder="List the expected outputs and acceptance outcomes." />
-                </Field>
-              </div>
-            ) : null}
+
             {ticketType === "change" ? (
               <Section title="Change assessment">
                 <div
@@ -1481,7 +1827,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                   </Field>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  Pick a window outside business hours where possible — IT
+                  Pick a window outside business hours where possible ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â IT
                   confirms the final schedule with you.
                 </p>
               </Section>
@@ -1542,7 +1888,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                     }
                     className="input"
                     required
-                    placeholder="Steps to implement the change, owners, and verification checks…"
+                    placeholder="Steps to implement the change, owners, and verification checks..."
                   />
                 </Field>
                 <Field label="Backout Plan">
@@ -1618,24 +1964,11 @@ export default function TicketCreatePage({ lockedType = null }) {
                     <option value="" disabled>
                       {loadingAgents ? "Loading eligible agents..." : "Select an eligible agent"}
                     </option>
-                    {recommendedAgents.length ? (
-                      <optgroup label={form.category ? `Recommended for ${form.category}` : "Recommended agents"}>
-                        {recommendedAgents.map((agent) => (
-                          <option key={agent.id} value={agent.id}>
-                            {agentOptionLabel(agent)}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                    {otherAgents.length ? (
-                      <optgroup label="All eligible IT agents">
-                        {otherAgents.map((agent) => (
-                          <option key={agent.id} value={agent.id}>
-                            {agentOptionLabel(agent)}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
+                    {eligibleAgents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agentOptionLabel(agent)}
+                      </option>
+                    ))}
                   </select>
                   {!loadingAgents && agents.length === 0 ? (
                     <p className="mt-1 text-xs font-semibold text-red-700">
@@ -1643,7 +1976,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                     </p>
                   ) : (
                     <p className="mt-1 text-xs text-slate-500">
-                      Recommendations are based on similar resolved requests. IT may reassign the ticket later when operationally necessary.
+                      Only active, governed IT support-group members are shown. IT may reassign the ticket later when operationally necessary.
                     </p>
                   )}
                 </Field>
@@ -1706,7 +2039,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                   Drop files here or click to browse
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  PNG, JPG, WebP, or PDF — up to 5 files, 8 MB each. Files are
+                  PNG, JPG, WebP, PDF, TXT, CSV, XLS, or XLSX - up to 5 files, 8 MB each. Files are
                   uploaded with your request.
                 </p>
                 <input
@@ -1787,10 +2120,10 @@ export default function TicketCreatePage({ lockedType = null }) {
                   ticketType === "service_request"
                     ? catalogItem?.categoryName || "Service Catalog"
                     : ticketType === "asset_request"
-                      ? form.assetItem || "—"
+                      ? form.assetItem || "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
                       : [form.category, form.subCategory]
                           .filter(Boolean)
-                          .join(" · ") || "—"
+                          .join(" Ãƒâ€š -  ") || "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
                 }
               />
               <RailRow
@@ -1817,7 +2150,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                     label="Window"
                     value={
                       form.plannedStart && form.plannedEnd
-                        ? `${form.plannedStart.replace("T", " ")} → ${form.plannedEnd.replace("T", " ")}`
+                        ? `${form.plannedStart.replace("T", " ")} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${form.plannedEnd.replace("T", " ")}`
                         : "Not set"
                     }
                   />
@@ -1879,7 +2212,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                   Might be a known fix
                 </p>
                 <p className="mt-0.5 text-xs text-slate-500">
-                  Check the help articles — you may solve it in minutes.
+                  Check the help articles - you may solve it in minutes.
                 </p>
               </div>
               <ArrowRight className="h-4 w-4 shrink-0 text-slate-300 transition group-hover:translate-x-0.5 group-hover:text-[#172b57]" />

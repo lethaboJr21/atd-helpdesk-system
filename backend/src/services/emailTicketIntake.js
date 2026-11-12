@@ -241,6 +241,8 @@ async function financeRouting(client,settings,sender){
         internetMessageId: message.internetMessageId || null,
         conversationId: message.conversationId || null,
         receivedAt: message.receivedDateTime || null,
+        externalSender: !requester,
+        importance: message.importance || "normal",
         senderEmail: sender.email,
         senderName: sender.name || null,
       },
@@ -267,6 +269,8 @@ async function financeRouting(client,settings,sender){
        requester ? null : sender.email, JSON.stringify(requestDetails), finance?.priority || "Medium"]
     );
     const ticketId = inserted.rows[0].id;
+    const emailImportant = String(message.importance||'').toLowerCase()==='high';
+    await client.query(`UPDATE tickets SET is_important=$1,importance_source='email',important_marked_at=CASE WHEN $1 THEN NOW() ELSE NULL END WHERE id=$2`,[emailImportant,ticketId]);
     const ticketRef = await allocateTicketRef(client, ticketId, classification.ticketType);
 
     await client.query(

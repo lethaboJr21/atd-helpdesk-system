@@ -10,8 +10,8 @@
                              "milestoneValidationScript":  208,
                              "serverPushAndReadmeScript":  207
                          },
-    "completedThrough":  781,
-    "currentCheckpoint":  781,
+    "completedThrough":  838,
+    "currentCheckpoint":  838,
     "policies":  {
                      "consolidatedMilestoneTesting":  true,
                      "readmeAtMilestoneBoundary":  true,
@@ -244,7 +244,6 @@
                                                       "deployment":  "deferred"
                                                   }
                                  },
-    "lastUpdated":  "2026-10-06T21:18:44.6214364+02:00",
     "milestoneHistory":  [
                              {
                                  "id":  "forwarding-scoped-ticket-participation-2026-09-27",
@@ -1160,5 +1159,358 @@
                                     "graphProcessingRun":  false,
                                     "functionalTesting":  "deferred-to-finance-milestone-boundary",
                                     "productionDeployment":  "not-performed"
-                                }
+                                },
+    "milestoneCheckpoints":  [
+                                 {
+                                     "marker":  "ATD-TRACKER-CHECKPOINT-2026-10-08-FINANCE-PRODUCTION-REPAIRS",
+                                     "date":  "2026-10-08",
+                                     "updatedAt":  "2026-10-08T20:44:00+02:00",
+                                     "milestone":  "Finance production activation and repair checkpoint",
+                                     "status":  "production_repairs_complete_finance_configuration_pending",
+                                     "completedScripts":  [
+                                                              799,
+                                                              800,
+                                                              801,
+                                                              802,
+                                                              803,
+                                                              804,
+                                                              805,
+                                                              806,
+                                                              807,
+                                                              808,
+                                                              809
+                                                          ],
+                                     "completed":  [
+                                                       "Finance milestone activated and production health verified",
+                                                       "Static frontend asset access repaired and cache-safe assets activated",
+                                                       "Ticket detail useRef runtime failure repaired, rebuilt and deployed",
+                                                       "Finance Workspace actual database and schema validated",
+                                                       "Finance dashboard and queue scope repaired using tickets.workspace",
+                                                       "PM2 restart and API health verification passed"
+                                                   ],
+                                     "currentState":  {
+                                                          "financeDatabase":  "atd_helpdesk",
+                                                          "financeOffices":  3,
+                                                          "financeEmployeeResponsibilities":  0,
+                                                          "financeMailboxes":  0,
+                                                          "financeExternalSenders":  0,
+                                                          "financeTicketOperations":  0,
+                                                          "financeDelegationHistory":  0,
+                                                          "emailProcessingEnabled":  false,
+                                                          "confidentialUploadsEnabled":  false
+                                                      },
+                                     "nextActions":  [
+                                                         "Load and validate the complete Finance employee roster and manager duties",
+                                                         "Configure authorised Finance mailboxes and governed routing without live processing",
+                                                         "Load governed external senders and verification states",
+                                                         "Validate classification, delegation, unattended indicators, queues and reporting",
+                                                         "Complete Finance Excel exports for the six required product families",
+                                                         "Run one comprehensive Finance milestone test and one consolidated report at the milestone boundary"
+                                                     ],
+                                     "deferred":  [
+                                                      "Frontend code splitting for the Vite chunk-size warning",
+                                                      "Live email and Microsoft Graph processing until governed activation"
+                                                  ],
+                                     "productionEvidence":  {
+                                                                "script806":  "frontend build and deployment successful; Helpdesk and Production assets HTTP 200",
+                                                                "script809":  "dashboard query passed; queue query passed; PM2 restart passed; API health HTTP 200"
+                                                            }
+                                 }
+                             ],
+    "lastUpdated":  "2026-10-13T22:20:06+02:00",
+    "financeOperationsBatch4":  {
+                                    "script":  812,
+                                    "status":  "implemented-locally-validation-pending",
+                                    "functions":  [
+                                                      "finance-employee-roster-discovery",
+                                                      "finance-responsibility-office-function-assignment",
+                                                      "finance-manager-backup-duty-assignment",
+                                                      "availability-delegation-eligibility",
+                                                      "authorised-mailbox-configuration",
+                                                      "assignee-backup-group-routing",
+                                                      "mailbox-sla-priority-sender-scope",
+                                                      "external-sender-verification-blocking"
+                                                  ],
+                                    "emailProcessingRun":  false,
+                                    "graphProcessingRun":  false,
+                                    "monitoringActivationAllowed":  false,
+                                    "functionalTesting":  "deferred-to-finance-milestone-boundary",
+                                    "productionDeployment":  "not-performed"
+                                },
+    "financeOperationsBatch5":  {
+                                    "script":  814,
+                                    "status":  "implemented-locally-validation-pending",
+                                    "functions":  [
+                                                      "managed-finance-ticket-selection",
+                                                      "triage-classification-finance-function",
+                                                      "risk-waiting-response-manager-instruction",
+                                                      "single-ticket-governed-delegation",
+                                                      "bulk-delegation-partial-results",
+                                                      "unattended-sla-attention-indicators",
+                                                      "finance-manager-triage-console",
+                                                      "detailed-delegation-history"
+                                                  ],
+                                    "deployment":  "prohibited-not-performed",
+                                    "databaseWrites":  "not-performed-by-script",
+                                    "emailProcessing":  false,
+                                    "graphProcessing":  false,
+                                    "functionalTesting":  "deferred-to-finance-milestone-boundary"
+                                },
+    "financeAccessScopeBatch":  {
+                                    "script":  816,
+                                    "status":  "implemented-locally-migration-not-executed",
+                                    "functions":  [
+                                                      "finance-entry-access-middleware",
+                                                      "verified-finance-department-eligibility",
+                                                      "approved-finance-position-catalogue",
+                                                      "reporting-hierarchy-scope",
+                                                      "office-function-scope",
+                                                      "confidentiality-record-field-restrictions",
+                                                      "temporary-administrative-override",
+                                                      "access-decision-audit-expiry-revocation"
+                                                  ],
+                                    "deployment":  "prohibited-not-performed",
+                                    "migration":  "created-not-executed",
+                                    "functionalTesting":  "deferred-to-finance-milestone-boundary"
+                                },
+    "globalTicketGovernance10FunctionBatch":  {
+                                                  "script":  818,
+                                                  "status":  "implemented-locally-migration-not-executed",
+                                                  "functions":  [
+                                                                    "agent-default-support-group",
+                                                                    "assignee-derived-group",
+                                                                    "assignee-group-lock",
+                                                                    "requester-priority-restriction",
+                                                                    "governed-incident-catalogue",
+                                                                    "governed-service-catalogue",
+                                                                    "external-email-source",
+                                                                    "ticket-important-flag",
+                                                                    "hierarchy-escalation-targets",
+                                                                    "global-escalation-audit"
+                                                                ],
+                                                  "migration":  "created-not-executed",
+                                                  "deployment":  "not-performed",
+                                                  "functionalTesting":  "deferred-to-milestone-boundary"
+                                              },
+    "globalTicketExperience10FunctionBatch":  {
+                                                  "script":  820,
+                                                  "status":  "implemented-locally-migration-not-executed",
+                                                  "functions":  [
+                                                                    "global-agent-availability",
+                                                                    "availability-assignment-guard",
+                                                                    "multi-group-alert-preferences",
+                                                                    "collaborator-cc-foundation-completed",
+                                                                    "teams-conversation-contract",
+                                                                    "complete-conversation-feed",
+                                                                    "resolved-closed-survey",
+                                                                    "attachment-preview-validated-existing",
+                                                                    "expanded-audit-confirmations",
+                                                                    "popup-undo-activity-expansion"
+                                                                ],
+                                                  "migration":  "created-not-executed",
+                                                  "deployment":  "not-performed",
+                                                  "functionalTesting":  "deferred-to-milestone-boundary"
+                                              },
+    "preDeploymentAuthTicketVisibilityDarkModeBatch":  {
+                                                           "script":  824,
+                                                           "title":  "Pre-deployment authentication, new-ticket visibility and dark-mode/header corrections",
+                                                           "status":  "scheduled-before-next-deployment",
+                                                           "priority":  "launch-critical-predeployment",
+                                                           "functions":  [
+                                                                             "1. Validate the submitted sign-in identifier as an email address before authentication options are shown.",
+                                                                             "2. For verified @atdalliance.co.za addresses, show Microsoft SSO as the only standard sign-in option.",
+                                                                             "3. Hide and disable password entry for @atdalliance.co.za accounts unless the account has server-verified IT department membership.",
+                                                                             "4. Prevent client-side department claims from unlocking password authentication; the exception must be authorised by backend directory/account data and audited.",
+                                                                             "5. Sort Ticket Workspace lists by newest-created ticket first unless a user deliberately selects another supported sort.",
+                                                                             "6. Sort Ticket Monitor lists by newest-created ticket first unless a user deliberately selects another supported sort.",
+                                                                             "7. Sort Dashboard Priority Queue results by newest-created ticket first unless a user deliberately selects another supported sort.",
+                                                                             "8. Display a consistent New ticket tag across Ticket Workspace, Ticket Monitor and Priority Queue, using one governed definition and expiry rule.",
+                                                                             "9. Include New-ticket state and tag evidence in escalation workflow displays and preserve readable ticket descriptions in Dark mode.",
+                                                                             "10. Place Ticket Monitor and the Light/Dark toggle beside the profile control, with responsive collision protection so the avatar never covers either control."
+                                                                         ],
+                                                           "acceptanceCriteria":  [
+                                                                                      "SSO routing is determined from a normalised case-insensitive email domain.",
+                                                                                      "The IT password exception requires verified active-account and department membership; changing page markup or request payloads cannot enable it.",
+                                                                                      "Existing external/local account authentication remains available according to current policy.",
+                                                                                      "New-ticket ordering is deterministic: created_at DESC with a stable secondary key.",
+                                                                                      "The New tag uses one shared backend/frontend rule across all three ticket surfaces.",
+                                                                                      "Dark-mode description text meets readable contrast and does not inherit light-mode translucent or blurred styling.",
+                                                                                      "Header controls remain visible at supported desktop and responsive widths and do not sit behind the floating profile control.",
+                                                                                      "Closed-ticket action restrictions, current access controls, audit history and existing ticket filters remain intact.",
+                                                                                      "Implementation and focused validation must complete before the next production deployment.",
+                                                                                      "Comprehensive milestone testing remains consolidated at the milestone boundary."
+                                                                                  ],
+                                                           "dependencies":  [
+                                                                                "Current authentication and Microsoft SSO configuration",
+                                                                                "Verified Microsoft Directory department data",
+                                                                                "Ticket Workspace, Ticket Monitor and Dashboard Priority Queue sources",
+                                                                                "Escalation workflow and Ticket Detail dark-mode styles",
+                                                                                "Responsive header and profile-control layout"
+                                                                            ],
+                                                           "implementation":  "not-started",
+                                                           "deployment":  "blocked-until-complete-and-validated",
+                                                           "productionChanges":  "none",
+                                                           "scheduledAt":  "2026-10-09T10:55:42+02:00"
+                                                       },
+    "currentProgressCheckpoint":  {
+                                      "checkpoint":  838,
+                                      "recordedAt":  "2026-10-13T22:20:06+02:00",
+                                      "milestone":  "Finance Department workspace completion, navigation integration and model-ready project knowledge consolidation",
+                                      "status":  "implemented-locally-build-validation-required-production-deployment-blocked",
+                                      "completed":  [
+                                                        "836 beneficiary-first request creation and username-first authentication batches implemented locally; frontend build passed",
+                                                        "837 incident catalogue clickability repaired, coloured icons added, catalogue-governed Short Summary and Priority locked, Other kept editable; frontend build passed",
+                                                        "Finance Workspace frontend, backend route surface and governed Finance access foundation verified present",
+                                                        "Finance Department linked directly beneath Workspaces in the Operations side navigation",
+                                                        "Existing development tracker, governance handoff and new-conversation context expanded without creating replacement tracker files",
+                                                        "Model-training context expanded with architecture, guarded implementation lessons, failure patterns, validation rules and operational boundaries"
+                                                    ],
+                                      "active":  [
+                                                     "Run focused Finance Workspace milestone validation after all Finance implementation work is complete",
+                                                     "Validate Finance employee scope, manager hierarchy, delegation, unattended-email queues, structured product reporting and reviewed Excel export against authorised data",
+                                                     "Prepare controlled production migration and deployment plan only after local milestone validation passes",
+                                                     "Keep confidential uploads, live email processing and production Graph actions disabled until security readiness is approved",
+                                                     "Add governed catalogue-item administration with title, description, icon, colour, category, default priority, lock controls and active state",
+                                                     "Expand the SLA bar to show policy, target type, elapsed and remaining time, response and resolution deadlines, breach state and pause behavior"
+                                                 ],
+                                      "blockers":  [
+                                                       "Production Finance migrations and routes may remain behind local development state",
+                                                       "Production deployment remains blocked pending the consolidated milestone test and authorised deployment preparation",
+                                                       "Real production data replication into local development requires a separately approved, minimised and pseudonymised reporting-replica process"
+                                                   ],
+                                      "controls":  [
+                                                       "Use atddev@10.0.0.12:18922 for approved production SSH operations; never use 10.0.0.21",
+                                                       "Finance access is restricted by verified Finance membership, approved positions and reporting-manager scope with governed override and audit",
+                                                       "Preserve existing tracker filenames, structure and history",
+                                                       "Use one consolidated Notepad-friendly UTF-8 TXT report per script unless genuinely too large",
+                                                       "No deployment, database migration, service restart, email, Graph, Teams or Git write is performed by Script 838"
+                                                   ]
+                                  },
+    "script853":  {
+                      "title":  "Catalogue grid admin controls and icon picker",
+                      "status":  "implemented_locally",
+                      "functions":  [
+                                        "Admin grid add/manage action",
+                                        "Shared Catalogue Manager routing",
+                                        "Existing portal icon selection and preview",
+                                        "Tracker synchronisation"
+                                    ],
+                      "preservesExistingCatalogue":  true,
+                      "next":  [
+                                   "Requester-managed catalogue validation",
+                                   "Process Engineering catalogue",
+                                   "Finance catalogue"
+                               ]
+                  },
+    "script854":  {
+                      "title":  "Request for Someone Else managed catalogue propagation",
+                      "status":  "implemented_locally",
+                      "functions":  [
+                                        "Beneficiary query propagation",
+                                        "Beneficiary navigation state",
+                                        "Explicit requester requirement for other",
+                                        "Requester versus creator attribution"
+                                    ],
+                      "milestoneTest":  "deferred"
+                  },
+    "script856":  {
+                      "title":  "Grouped Catalogue Manager explorer",
+                      "status":  "implemented_locally",
+                      "functions":  [
+                                        "Summary cards",
+                                        "Search and filters",
+                                        "Workspace/type/category grouping",
+                                        "Expand/collapse category tables"
+                                    ],
+                      "preservesCatalogueData":  true
+                  },
+    "script858":  {
+                      "title":  "Portal mouse-wheel scroll repair and catalogue UX close",
+                      "status":  "implemented_locally",
+                      "functions":  [
+                                        "Ticket Workspace vertical wheel scroll owner",
+                                        "Vertical overscroll chaining",
+                                        "Stable scrollbar gutter",
+                                        "Catalogue UX batch closure"
+                                    ],
+                      "preserves":  [
+                                        "Script 856 grouped Catalogue Manager",
+                                        "Kanban horizontal containment",
+                                        "Modal scroll locking"
+                                    ],
+                      "next":  [
+                                   "Finance module",
+                                   "Process Engineering PDM module"
+                               ]
+                  },
+    "script860":  {
+                      "title":  "Finance and PDM shared catalogue completion",
+                      "status":  "implemented_locally",
+                      "functions":  [
+                                        "Finance managed catalogue",
+                                        "Finance operational foundation preservation",
+                                        "PDM managed catalogue",
+                                        "PDM plant/process ticket context"
+                                    ],
+                      "testing":  "deferred-to-department-milestone-boundary"
+                  },
+    "script862":  {
+                      "title":  "Finance access-context API and local auth diagnostics",
+                      "status":  "implemented_locally",
+                      "functions":  [
+                                        "Finance accessContext frontend API restoration",
+                                        "Development-safe local login diagnostic response"
+                                    ],
+                      "credentialWrite":  false
+                  },
+    "script863":  {
+                      "title":  "Sprinto-style login options and authentication repair batch",
+                      "status":  "implemented_locally",
+                      "functions":  [
+                                        "Identifier-first Next flow",
+                                        "Server-authorised sign-in options",
+                                        "Microsoft and local-password choice cards",
+                                        "Account switching and option navigation",
+                                        "Identifier terminology correction",
+                                        "Development login diagnostics preservation"
+                                    ],
+                      "security":  [
+                                       "No password or hash reset",
+                                       "No account-policy bypass",
+                                       "Microsoft-only company routing preserved"
+                                   ]
+                  },
+    "script870PdmFinanceDashboard":  {
+                                         "status":  "implemented-locally",
+                                         "testing":  "deferred-to-milestone",
+                                         "functions":  [
+                                                           "shared-filtering",
+                                                           "kpi-drilldown",
+                                                           "finance-reporting-summary",
+                                                           "pdm-operational-dashboard"
+                                                       ],
+                                         "updatedAt":  "2026-10-15T20:44:51.3240877+02:00"
+                                     },
+    "script871FinanceCorrespondence":  {
+                                           "status":  "implemented-locally",
+                                           "activation":  "requires-governed-graph-configuration",
+                                           "functions":  [
+                                                             "authorised-mailbox-registry-and-delta-sync",
+                                                             "importance-and-management-classification",
+                                                             "unattended-stale-overdue-engine",
+                                                             "correspondence-dashboard-and-escalation"
+                                                         ],
+                                           "updatedAt":  "2026-10-15T21:05:48.3954530+02:00"
+                                       },
+    "script874FinancePdmCompletion":  {
+                                          "status":  "implemented-locally",
+                                          "testing":  "deferred-to-combined-department-milestone",
+                                          "functions":  [
+                                                            "finance-correspondence-actions-ticket-conversion",
+                                                            "finance-reviewed-xlsx-monitoring-status",
+                                                            "pdm-context-recent-activity",
+                                                            "pdm-sla-reporting-xlsx"
+                                                        ],
+                                          "updatedAt":  "2026-10-15T22:02:16.9148908+02:00"
+                                      }
 }

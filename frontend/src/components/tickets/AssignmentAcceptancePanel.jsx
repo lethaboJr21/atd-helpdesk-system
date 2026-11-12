@@ -16,7 +16,40 @@ export default function AssignmentAcceptancePanel({ticketId,ticket,groups,curren
  const [state,setState]=useState(null),[collaborators,setCollaborators]=useState([]),[participants,setParticipants]=useState([]),[eligibleAgents,setEligibleAgents]=useState([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[error,setError]=useState(""),[message,setMessage]=useState("");
  const [selectedAssignee,setSelectedAssignee]=useState(""),[selectedOwningGroupId,setSelectedOwningGroupId]=useState(""),[note,setNote]=useState(""),[destinationGroupId,setDestinationGroupId]=useState(""),[destinationAssigneeId,setDestinationAssigneeId]=useState("");
  const [collaboratorUserId,setCollaboratorUserId]=useState(""),[collaboratorRole,setCollaboratorRole]=useState("collaborator"),[participantEmail,setParticipantEmail]=useState(""),[participantName,setParticipantName]=useState(""),[participantType,setParticipantType]=useState("cc");
- const load=async()=>{setLoading(true);setError("");try{const [a,c,p,agents]=await Promise.all([assignmentAcceptanceApi.getState(ticketId),assignmentAcceptanceApi.getCollaborators(ticketId),assignmentAcceptanceApi.getEmailParticipants(ticketId),groupsApi.getAgents()]);setState(a.data||null);setCollaborators(Array.isArray(c.data)?c.data:[]);setParticipants(Array.isArray(p.data)?p.data:[]);setEligibleAgents(Array.isArray(agents.data)?agents.data:[]);}catch(e){setError(errorMessage(e,"Assignment and collaboration details could not be loaded."));}finally{setLoading(false);}};
+ const load=async()=>{
+  setLoading(true);
+  setError("");
+  const agentRequest=async()=>{
+   try{return await groupsApi.getAgents();}
+   catch(primaryError){
+    try{return await groupsApi.getEligibleAgents();}
+    catch(fallbackError){throw primaryError||fallbackError;}
+   }
+  };
+  try{
+   const results=await Promise.allSettled([
+    assignmentAcceptanceApi.getState(ticketId),
+    assignmentAcceptanceApi.getCollaborators(ticketId),
+    assignmentAcceptanceApi.getEmailParticipants(ticketId),
+    agentRequest()
+   ]);
+   const [stateResult,collaboratorsResult,participantsResult,agentsResult]=results;
+   if(stateResult.status==="fulfilled")setState(stateResult.value.data||null);
+   if(collaboratorsResult.status==="fulfilled")setCollaborators(Array.isArray(collaboratorsResult.value.data)?collaboratorsResult.value.data:[]);
+   if(participantsResult.status==="fulfilled")setParticipants(Array.isArray(participantsResult.value.data)?participantsResult.value.data:[]);
+   if(agentsResult.status==="fulfilled")setEligibleAgents(Array.isArray(agentsResult.value.data)?agentsResult.value.data:[]);
+   const failed=[];
+   if(stateResult.status==="rejected")failed.push("assignment workflow");
+   if(collaboratorsResult.status==="rejected")failed.push("collaborators");
+   if(participantsResult.status==="rejected")failed.push("email participants");
+   if(agentsResult.status==="rejected")failed.push("agents");
+   if(failed.length)setError(`Some ticket controls could not be loaded: ${failed.join(", ")}. Other available controls remain usable.`);
+  }catch(e){
+   setError(errorMessage(e,"Assignment and collaboration details could not be loaded."));
+  }finally{
+   setLoading(false);
+  }
+ };
  useEffect(()=>{load();},[ticketId]);
  const proposal=state?.proposal||null,status=proposal?.status||"group_queue",owningGroupId=proposal?.owning_group_id||ticket?.assigned_group_id||null;
  const effectiveOwningGroupId=selectedOwningGroupId||owningGroupId||null;

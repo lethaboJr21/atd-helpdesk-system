@@ -1,0 +1,1403 @@
+{
+    "schemaVersion":  1,
+    "updatedAt":  "2026-10-04T21:48:15+02:00",
+    "project":  "ATD Helpdesk",
+    "currentMilestone":  {
+                             "id":  "post-deployment-functional-validation-and-hardening",
+                             "name":  "Post-deployment functional validation and hardening",
+                             "status":  "READY",
+                             "nextScript":  208,
+                             "milestoneValidationScript":  208,
+                             "serverPushAndReadmeScript":  207
+                         },
+    "completedThrough":  834,
+    "currentCheckpoint":  834,
+    "policies":  {
+                     "consolidatedMilestoneTesting":  true,
+                     "readmeAtMilestoneBoundary":  true,
+                     "floatingActivityPopupPriority":  true,
+                     "undoRequiresTransactionalInverse":  true,
+                     "controlledBackend":  {
+                                               "DISABLE_BACKGROUND_JOBS":  "1",
+                                               "EMAIL_ENABLED":  "false"
+                                           }
+                 },
+    "workItems":  [
+                      {
+                          "script":  184,
+                          "name":  "Ticket review before submission",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  185,
+                          "name":  "Priority SLA policy",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  186,
+                          "name":  "Governed lifecycle emails",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  187,
+                          "name":  "Email replies and recipient switching",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  188,
+                          "name":  "Acceptance cards and previews",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  189,
+                          "name":  "Sticky list shell",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  190,
+                          "name":  "Ticket activity popup",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  191,
+                          "name":  "Transactional Undo",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  192,
+                          "name":  "Consolidated infrastructure and production validation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  193,
+                          "name":  "Deployment context, server inspection and release preparation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  194,
+                          "name":  "Server deployment context inspection",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  195,
+                          "name":  "Deployment detail inspection",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  196,
+                          "name":  "Serving and restart-path inspection",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  197,
+                          "name":  "Controlled runtime release package",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  198,
+                          "name":  "Verified remote rollback backup",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  199,
+                          "name":  "Remote release staging and verification",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  200,
+                          "name":  "Activation preflight",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  201,
+                          "name":  "Migration and activation safety validation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  202,
+                          "name":  "Additive migrations and source staging",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  203,
+                          "name":  "Backend cutover and health verification",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  204,
+                          "name":  "Public frontend activation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  205,
+                          "name":  "Consolidated production validation",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  206,
+                          "name":  "Milestone closure report",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  207,
+                          "name":  "Tracker and README deployment update",
+                          "status":  "DONE"
+                      },
+                      {
+                          "script":  208,
+                          "name":  "Consolidated role-based functional validation",
+                          "status":  "READY"
+                      }
+                  ],
+    "latestProductionDeployment":  {
+                                       "deployedAt":  "2026-09-01T11:01:52+02:00",
+                                       "release":  "atd-helpdesk-runtime-release-20260901-090118",
+                                       "archiveSha256":  "9A6763700789CED96E030DB526CF10113B95DD938D84F79A600E274C82AD1E5D",
+                                       "publicIndexSha256":  "578A308C6FEF2BED7D7028862F348D136E0A1FF5F7C1D6FD586DC615C3E9F90D",
+                                       "rollbackPath":  "/home/atdadmin/atd-helpdesk-backups/pre-release-20260901-091236",
+                                       "productionValidation":  {
+                                                                    "passes":  18,
+                                                                    "warnings":  10,
+                                                                    "failures":  0,
+                                                                    "result":  "PASS"
+                                                                },
+                                       "pm2":  {
+                                                   "application":  "atd-helpdesk-api",
+                                                   "pid":  1164117,
+                                                   "status":  "online"
+                                               },
+                                       "migrationsCommitted":  [
+                                                                   "2026-08-assignment-acceptance-access-foundation.sql",
+                                                                   "2026-08-email-replies-and-recipient-switching.sql",
+                                                                   "2026-08-first-login-onboarding.sql",
+                                                                   "2026-08-guided-routing-foundation.sql",
+                                                                   "2026-08-priority-sla-policy.sql",
+                                                                   "2026-08-terms-governance.sql",
+                                                                   "191_transaction_safe_undo.sql"
+                                                               ],
+                                       "migrationExcluded":  "2026-08-corrected-guided-request-routing.sql",
+                                       "excludedMigrationReason":  "Contains controlled UPDATE and DELETE statements affecting support groups and routing rules; manual business-data review required.",
+                                       "openItems":  [
+                                                         "Controlled production lifecycle-email delivery validation",
+                                                         "Production inbound email-to-ticket validation",
+                                                         "Bedliner DNS resolution for atd-sql01",
+                                                         "Apache SSL private-key repair and successful configtest",
+                                                         "PM2 reboot-persistence repair",
+                                                         "Business-data review of the excluded corrected guided-routing migration",
+                                                         "Consolidated role-based functional milestone testing",
+                                                         "Syspro service-specific response SLA resolver",
+                                                         "Base-less route redirect compatibility",
+                                                         "Survey and background-job validation",
+                                                         "Expanded Undo coverage beyond status and priority",
+                                                         "Dashboard customisation, named layout templates, themes and universal UX batch",
+                                                         "Frontend bundle code splitting and chunk optimisation"
+                                                     ]
+                                   },
+    "recentMilestone":  {
+                            "id":  338,
+                            "status":  "implemented",
+                            "features":  [
+                                             "avatar-crop-fit-zoom",
+                                             "profile-media-modal-isolation",
+                                             "ticket-monitor-sticky-headings",
+                                             "ticket-workspace-list-kanban-select",
+                                             "semantic-priority-theme"
+                                         ],
+                            "deferred":  [
+                                             "governed-ticket-bulk-endpoints",
+                                             "announcement-identity-card"
+                                         ]
+                        },
+    "latestValidatedMilestone":  {
+                                     "id":  "forwarding-scoped-ticket-participation-2026-09-27",
+                                     "name":  "Forwarding and scoped ticket participation",
+                                     "status":  "validated",
+                                     "completedAt":  "2026-09-27T16:49:17+02:00",
+                                     "scripts":  [
+                                                     647,
+                                                     651,
+                                                     652,
+                                                     655,
+                                                     656,
+                                                     657,
+                                                     658
+                                                 ],
+                                     "capabilities":  [
+                                                          "governed-ticket-forwarding",
+                                                          "ticket-scoped-read-only-and-reply-only-participation",
+                                                          "someone-elses-tickets",
+                                                          "participant-management-and-revocation",
+                                                          "separate-access-and-email-outcomes",
+                                                          "reply-only-comment-and-attachment-write-boundaries"
+                                                      ],
+                                     "validation":  {
+                                                        "comprehensiveTest":  "passed",
+                                                        "failures":  0,
+                                                        "warnings":  0,
+                                                        "temporaryDataRolledBack":  true,
+                                                        "emailSent":  false,
+                                                        "backendSyntax":  "passed",
+                                                        "frontendBuild":  "passed"
+                                                    },
+                                     "delivery":  {
+                                                      "gitPush":  "pending-selective-staging",
+                                                      "deployment":  "deferred"
+                                                  }
+                                 },
+    "milestoneHistory":  [
+                             {
+                                 "id":  "forwarding-scoped-ticket-participation-2026-09-27",
+                                 "name":  "Forwarding and scoped ticket participation",
+                                 "status":  "validated",
+                                 "completedAt":  "2026-09-27T16:49:17+02:00",
+                                 "scripts":  [
+                                                 647,
+                                                 651,
+                                                 652,
+                                                 655,
+                                                 656,
+                                                 657,
+                                                 658
+                                             ],
+                                 "capabilities":  [
+                                                      "governed-ticket-forwarding",
+                                                      "ticket-scoped-read-only-and-reply-only-participation",
+                                                      "someone-elses-tickets",
+                                                      "participant-management-and-revocation",
+                                                      "separate-access-and-email-outcomes",
+                                                      "reply-only-comment-and-attachment-write-boundaries"
+                                                  ],
+                                 "validation":  {
+                                                    "comprehensiveTest":  "passed",
+                                                    "failures":  0,
+                                                    "warnings":  0,
+                                                    "temporaryDataRolledBack":  true,
+                                                    "emailSent":  false,
+                                                    "backendSyntax":  "passed",
+                                                    "frontendBuild":  "passed"
+                                                },
+                                 "delivery":  {
+                                                  "gitPush":  "pending-selective-staging",
+                                                  "deployment":  "deferred"
+                                              }
+                             },
+                             {
+                                 "id":  "post-forwarding-milestone-2026-09-27",
+                                 "recordedAt":  "2026-09-27T22:48:00+02:00",
+                                 "deliveredCommit":  "edf97e4876d09d6e8120377a35a39b55896e61a7",
+                                 "deliveredTree":  "904ce7c9027269fd22f8b5175425b86851c0a731",
+                                 "deployment":  {
+                                                    "status":  "blocked_pending_authorised_context",
+                                                    "requirements":  [
+                                                                         "deployment_target",
+                                                                         "database_backup",
+                                                                         "migration_status"
+                                                                     ]
+                                                },
+                                 "activeBatches":  [
+                                                       {
+                                                           "id":  "finance-workspace",
+                                                           "priority":  "accelerated",
+                                                           "functions":  [
+                                                                             "finance-intake",
+                                                                             "finance-workspace",
+                                                                             "finance-lifecycle-approvals",
+                                                                             "finance-dashboard-meeting-pack"
+                                                                         ]
+                                                       },
+                                                       {
+                                                           "id":  "responsive-layout",
+                                                           "priority":  "next",
+                                                           "functions":  [
+                                                                             "pinned-floating-panels",
+                                                                             "width-persistence",
+                                                                             "universal-header",
+                                                                             "zoom-no-omission"
+                                                                         ]
+                                                       },
+                                                       {
+                                                           "id":  "change-popup-lifecycle-navigation",
+                                                           "priority":  "next",
+                                                           "functions":  [
+                                                                             "global-overlay-popup",
+                                                                             "governed-undo",
+                                                                             "resolve-close-navigation",
+                                                                             "queue-synchronisation"
+                                                                         ]
+                                                       },
+                                                       {
+                                                           "id":  "assets-management-rebrand",
+                                                           "priority":  "scheduled",
+                                                           "functions":  [
+                                                                             "user-facing-naming",
+                                                                             "navigation-permissions-reports",
+                                                                             "documentation-notifications",
+                                                                             "data-route-compatibility"
+                                                                         ]
+                                                       }
+                                                   ],
+                                 "decisions":  {
+                                                   "closeLabel":  "Close",
+                                                   "prohibitedCloseLabel":  "Governed Close",
+                                                   "assetModuleName":  "Assets Management",
+                                                   "assetSidebarLabel":  "Assets",
+                                                   "obsoleteAssetLabels":  [
+                                                                               "CMDB",
+                                                                               "Assets / CMDB"
+                                                                           ]
+                                               }
+                             },
+                             {
+                                 "id":  "urgent-release-checkpoint-2026-10-04",
+                                 "recordedAt":  "2026-10-04T21:48:15+02:00",
+                                 "status":  "committed-locally-remote-push-pending",
+                                 "branch":  "feature/launch-communications-queue-compatibility",
+                                 "commit":  "86c8b876b5313f3748378db87b3b25cc77b21871",
+                                 "tree":  "4e4948d001b840f4742d08d68210773621e22e86",
+                                 "approvedPathCount":  14,
+                                 "capabilities":  [
+                                                      "finance-workspace-review-prototype",
+                                                      "notification-ticket-reference-fallback",
+                                                      "assets-management-naming",
+                                                      "ticket-close-wording"
+                                                  ],
+                                 "validation":  {
+                                                    "patchAllowlist":  "passed",
+                                                    "stagedWhitespace":  "passed",
+                                                    "backendSyntax":  "passed",
+                                                    "frontendBuild":  "passed",
+                                                    "modulesTransformed":  2469,
+                                                    "stagedTree":  "passed"
+                                                },
+                                 "delivery":  {
+                                                  "trackingRemote":  "gitlab",
+                                                  "secondaryRemote":  "github",
+                                                  "push":  "pending",
+                                                  "deployment":  "not-performed",
+                                                  "migration":  "created-not-applied",
+                                                  "productionGate":  [
+                                                                         "authorised-production-target",
+                                                                         "database-backup",
+                                                                         "migration-state",
+                                                                         "rollback-point"
+                                                                     ]
+                                              },
+                                 "nextActions":  [
+                                                     "push-and-verify-gitlab-remote",
+                                                     "confirm-production-delivery-context",
+                                                     "authorised-migration-review",
+                                                     "controlled-deployment-and-verification",
+                                                     "finance-accounts-payable-expansion",
+                                                     "responsive-layout-and-universal-header"
+                                                 ]
+                             }
+                         ],
+    "pendingBatchHistory":  [
+                                {
+                                    "id":  "pending-four-function-batches-2026-09-27",
+                                    "recordedAt":  "2026-09-27T19:20:00+02:00",
+                                    "currentDelivery":  "forwarding-participation-selective-delivery",
+                                    "acceleratedPriority":  "finance-workspace-review-prototype",
+                                    "batches":  [
+                                                    {
+                                                        "id":  "finance-workspace",
+                                                        "priority":  "accelerated",
+                                                        "functions":  [
+                                                                          "finance-task-intake",
+                                                                          "finance-task-workspace",
+                                                                          "finance-lifecycle-and-approvals",
+                                                                          "finance-dashboard-and-meeting-pack"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "responsive-layout",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "responsive-dashboards",
+                                                                          "pinned-versus-floating-panels",
+                                                                          "universal-header",
+                                                                          "zoom-no-omission-validation"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "compact-ticket-detail",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "compact-people",
+                                                                          "status-resolve",
+                                                                          "sla-timing",
+                                                                          "contextual-action-menus"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "ticket-lifecycle",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "closed-ticket-action-locks",
+                                                                          "read-only-history-access",
+                                                                          "governed-reopen",
+                                                                          "repeat-issue-cycle"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "assignment-support-groups",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "default-single-group",
+                                                                          "select-owning-group",
+                                                                          "multi-group-alert-preferences",
+                                                                          "membership-without-alerts"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "escalation",
+                                                        "priority":  "high",
+                                                        "functions":  [
+                                                                          "separate-escalation-state",
+                                                                          "escalation-request",
+                                                                          "acknowledgement-lifecycle",
+                                                                          "notifications-and-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "email-first-authentication",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "email-first-entry",
+                                                                          "m365-domain-routing",
+                                                                          "local-password-routing",
+                                                                          "authentication-security"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "universal-table-filters",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "excel-style-columns",
+                                                                          "server-backed-values",
+                                                                          "combined-filter-state",
+                                                                          "portal-table-integration"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "new-ticket-attention",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "assignment-cycle-new-state",
+                                                                          "ticket-visual-pulses",
+                                                                          "notification-badge-and-browser-alerts",
+                                                                          "acknowledgement-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "notification-centre",
+                                                        "priority":  "launch-critical",
+                                                        "functions":  [
+                                                                          "repair-open-actions",
+                                                                          "persistent-pending-actions",
+                                                                          "event-settings",
+                                                                          "delivery-state-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "conversation-activity",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "complete-capture",
+                                                                          "requester-default-replies",
+                                                                          "change-popups-and-undo",
+                                                                          "detailed-activity-history"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "bulk-ticket-operations",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "bulk-selection",
+                                                                          "bulk-edit-resolution",
+                                                                          "archive-delete",
+                                                                          "teams-confirmation"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "workspace-search",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "list-kanban-preview-statistics",
+                                                                          "broad-filters",
+                                                                          "priority-queue-scope",
+                                                                          "universal-authorised-search"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "reopened-repeat-issues",
+                                                        "priority":  "planned",
+                                                        "functions":  [
+                                                                          "employee-reopen",
+                                                                          "resolution-cycle-history",
+                                                                          "repeat-indicators",
+                                                                          "reopen-reporting"
+                                                                      ]
+                                                    },
+                                                    {
+                                                        "id":  "attachments-surveys",
+                                                        "priority":  "later",
+                                                        "functions":  [
+                                                                          "attachment-previews",
+                                                                          "full-screen-gallery",
+                                                                          "post-assistance-survey",
+                                                                          "survey-follow-up-reporting"
+                                                                      ]
+                                                    }
+                                                ]
+                                }
+                            ],
+    "pendingImplementationBatches":  {
+                                         "id":  "pending-four-function-batches-2026-09-27",
+                                         "recordedAt":  "2026-09-27T19:20:00+02:00",
+                                         "currentDelivery":  "forwarding-participation-selective-delivery",
+                                         "acceleratedPriority":  "finance-workspace-review-prototype",
+                                         "batches":  [
+                                                         {
+                                                             "id":  "finance-workspace",
+                                                             "priority":  "accelerated",
+                                                             "functions":  [
+                                                                               "finance-task-intake",
+                                                                               "finance-task-workspace",
+                                                                               "finance-lifecycle-and-approvals",
+                                                                               "finance-dashboard-and-meeting-pack"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "responsive-layout",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "responsive-dashboards",
+                                                                               "pinned-versus-floating-panels",
+                                                                               "universal-header",
+                                                                               "zoom-no-omission-validation"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "compact-ticket-detail",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "compact-people",
+                                                                               "status-resolve",
+                                                                               "sla-timing",
+                                                                               "contextual-action-menus"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "ticket-lifecycle",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "closed-ticket-action-locks",
+                                                                               "read-only-history-access",
+                                                                               "governed-reopen",
+                                                                               "repeat-issue-cycle"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "assignment-support-groups",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "default-single-group",
+                                                                               "select-owning-group",
+                                                                               "multi-group-alert-preferences",
+                                                                               "membership-without-alerts"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "escalation",
+                                                             "priority":  "high",
+                                                             "functions":  [
+                                                                               "separate-escalation-state",
+                                                                               "escalation-request",
+                                                                               "acknowledgement-lifecycle",
+                                                                               "notifications-and-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "email-first-authentication",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "email-first-entry",
+                                                                               "m365-domain-routing",
+                                                                               "local-password-routing",
+                                                                               "authentication-security"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "universal-table-filters",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "excel-style-columns",
+                                                                               "server-backed-values",
+                                                                               "combined-filter-state",
+                                                                               "portal-table-integration"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "new-ticket-attention",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "assignment-cycle-new-state",
+                                                                               "ticket-visual-pulses",
+                                                                               "notification-badge-and-browser-alerts",
+                                                                               "acknowledgement-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "notification-centre",
+                                                             "priority":  "launch-critical",
+                                                             "functions":  [
+                                                                               "repair-open-actions",
+                                                                               "persistent-pending-actions",
+                                                                               "event-settings",
+                                                                               "delivery-state-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "conversation-activity",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "complete-capture",
+                                                                               "requester-default-replies",
+                                                                               "change-popups-and-undo",
+                                                                               "detailed-activity-history"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "bulk-ticket-operations",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "bulk-selection",
+                                                                               "bulk-edit-resolution",
+                                                                               "archive-delete",
+                                                                               "teams-confirmation"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "workspace-search",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "list-kanban-preview-statistics",
+                                                                               "broad-filters",
+                                                                               "priority-queue-scope",
+                                                                               "universal-authorised-search"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "reopened-repeat-issues",
+                                                             "priority":  "planned",
+                                                             "functions":  [
+                                                                               "employee-reopen",
+                                                                               "resolution-cycle-history",
+                                                                               "repeat-indicators",
+                                                                               "reopen-reporting"
+                                                                           ]
+                                                         },
+                                                         {
+                                                             "id":  "attachments-surveys",
+                                                             "priority":  "later",
+                                                             "functions":  [
+                                                                               "attachment-previews",
+                                                                               "full-screen-gallery",
+                                                                               "post-assistance-survey",
+                                                                               "survey-follow-up-reporting"
+                                                                           ]
+                                                         }
+                                                     ]
+                                     },
+    "currentDelivery":  {
+                            "id":  "post-forwarding-milestone-2026-09-27",
+                            "recordedAt":  "2026-09-27T22:48:00+02:00",
+                            "deliveredCommit":  "86c8b876b5313f3748378db87b3b25cc77b21871",
+                            "deliveredTree":  "4e4948d001b840f4742d08d68210773621e22e86",
+                            "deployment":  {
+                                               "status":  "blocked_pending_authorised_context",
+                                               "requirements":  [
+                                                                    "deployment_target",
+                                                                    "database_backup",
+                                                                    "migration_status"
+                                                                ]
+                                           },
+                            "activeBatches":  [
+                                                  {
+                                                      "id":  "finance-workspace",
+                                                      "priority":  "accelerated",
+                                                      "functions":  [
+                                                                        "finance-intake",
+                                                                        "finance-workspace",
+                                                                        "finance-lifecycle-approvals",
+                                                                        "finance-dashboard-meeting-pack"
+                                                                    ]
+                                                  },
+                                                  {
+                                                      "id":  "responsive-layout",
+                                                      "priority":  "next",
+                                                      "functions":  [
+                                                                        "pinned-floating-panels",
+                                                                        "width-persistence",
+                                                                        "universal-header",
+                                                                        "zoom-no-omission"
+                                                                    ]
+                                                  },
+                                                  {
+                                                      "id":  "change-popup-lifecycle-navigation",
+                                                      "priority":  "next",
+                                                      "functions":  [
+                                                                        "global-overlay-popup",
+                                                                        "governed-undo",
+                                                                        "resolve-close-navigation",
+                                                                        "queue-synchronisation"
+                                                                    ]
+                                                  },
+                                                  {
+                                                      "id":  "assets-management-rebrand",
+                                                      "priority":  "scheduled",
+                                                      "functions":  [
+                                                                        "user-facing-naming",
+                                                                        "navigation-permissions-reports",
+                                                                        "documentation-notifications",
+                                                                        "data-route-compatibility"
+                                                                    ]
+                                                  }
+                                              ],
+                            "decisions":  {
+                                              "closeLabel":  "Close",
+                                              "prohibitedCloseLabel":  "Governed Close",
+                                              "assetModuleName":  "Assets Management",
+                                              "assetSidebarLabel":  "Assets",
+                                              "obsoleteAssetLabels":  [
+                                                                          "CMDB",
+                                                                          "Assets / CMDB"
+                                                                      ]
+                                          },
+                            "deliveryStatus":  "committed-locally-remote-push-pending",
+                            "trackingRemote":  "gitlab"
+                        },
+    "financeCommercialIntelligence":  {
+                                          "id":  "finance-commercial-intelligence-scope-2026-09-27",
+                                          "recordedAt":  "2026-09-27T20:48:00+02:00",
+                                          "priority":  "accelerated",
+                                          "target":  "reviewable-prototype-before-finance-manager-meeting",
+                                          "offices":  [
+                                                          {
+                                                              "id":  "main-cfo",
+                                                              "name":  "Finance Main and CFO Office",
+                                                              "kind":  "operational_and_executive"
+                                                          },
+                                                          {
+                                                              "id":  "accounts-payable",
+                                                              "name":  "Accounts Payable Office",
+                                                              "kind":  "operational",
+                                                              "ownManager":  true
+                                                          },
+                                                          {
+                                                              "id":  "boardroom",
+                                                              "name":  "Finance Boardroom",
+                                                              "kind":  "governed_meeting_and_decision_space",
+                                                              "defaultAssignee":  false
+                                                          }
+                                                      ],
+                                          "entraOrganogram":  {
+                                                                  "mode":  "read_only",
+                                                                  "fields":  [
+                                                                                 "department",
+                                                                                 "jobTitle",
+                                                                                 "manager",
+                                                                                 "officeLocation",
+                                                                                 "companyName",
+                                                                                 "employeeType",
+                                                                                 "accountEnabled",
+                                                                                 "objectId"
+                                                                             ],
+                                                                  "writeBack":  false,
+                                                                  "membershipReviewRequired":  true
+                                                              },
+                                          "productFamilies":  [
+                                                                  {
+                                                                      "code":  "RSB",
+                                                                      "name":  "Rear Step Bumpers"
+                                                                  },
+                                                                  {
+                                                                      "code":  "CF",
+                                                                      "name":  "Chassis Frames"
+                                                                  },
+                                                                  {
+                                                                      "code":  "TG",
+                                                                      "name":  "Tailgates"
+                                                                  },
+                                                                  {
+                                                                      "code":  "BL",
+                                                                      "name":  "Bedliners"
+                                                                  },
+                                                                  {
+                                                                      "code":  "BR",
+                                                                      "name":  "Box Rails"
+                                                                  },
+                                                                  {
+                                                                      "code":  "EC",
+                                                                      "name":  "Endcaps"
+                                                                  },
+                                                                  {
+                                                                      "code":  "OTHER",
+                                                                      "name":  "Other or uncategorised products"
+                                                                  }
+                                                              ],
+                                          "processCatalogue":  [
+                                                                   "supplier-invoice",
+                                                                   "supplier-payment",
+                                                                   "employee-payment",
+                                                                   "employee-reimbursement",
+                                                                   "sales-order-processing",
+                                                                   "purchase-order-matching",
+                                                                   "payment-exception",
+                                                                   "supplier-query",
+                                                                   "budget-review",
+                                                                   "financial-reporting",
+                                                                   "audit-request",
+                                                                   "boardroom-review",
+                                                                   "general-finance-request"
+                                                               ],
+                                          "functions":  [
+                                                            "finance-organisation-secure-intake",
+                                                            "finance-operations-workspace",
+                                                            "finance-lifecycle-controls",
+                                                            "finance-intelligence-reporting"
+                                                        ],
+                                          "reporting":  {
+                                                            "dashboards":  [
+                                                                               "executive-finance",
+                                                                               "product-performance",
+                                                                               "accounts-payable",
+                                                                               "finance-manager",
+                                                                               "boardroom"
+                                                                           ],
+                                                            "periods":  [
+                                                                            "daily",
+                                                                            "weekly",
+                                                                            "monthly",
+                                                                            "quarterly",
+                                                                            "year-to-date",
+                                                                            "financial-year",
+                                                                            "custom"
+                                                                        ],
+                                                            "drillDownToAuthorisedRecords":  true,
+                                                            "preserveFilters":  true,
+                                                            "boardroomSnapshots":  true
+                                                        },
+                                          "excelExports":  {
+                                                               "format":  "xlsx",
+                                                               "exports":  [
+                                                                               "detailed-finance",
+                                                                               "product-sales",
+                                                                               "accounts-payable",
+                                                                               "approvals",
+                                                                               "management-pack"
+                                                                           ],
+                                                               "sheets":  [
+                                                                              "Summary",
+                                                                              "Product Performance",
+                                                                              "Accounts Payable",
+                                                                              "Approvals",
+                                                                              "Overdue Items",
+                                                                              "Office Workload",
+                                                                              "Exceptions",
+                                                                              "Detailed Data",
+                                                                              "Data Dictionary",
+                                                                              "Export Metadata"
+                                                                          ],
+                                                               "cleanDataRulesRequired":  true,
+                                                               "columnLevelSecurity":  true,
+                                                               "exportAuditRequired":  true
+                                                           },
+                                          "security":  {
+                                                           "leastPrivilege":  true,
+                                                           "separationOfDuties":  true,
+                                                           "confidentialityLevels":  [
+                                                                                         "Internal",
+                                                                                         "Finance Restricted",
+                                                                                         "Confidential",
+                                                                                         "CFO Restricted",
+                                                                                         "Boardroom Restricted",
+                                                                                         "Payment Restricted",
+                                                                                         "Employee Financial Information",
+                                                                                         "Supplier Banking Information"
+                                                                                     ],
+                                                           "confidentialUploadsEnabled":  false,
+                                                           "uploadReadinessRequirements":  [
+                                                                                               "protected-storage",
+                                                                                               "extension-signature-validation",
+                                                                                               "generated-filenames",
+                                                                                               "size-limits",
+                                                                                               "malware-scanning",
+                                                                                               "csrf-protection",
+                                                                                               "retention",
+                                                                                               "authenticated-download"
+                                                                                           ],
+                                                           "identitySecurityRequirements":  [
+                                                                                                "mfa",
+                                                                                                "conditional-access",
+                                                                                                "trusted-or-compliant-device",
+                                                                                                "session-controls",
+                                                                                                "step-up-authentication"
+                                                                                            ]
+                                                       },
+                                          "dataQualityStatuses":  [
+                                                                      "Valid",
+                                                                      "Incomplete",
+                                                                      "Needs Review",
+                                                                      "Exception",
+                                                                      "Blocked"
+                                                                  ],
+                                          "noFabricatedFinancialData":  true,
+                                          "productionDeployment":  "blocked_pending_finance_review_and_security_readiness"
+                                      },
+    "financeReadinessRosterNaming":  {
+                                         "id":  "finance-readiness-roster-naming-2026-09-27",
+                                         "recordedAt":  "2026-09-27T23:56:36+02:00",
+                                         "financeReadiness":  {
+                                                                  "result":  "pass",
+                                                                  "failures":  0,
+                                                                  "warnings":  4,
+                                                                  "passes":  66,
+                                                                  "backendSyntax":  "passed",
+                                                                  "frontendBuild":  "passed",
+                                                                  "modulesTransformed":  2469,
+                                                                  "migrationExecuted":  false,
+                                                                  "confidentialUploadsEnabled":  false,
+                                                                  "xlsxGeneration":  "approved-service-pending",
+                                                                  "entraMapping":  "read-only-verification-pending"
+                                                              },
+                                         "accountsPayableOffice":  [
+                                                                       {
+                                                                           "name":  "Sibongile Jele",
+                                                                           "suppliedTitle":  "Accountant"
+                                                                       },
+                                                                       {
+                                                                           "name":  "Phindile Ntuli",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Lindokuhle Malevu",
+                                                                           "suppliedTitle":  "Accountant Assistant"
+                                                                       },
+                                                                       {
+                                                                           "name":  "Francina Tshabalala",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Mpho Mnisi",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Tshepo Maroga",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Hlengiwe Lubisi",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Bhekumuzi Thubana",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Sesihle Sanka",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Cynthia Cannela",
+                                                                           "suppliedTitle":  null
+                                                                       },
+                                                                       {
+                                                                           "name":  "Suphaporn",
+                                                                           "suppliedTitle":  "Office Manager"
+                                                                       }
+                                                                   ],
+                                         "mainAndCfoOffice":  [
+                                                                  {
+                                                                      "name":  "Puseletso Sithole",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Ayanda Mbatha",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Lutho Mafunda",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Khumbudzo Mutheiwana",
+                                                                      "suppliedTitle":  null
+                                                                  },
+                                                                  {
+                                                                      "name":  "Mncedisi Valashiya",
+                                                                      "suppliedTitle":  "Accountant Manager"
+                                                                  },
+                                                                  {
+                                                                      "name":  "Bongani Tshabalala",
+                                                                      "suppliedTitle":  "Finance Manager"
+                                                                  }
+                                                              ],
+                                         "entraVerification":  {
+                                                                   "required":  true,
+                                                                   "writeBack":  false,
+                                                                   "autoGrantAccess":  false,
+                                                                   "fields":  [
+                                                                                  "displayName",
+                                                                                  "userPrincipalName",
+                                                                                  "mail",
+                                                                                  "jobTitle",
+                                                                                  "department",
+                                                                                  "officeLocation",
+                                                                                  "employeeType",
+                                                                                  "accountEnabled",
+                                                                                  "id",
+                                                                                  "manager"
+                                                                              ]
+                                                               },
+                                         "naming":  {
+                                                        "sidebarAssets":  "Assets",
+                                                        "moduleTitle":  "Assets Management",
+                                                        "closeAction":  "Close",
+                                                        "closeConfirmation":  "Ticket closed successfully.",
+                                                        "technicalGovernedClosurePreserved":  true,
+                                                        "assetRoutesAndDataPreserved":  true,
+                                                        "staleLabelScan":  "passed",
+                                                        "frontendBuild":  "passed"
+                                                    },
+                                         "deployment":  "pending-selective-stage-commit-push-and-authorised-migration-review"
+                                     },
+    "latestDeliveryCheckpoint":  {
+                                     "id":  "urgent-release-checkpoint-2026-10-04",
+                                     "recordedAt":  "2026-10-04T21:48:15+02:00",
+                                     "status":  "committed-locally-remote-push-pending",
+                                     "branch":  "feature/launch-communications-queue-compatibility",
+                                     "commit":  "86c8b876b5313f3748378db87b3b25cc77b21871",
+                                     "tree":  "4e4948d001b840f4742d08d68210773621e22e86",
+                                     "approvedPathCount":  14,
+                                     "capabilities":  [
+                                                          "finance-workspace-review-prototype",
+                                                          "notification-ticket-reference-fallback",
+                                                          "assets-management-naming",
+                                                          "ticket-close-wording"
+                                                      ],
+                                     "validation":  {
+                                                        "patchAllowlist":  "passed",
+                                                        "stagedWhitespace":  "passed",
+                                                        "backendSyntax":  "passed",
+                                                        "frontendBuild":  "passed",
+                                                        "modulesTransformed":  2469,
+                                                        "stagedTree":  "passed"
+                                                    },
+                                     "delivery":  {
+                                                      "trackingRemote":  "gitlab",
+                                                      "secondaryRemote":  "github",
+                                                      "push":  "pending",
+                                                      "deployment":  "not-performed",
+                                                      "migration":  "created-not-applied",
+                                                      "productionGate":  [
+                                                                             "authorised-production-target",
+                                                                             "database-backup",
+                                                                             "migration-state",
+                                                                             "rollback-point"
+                                                                         ]
+                                                  },
+                                     "nextActions":  [
+                                                         "push-and-verify-gitlab-remote",
+                                                         "confirm-production-delivery-context",
+                                                         "authorised-migration-review",
+                                                         "controlled-deployment-and-verification",
+                                                         "finance-accounts-payable-expansion",
+                                                         "responsive-layout-and-universal-header"
+                                                     ]
+                                 },
+    "financeEmailOperationsBatch":  {
+                                        "id":  "finance-email-ticketing-operations-2026-10-05",
+                                        "script":  774,
+                                        "status":  "implemented-locally-validation-pending",
+                                        "functions":  [
+                                                          "finance-employee-responsibility-registry",
+                                                          "authorised-mailbox-external-sender-registry",
+                                                          "actionable-email-triage",
+                                                          "unattended-monitoring-manager-delegation"
+                                                      ],
+                                        "migrationExecuted":  false,
+                                        "productionDeployment":  "not-performed"
+                                    },
+    "financeOperationsBatch2":  {
+                                    "script":  777,
+                                    "status":  "implemented-locally-migration-applied-validation-pending",
+                                    "functions":  [
+                                                      "mailbox-routing-administration",
+                                                      "external-sender-governance",
+                                                      "manager-triage-bulk-delegation",
+                                                      "email-intake-finance-enrichment"
+                                                  ],
+                                    "migrationExecuted":  true,
+                                    "emailProcessingRun":  false,
+                                    "productionDeployment":  "not-performed"
+                                },
+    "financeOperationsBatch3":  {
+                                    "script":  781,
+                                    "status":  "implemented-locally-validation-pending",
+                                    "functions":  [
+                                                      "finance-employee-duty-administration",
+                                                      "finance-office-allocation-administration",
+                                                      "authorised-mailbox-routing-administration",
+                                                      "external-sender-governance-administration"
+                                                  ],
+                                    "migrationScript":  779,
+                                    "migrationExecuted":  true,
+                                    "localBackupVerified":  true,
+                                    "emailProcessingRun":  false,
+                                    "graphProcessingRun":  false,
+                                    "functionalTesting":  "deferred-to-finance-milestone-boundary",
+                                    "productionDeployment":  "not-performed"
+                                },
+    "milestoneCheckpoints":  [
+                                 {
+                                     "marker":  "ATD-TRACKER-CHECKPOINT-2026-10-08-FINANCE-PRODUCTION-REPAIRS",
+                                     "date":  "2026-10-08",
+                                     "updatedAt":  "2026-10-08T20:44:00+02:00",
+                                     "milestone":  "Finance production activation and repair checkpoint",
+                                     "status":  "production_repairs_complete_finance_configuration_pending",
+                                     "completedScripts":  [
+                                                              799,
+                                                              800,
+                                                              801,
+                                                              802,
+                                                              803,
+                                                              804,
+                                                              805,
+                                                              806,
+                                                              807,
+                                                              808,
+                                                              809
+                                                          ],
+                                     "completed":  [
+                                                       "Finance milestone activated and production health verified",
+                                                       "Static frontend asset access repaired and cache-safe assets activated",
+                                                       "Ticket detail useRef runtime failure repaired, rebuilt and deployed",
+                                                       "Finance Workspace actual database and schema validated",
+                                                       "Finance dashboard and queue scope repaired using tickets.workspace",
+                                                       "PM2 restart and API health verification passed"
+                                                   ],
+                                     "currentState":  {
+                                                          "financeDatabase":  "atd_helpdesk",
+                                                          "financeOffices":  3,
+                                                          "financeEmployeeResponsibilities":  0,
+                                                          "financeMailboxes":  0,
+                                                          "financeExternalSenders":  0,
+                                                          "financeTicketOperations":  0,
+                                                          "financeDelegationHistory":  0,
+                                                          "emailProcessingEnabled":  false,
+                                                          "confidentialUploadsEnabled":  false
+                                                      },
+                                     "nextActions":  [
+                                                         "Load and validate the complete Finance employee roster and manager duties",
+                                                         "Configure authorised Finance mailboxes and governed routing without live processing",
+                                                         "Load governed external senders and verification states",
+                                                         "Validate classification, delegation, unattended indicators, queues and reporting",
+                                                         "Complete Finance Excel exports for the six required product families",
+                                                         "Run one comprehensive Finance milestone test and one consolidated report at the milestone boundary"
+                                                     ],
+                                     "deferred":  [
+                                                      "Frontend code splitting for the Vite chunk-size warning",
+                                                      "Live email and Microsoft Graph processing until governed activation"
+                                                  ],
+                                     "productionEvidence":  {
+                                                                "script806":  "frontend build and deployment successful; Helpdesk and Production assets HTTP 200",
+                                                                "script809":  "dashboard query passed; queue query passed; PM2 restart passed; API health HTTP 200"
+                                                            }
+                                 }
+                             ],
+    "lastUpdated":  "2026-10-13T15:14:44+02:00",
+    "financeOperationsBatch4":  {
+                                    "script":  812,
+                                    "status":  "implemented-locally-validation-pending",
+                                    "functions":  [
+                                                      "finance-employee-roster-discovery",
+                                                      "finance-responsibility-office-function-assignment",
+                                                      "finance-manager-backup-duty-assignment",
+                                                      "availability-delegation-eligibility",
+                                                      "authorised-mailbox-configuration",
+                                                      "assignee-backup-group-routing",
+                                                      "mailbox-sla-priority-sender-scope",
+                                                      "external-sender-verification-blocking"
+                                                  ],
+                                    "emailProcessingRun":  false,
+                                    "graphProcessingRun":  false,
+                                    "monitoringActivationAllowed":  false,
+                                    "functionalTesting":  "deferred-to-finance-milestone-boundary",
+                                    "productionDeployment":  "not-performed"
+                                },
+    "financeOperationsBatch5":  {
+                                    "script":  814,
+                                    "status":  "implemented-locally-validation-pending",
+                                    "functions":  [
+                                                      "managed-finance-ticket-selection",
+                                                      "triage-classification-finance-function",
+                                                      "risk-waiting-response-manager-instruction",
+                                                      "single-ticket-governed-delegation",
+                                                      "bulk-delegation-partial-results",
+                                                      "unattended-sla-attention-indicators",
+                                                      "finance-manager-triage-console",
+                                                      "detailed-delegation-history"
+                                                  ],
+                                    "deployment":  "prohibited-not-performed",
+                                    "databaseWrites":  "not-performed-by-script",
+                                    "emailProcessing":  false,
+                                    "graphProcessing":  false,
+                                    "functionalTesting":  "deferred-to-finance-milestone-boundary"
+                                },
+    "financeAccessScopeBatch":  {
+                                    "script":  816,
+                                    "status":  "implemented-locally-migration-not-executed",
+                                    "functions":  [
+                                                      "finance-entry-access-middleware",
+                                                      "verified-finance-department-eligibility",
+                                                      "approved-finance-position-catalogue",
+                                                      "reporting-hierarchy-scope",
+                                                      "office-function-scope",
+                                                      "confidentiality-record-field-restrictions",
+                                                      "temporary-administrative-override",
+                                                      "access-decision-audit-expiry-revocation"
+                                                  ],
+                                    "deployment":  "prohibited-not-performed",
+                                    "migration":  "created-not-executed",
+                                    "functionalTesting":  "deferred-to-finance-milestone-boundary"
+                                },
+    "globalTicketGovernance10FunctionBatch":  {
+                                                  "script":  818,
+                                                  "status":  "implemented-locally-migration-not-executed",
+                                                  "functions":  [
+                                                                    "agent-default-support-group",
+                                                                    "assignee-derived-group",
+                                                                    "assignee-group-lock",
+                                                                    "requester-priority-restriction",
+                                                                    "governed-incident-catalogue",
+                                                                    "governed-service-catalogue",
+                                                                    "external-email-source",
+                                                                    "ticket-important-flag",
+                                                                    "hierarchy-escalation-targets",
+                                                                    "global-escalation-audit"
+                                                                ],
+                                                  "migration":  "created-not-executed",
+                                                  "deployment":  "not-performed",
+                                                  "functionalTesting":  "deferred-to-milestone-boundary"
+                                              },
+    "globalTicketExperience10FunctionBatch":  {
+                                                  "script":  820,
+                                                  "status":  "implemented-locally-migration-not-executed",
+                                                  "functions":  [
+                                                                    "global-agent-availability",
+                                                                    "availability-assignment-guard",
+                                                                    "multi-group-alert-preferences",
+                                                                    "collaborator-cc-foundation-completed",
+                                                                    "teams-conversation-contract",
+                                                                    "complete-conversation-feed",
+                                                                    "resolved-closed-survey",
+                                                                    "attachment-preview-validated-existing",
+                                                                    "expanded-audit-confirmations",
+                                                                    "popup-undo-activity-expansion"
+                                                                ],
+                                                  "migration":  "created-not-executed",
+                                                  "deployment":  "not-performed",
+                                                  "functionalTesting":  "deferred-to-milestone-boundary"
+                                              },
+    "preDeploymentAuthTicketVisibilityDarkModeBatch":  {
+                                                           "script":  824,
+                                                           "title":  "Pre-deployment authentication, new-ticket visibility and dark-mode/header corrections",
+                                                           "status":  "scheduled-before-next-deployment",
+                                                           "priority":  "launch-critical-predeployment",
+                                                           "functions":  [
+                                                                             "1. Validate the submitted sign-in identifier as an email address before authentication options are shown.",
+                                                                             "2. For verified @atdalliance.co.za addresses, show Microsoft SSO as the only standard sign-in option.",
+                                                                             "3. Hide and disable password entry for @atdalliance.co.za accounts unless the account has server-verified IT department membership.",
+                                                                             "4. Prevent client-side department claims from unlocking password authentication; the exception must be authorised by backend directory/account data and audited.",
+                                                                             "5. Sort Ticket Workspace lists by newest-created ticket first unless a user deliberately selects another supported sort.",
+                                                                             "6. Sort Ticket Monitor lists by newest-created ticket first unless a user deliberately selects another supported sort.",
+                                                                             "7. Sort Dashboard Priority Queue results by newest-created ticket first unless a user deliberately selects another supported sort.",
+                                                                             "8. Display a consistent New ticket tag across Ticket Workspace, Ticket Monitor and Priority Queue, using one governed definition and expiry rule.",
+                                                                             "9. Include New-ticket state and tag evidence in escalation workflow displays and preserve readable ticket descriptions in Dark mode.",
+                                                                             "10. Place Ticket Monitor and the Light/Dark toggle beside the profile control, with responsive collision protection so the avatar never covers either control."
+                                                                         ],
+                                                           "acceptanceCriteria":  [
+                                                                                      "SSO routing is determined from a normalised case-insensitive email domain.",
+                                                                                      "The IT password exception requires verified active-account and department membership; changing page markup or request payloads cannot enable it.",
+                                                                                      "Existing external/local account authentication remains available according to current policy.",
+                                                                                      "New-ticket ordering is deterministic: created_at DESC with a stable secondary key.",
+                                                                                      "The New tag uses one shared backend/frontend rule across all three ticket surfaces.",
+                                                                                      "Dark-mode description text meets readable contrast and does not inherit light-mode translucent or blurred styling.",
+                                                                                      "Header controls remain visible at supported desktop and responsive widths and do not sit behind the floating profile control.",
+                                                                                      "Closed-ticket action restrictions, current access controls, audit history and existing ticket filters remain intact.",
+                                                                                      "Implementation and focused validation must complete before the next production deployment.",
+                                                                                      "Comprehensive milestone testing remains consolidated at the milestone boundary."
+                                                                                  ],
+                                                           "dependencies":  [
+                                                                                "Current authentication and Microsoft SSO configuration",
+                                                                                "Verified Microsoft Directory department data",
+                                                                                "Ticket Workspace, Ticket Monitor and Dashboard Priority Queue sources",
+                                                                                "Escalation workflow and Ticket Detail dark-mode styles",
+                                                                                "Responsive header and profile-control layout"
+                                                                            ],
+                                                           "implementation":  "not-started",
+                                                           "deployment":  "blocked-until-complete-and-validated",
+                                                           "productionChanges":  "none",
+                                                           "scheduledAt":  "2026-10-09T10:55:42+02:00"
+                                                       },
+    "currentProgressCheckpoint":  {
+                                      "checkpoint":  834,
+                                      "recordedAt":  "2026-10-13T15:14:44+02:00",
+                                      "milestone":  "Pre-deployment authentication, ticket experience, Finance activation and reporting preparation",
+                                      "status":  "implementation-in-progress-deployment-blocked",
+                                      "completed":  [
+                                                        "819 source and implementation context processed as one logical package",
+                                                        "820 global ticket experience batch implemented locally and validated",
+                                                        "821 Finance Workspace accessContext runtime defect repaired and frontend build passed",
+                                                        "822 local Finance access, ticket governance and ticket experience migrations applied and verified",
+                                                        "823 production Finance Workspace context collected read-only from approved web server authority",
+                                                        "824 pre-deployment authentication, New-ticket, Dark-mode and header work scheduled",
+                                                        "825 pre-deployment source context collected read-only",
+                                                        "826 company-email SSO routing, IT password exception guard, New-ticket state, ordering and Dark-mode foundations implemented; build passed",
+                                                        "827 remaining Ticket Workspace, Priority Queue and header context collected",
+                                                        "828 New-ticket tags implemented in Ticket Workspace and Dashboard Priority Queue; build passed",
+                                                        "829 incident form Dark-mode and responsive header context collected",
+                                                        "830 Ticket Monitor, Kanban, sticky-footer and terminology context collected",
+                                                        "831 incident-form Dark-mode contrast and responsive header collision protection implemented; cleanup verified",
+                                                        "832 Ticket Monitor/Kanban responsive reachability, sticky-footer strengthening and user-facing Triage to Prioritisation changes implemented; build passed"
+                                                    ],
+                                      "active":  [
+                                                     "832 follow-up: merge duplicate Microsoft sign-in disabled attributes and validate a clean frontend build",
+                                                     "833 collect Ticket Statistics, reviewed Excel export, closed-ticket and email-recipient UI context",
+                                                     "Implement complete Ticket Statistics page with authorised ticket records, requester, department and approximately 40-word description preview",
+                                                     "Add Read full description and Open ticket actions, including governed access to closed tickets",
+                                                     "Add filterable Excel export with mandatory review/preview before download and audit evidence",
+                                                     "Repair Ticket Detail email-recipient controls for Dark-mode readability and clearer selected-recipient presentation",
+                                                     "Complete empty-column collapsed-by-default behavior and explicit expand controls in Ticket Monitor and Ticket Workspace Kanban if focused validation finds gaps"
+                                                 ],
+                                      "blocked":  [
+                                                      "Next production deployment remains blocked until active launch-critical work is implemented and focused validation passes",
+                                                      "Production Finance source, routes and migrations remain behind local development state",
+                                                      "No production database migration should run before controlled production deployment preparation"
+                                                  ],
+                                      "deferred":  [
+                                                       "Comprehensive milestone functional testing remains deferred until milestone implementation is complete",
+                                                       "Milestone server push and consolidated milestone report remain pending",
+                                                       "Large frontend bundle code-splitting remains a post-launch architecture optimisation",
+                                                       "Modular architecture documentation, ADR library, function rationale, failure-mode register and decision playbooks remain scheduled immediately after deployment"
+                                                   ],
+                                      "environment":  {
+                                                          "repository":  "C:\\Users\\jeffrey.motepe\\OneDrive - ATD-Alliance\\Documents\\atd-helpdesk-deployment\\atd-helpdesk",
+                                                          "productionSsh":  "atddev@10.0.0.12:18922",
+                                                          "prohibitedLegacyServer":  "10.0.0.21",
+                                                          "reportStandard":  "One consolidated Notepad-friendly UTF-8 TXT report per script unless genuinely too large"
+                                                      }
+                                  }
+}

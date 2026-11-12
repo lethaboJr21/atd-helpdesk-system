@@ -29,8 +29,13 @@ const SAFE_USER_SELECT = `
   id,
   name,
   email,
+  username,
   role,
   status,
+  account_type,
+  authentication_mode,
+  account_purpose,
+  deactivated_at,
   approved,
   microsoft_id,
   microsoft_account_enabled,
@@ -260,7 +265,13 @@ function buildAccountAccessError(user) {
     };
   }
 
-  if (user.microsoft_account_enabled === false) {
+  const localPasswordAccount = Boolean(
+    user.role === "superadmin" ||
+      user.account_purpose === "superadmin" ||
+      user.account_purpose === "station_operator" ||
+      user.authentication_mode === "local_password"
+  );
+  if (user.microsoft_account_enabled === false && !localPasswordAccount) {
     return {
       status: 403,
       code: "MICROSOFT_ACCOUNT_DISABLED",
@@ -512,215 +523,210 @@ async function findOrCreateMicrosoftUser(profile) {
   };
 }
 
-router.post("/login", async (request, response) => {
-  const email = normalizeEmail(request.body.email);
-  const password = String(request.body.password || "");
 
-  if (!email || !password) {
-    return response.status(400).json({
-      error: "Email and password are required",
-    });
-  }
+function normalizeIdentifier(value) {
+  return String(value || "").trim().toLowerCase();
+}
 
+function unavailableRoute(message) {
+  return {
+    route: "unavailable",
+    passwordAllowed: false,
+    microsoftAllowed: false,
+    preferred: null,
+    options: [],
+    message,
+  };
+}
+
+function activeInteractiveAccount(user) {
+  return Boolean(
+    user &&
+      user.approved &&
+      user.role !== "pending" &&
+      user.status === "active" &&
+      !user.archived_at &&
+      !user.deactivated_at &&
+      (user.account_type || "person") === "person"
+  );
+}
+
+async function authenticationPolicyFor(user) {
+  let policy = null;
   try {
     const result = await pool.query(
-      `
-      SELECT
-        ${SAFE_USER_SELECT},
-        password_hash
-      FROM users
-      WHERE LOWER(email::text) = LOWER($1::text)
-      LIMIT 1
-      `,
-      [email]
-    );
-
-    const user = result.rows[0];
-
-    if (!user || !user.password_hash) {
-      return response.status(401).json({
-        error: "Invalid credentials",
-      });
-    }
-
-    const validPassword = await bcrypt.compare(
-      password,
-      user.password_hash
-    );
-
-    if (!validPassword) {
-      return response.status(401).json({
-        error: "Invalid credentials",
-      });
-    }
-
-    const accessError = buildAccountAccessError(user);
-
-    if (accessError) {
-      return response
-        .status(accessError.status)
-        .json({
-          code: accessError.code,
-          message: accessError.message,
-        });
-    }
-
-    await pool.query(
-      `
-      UPDATE users
-      SET last_login_at = NOW()
-      WHERE id = $1
-      `,
+      `SELECT allow_microsoft_sso, allow_local_password, preferred_method, policy_reason
+       FROM user_authentication_policies
+       WHERE user_id = $1`,
       [user.id]
     );
+    policy = result.rows[0] || null;
+  } catch (error) {
+    if (error.code !== "42P01") throw error;
+  }
 
-    const token = signToken(user);
-    delete user.password_hash;
+  const companyAccount = getEmailDomain(user.email) === getMicrosoftConfig().allowedDomain;
+  const superadmin = user.role === "superadmin" || user.account_purpose === "superadmin";
+  const station = user.account_purpose === "station_operator";
+  const hasPassword = Boolean(user.password_hash);
+  const microsoftIdentityAvailable = Boolean(
+    companyAccount && user.email && user.microsoft_account_enabled !== false
+  );
 
+  if (policy) {
+    return {
+      companyAccount,
+      passwordAllowed: Boolean(policy.allow_local_password && hasPassword),
+      microsoftAllowed: Boolean(policy.allow_microsoft_sso && microsoftIdentityAvailable),
+      preferred: policy.preferred_method,
+      source: "governed_policy",
+    };
+  }
+  if (superadmin) {
+    return {
+      companyAccount,
+      passwordAllowed: hasPassword,
+      microsoftAllowed: microsoftIdentityAvailable,
+      preferred: hasPassword ? "local_password" : "microsoft",
+      source: "superadmin_policy",
+    };
+  }
+  if (station) {
+    return {
+      companyAccount: false,
+      passwordAllowed: hasPassword,
+      microsoftAllowed: false,
+      preferred: "local_password",
+      source: "station_policy",
+    };
+  }
+  if (companyAccount) {
+    return {
+      companyAccount: true,
+      passwordAllowed: false,
+      microsoftAllowed: microsoftIdentityAvailable,
+      preferred: "microsoft",
+      source: "company_policy",
+    };
+  }
+  return {
+    companyAccount: false,
+    passwordAllowed: hasPassword,
+    microsoftAllowed: false,
+    preferred: "local_password",
+    source: "external_local_policy",
+  };
+}
+
+router.post("/login-options", async (request, response) => {
+  const identifier = normalizeIdentifier(request.body.identifier || request.body.email);
+  if (!identifier) {
+    return response.status(400).json({
+      code: "IDENTIFIER_REQUIRED",
+      error: "Enter a username or email address.",
+    });
+  }
+  try {
+    const result = await pool.query(
+      `SELECT id,email,username,role,status,approved,archived_at,deactivated_at,
+              account_type,password_hash,microsoft_account_enabled,authentication_mode,account_purpose
+       FROM users
+       WHERE LOWER(COALESCE(email,''))=$1 OR LOWER(COALESCE(username,''))=$1
+       LIMIT 1`,
+      [identifier]
+    );
+    const user = result.rows[0];
+    if (!activeInteractiveAccount(user)) {
+      return response.json(unavailableRoute(
+        "No active sign-in account is available for this identifier. Use another account or submit a local account request."
+      ));
+    }
+    const policy = await authenticationPolicyFor(user);
+    const options = [];
+    if (policy.microsoftAllowed) options.push("microsoft");
+    if (policy.passwordAllowed) options.push("local_password");
+    if (!options.length) {
+      return response.json(unavailableRoute(
+        policy.companyAccount
+          ? "Microsoft sign-in is not available for this company account. Contact IT for assistance."
+          : "No active local password is registered for this account. Submit a local account request or contact IT."
+      ));
+    }
     return response.json({
-      token,
-      user: {
-        ...user,
-        last_login_at: new Date(),
-      },
+      route: options.length > 1 ? "options" : options[0] === "microsoft" ? "microsoft" : "password",
+      passwordAllowed: policy.passwordAllowed,
+      microsoftAllowed: policy.microsoftAllowed,
+      preferred: options.includes(policy.preferred) ? policy.preferred : options[0],
+      options,
+      loginHint: policy.microsoftAllowed ? user.email : null,
+      identifierType: policy.companyAccount ? "company" : user.account_purpose === "station_operator" ? "station_operator" : "local",
+      policySource: policy.source,
     });
   } catch (error) {
-    console.error("Login failed:", error);
-    return response.status(500).json({
-      error: "Login failed",
-    });
+    console.error("Login routing failed:", error);
+    return response.status(500).json({ error: "Sign-in routing could not be completed." });
   }
 });
 
-router.post("/signup", async (request, response) => {
-  const name = String(request.body.name || "").trim();
-  const email = normalizeEmail(request.body.email);
+router.post("/login", async (request, response) => {
+  const identifier = normalizeIdentifier(request.body.identifier || request.body.email);
   const password = String(request.body.password || "");
-
-  if (!name || !email || !password) {
-    return response.status(400).json({
-      error: "Name, email and password are required",
-    });
+  if (!identifier || !password) {
+    return response.status(400).json({ error: "Username/email and password are required" });
   }
-
-  if (!isValidEmail(email)) {
-    return response.status(400).json({
-      error: "Enter a valid email address.",
-    });
-  }
-
-  if (password.length < 8) {
-    return response.status(400).json({
-      error: "Password must be at least 8 characters.",
-    });
-  }
-
   try {
-    const existingResult = await pool.query(
-      `
-      SELECT id, approved, status, archived_at
-      FROM users
-      WHERE LOWER(email::text) = LOWER($1::text)
-      LIMIT 1
-      `,
-      [email]
+    const result = await pool.query(
+      `SELECT ${SAFE_USER_SELECT},password_hash FROM users
+       WHERE LOWER(COALESCE(email,''))=$1 OR LOWER(COALESCE(username,''))=$1 LIMIT 1`,
+      [identifier]
     );
-
-    if (existingResult.rows[0]) {
-      return response.status(409).json({
-        error:
-          "An account already exists for this email address. Use Sign In or contact IT for assistance.",
+    const user = result.rows[0];
+    if (!user || !user.password_hash || !activeInteractiveAccount(user)) {
+      return response.status(401).json({ error: "Invalid credentials" });
+    }
+    const policy = await authenticationPolicyFor(user);
+    if (!policy.passwordAllowed) {
+      return response.status(403).json({
+        code: "PASSWORD_LOGIN_NOT_ALLOWED",
+        error: policy.companyAccount
+          ? "Use Microsoft to sign in with this company account."
+          : "Password sign-in is not enabled for this account.",
       });
     }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const insertedResult = await pool.query(
-      `
-      INSERT INTO users (
-        name,
-        email,
-        password_hash,
-        role,
-        status,
-        approved
-      )
-      VALUES (
-        $1,
-        $2,
-        $3,
-        'pending',
-        'inactive',
-        FALSE
-      )
-      RETURNING ${SAFE_USER_SELECT}
-      `,
-      [name, email, passwordHash]
-    );
-
-    const newUser = insertedResult.rows[0];
-
-    try {
-      await createAccountApprovalNotifications(newUser);
-    } catch (notificationError) {
-      console.error(
-        "Account approval notifications failed, but signup continues:",
-        {
-          userId: newUser.id,
-          message: notificationError.message,
-        }
-      );
+    if (!(await bcrypt.compare(password, user.password_hash))) {
+      return response.status(401).json({ error: "Invalid credentials" });
     }
-
-    // Email is intentionally non-blocking. The account request is already saved.
-    Promise.allSettled([
-      sendApprovalEmail(newUser),
-      sendAccountRequestReceivedEmail(newUser),
-    ]).then((results) => {
-      const labels = [
-        "Administrator approval email",
-        "Requester confirmation email",
-      ];
-
-      results.forEach((result, index) => {
-        if (result.status === "rejected") {
-          console.error(
-            `${labels[index]} failed, but signup continues:`,
-            result.reason?.message || result.reason
-          );
-          return;
-        }
-
-        if (
-          result.value &&
-          !result.value.sent &&
-          !result.value.skipped
-        ) {
-          console.error(
-            `${labels[index]} was not delivered:`,
-            result.value.error || result.value
-          );
-        }
-      });
-    });
-
-    return response.status(201).json({
-      message:
-        "Account request submitted successfully. Administrators and authorised IT staff have been notified.",
-      user: newUser,
-    });
+    const accessError = buildAccountAccessError(user);
+    if (accessError) {
+      return response.status(accessError.status).json({ code: accessError.code, message: accessError.message });
+    }
+    await pool.query("UPDATE users SET last_login_at=NOW() WHERE id=$1", [user.id]);
+    const token = signToken(user);
+    delete user.password_hash;
+    return response.json({ token, user: { ...user, last_login_at: new Date() } });
   } catch (error) {
-    if (error.code === "23505") {
-      return response.status(409).json({
-        error: "An account already exists for this email address.",
-      });
-    }
-
-    console.error("Signup failed:", error);
+    console.error("Login failed:", { message: error.message, code: error.code || null });
     return response.status(500).json({
-      error: "Signup failed",
+      code: "LOCAL_LOGIN_REQUEST_FAILED",
+      error: process.env.NODE_ENV === "development" ? `Local login failed: ${error.message}` : "Login failed",
     });
   }
+});
+router.post("/signup",async(request,response)=>{
+ const name=String(request.body.name||"").trim();const username=normalizeIdentifier(request.body.username);const email=normalizeEmail(request.body.email);const password=String(request.body.password||"");const accountPurpose=String(request.body.accountPurpose||"external_local");
+ const station=accountPurpose==="station_operator";const plantCode=String(request.body.plantCode||"").trim();const stationCode=String(request.body.stationCode||"").trim();
+ if(!name||!password||(!station&&!email)||(station&&(!username||!plantCode||!stationCode)))return response.status(400).json({error:station?"Name, username, plant, station and password are required":"Name, email and password are required"});
+ if(email&&getEmailDomain(email)===getMicrosoftConfig().allowedDomain)return response.status(409).json({code:"COMPANY_SSO_REQUIRED",error:"Company email accounts must use Microsoft SSO."});
+ if(username&&!/^[a-z0-9][a-z0-9._-]{2,39}$/.test(username))return response.status(400).json({error:"Username must be 3 to 40 characters using letters, numbers, dots, underscores or hyphens."});
+ if(password.length<8)return response.status(400).json({error:"Password must be at least 8 characters."});
+ try{
+  const exists=await pool.query("SELECT id FROM users WHERE ($1<>'' AND LOWER(COALESCE(email,''))=$1) OR ($2<>'' AND LOWER(COALESCE(username,''))=$2) LIMIT 1",[email,username]);if(exists.rowCount)return response.status(409).json({error:"An account already exists for this identifier."});
+  const hash=await bcrypt.hash(password,10);const fallbackEmail=station?null:email;
+  const inserted=await pool.query(`INSERT INTO users(name,email,username,password_hash,role,status,approved,authentication_mode,account_purpose,plant_code,station_code,shift_code,station_signup_requested_at)
+   VALUES($1,$2,$3,$4,'pending','inactive',FALSE,'local_password',$5,$6,$7,$8,CASE WHEN $5='station_operator' THEN NOW() ELSE NULL END) RETURNING ${SAFE_USER_SELECT}`,[name,fallbackEmail,username||null,hash,station?"station_operator":"external_local",plantCode||null,stationCode||null,String(request.body.shiftCode||"").trim()||null]);
+  const user=inserted.rows[0];try{await createAccountApprovalNotifications(user)}catch(e){console.error("Approval notification failed:",e.message)}
+  return response.status(201).json({message:station?"Station operator account request submitted for approval.":"Account request submitted for approval.",user});
+ }catch(error){if(error.code==="23505")return response.status(409).json({error:"An account already exists for this identifier."});console.error("Signup failed:",error);return response.status(500).json({error:"Signup failed"});}
 });
 
 router.post("/logout", auth, (_request, response) => {

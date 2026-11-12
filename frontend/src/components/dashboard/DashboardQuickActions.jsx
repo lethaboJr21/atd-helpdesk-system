@@ -1,4 +1,4 @@
-﻿export default function DashboardQuickActions({ title = "Quick actions", actions = [] }) {
+export default function DashboardQuickActions({ title = "Quick actions", actions = [] }) {
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-base font-bold text-slate-950">{title}</h2>

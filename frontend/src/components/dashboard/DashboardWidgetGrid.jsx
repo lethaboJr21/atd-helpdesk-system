@@ -1,4 +1,4 @@
-﻿export default function DashboardWidgetGrid({ children, columns = 4, className = "" }) {
+export default function DashboardWidgetGrid({ children, columns = 4, className = "" }) {
   const layouts = {
     2: "md:grid-cols-2",
     3: "md:grid-cols-2 xl:grid-cols-3",

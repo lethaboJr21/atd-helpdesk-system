@@ -12,7 +12,11 @@ const ALLOWED_MIME = new Set([
   "image/jpeg",
   "image/webp",
   "application/pdf",
-]);
+  "text/plain",
+  "text/csv",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]);
 
 const MAX_FILES = 5;
 const MAX_FILE_BYTES = 8 * 1024 * 1024;

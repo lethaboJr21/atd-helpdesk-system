@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 /**
- * Four top-level request modules — separate portals, not tabs on one form.
+ * Four top-level request modules  -  separate portals, not tabs on one form.
  * Catalog contents come from Freshservice via /api/catalog/*.
  */
 
@@ -87,7 +87,7 @@ export const REQUEST_MODULES = {
 
 /**
  * High-volume incident shortcuts from Freshservice history (Syspro, printers).
- * Prefill category tree on /incidents/new — not separate modules.
+ * Prefill category tree on /incidents/new  -  not separate modules.
  */
 export const GUIDED_INCIDENTS = [
   {
@@ -138,13 +138,28 @@ export const GUIDED_INCIDENTS = [
 
 /** Legacy catalogue keys used by assets page and deep links */
 export const LEGACY_CATALOGUE = {
-  asset_request: { title: "Request an Asset", type: "asset_request" },
-  asset_problem: { title: "Report an Asset Problem", type: "incident" },
+  computer: {
+    title: "Computer or laptop",
+    type: "incident",
+    icon: Laptop,
+  },
+  asset_request: {
+    title: "Request an Asset",
+    type: "asset_request"
+  },
+  asset_problem: {
+    title: "Report an Asset Problem",
+    type: "incident"
+  },
   asset_replacement: {
     title: "Request Asset Replacement",
     type: "asset_request",
   },
-  laptop_checkup: { title: "Laptop Checkup", type: "incident", icon: Laptop },
+  laptop_checkup: {
+    title: "Laptop Checkup",
+    type: "incident",
+    icon: Laptop
+  },
   device_registration: {
     title: "Register Current Device",
     type: "service_request",
@@ -167,7 +182,7 @@ export const ASSET_REASONS = [
   "Damaged",
 ];
 
-/** Freshservice-aligned impact × urgency → priority (ITIL style). */
+/** Freshservice-aligned impact Ãƒâ€” urgency Ã¢â€ â€™ priority (ITIL style). */
 export function suggestPriority(impact, urgency) {
   const rank = { Low: 1, Medium: 2, High: 3 };
   const score = (rank[impact] || 2) + (rank[urgency] || 2);
@@ -191,6 +206,8 @@ export function formPathForType(ticketType, options = {}) {
 
   if (options.catalogue) params.set("catalogue", options.catalogue);
   if (options.item) params.set("item", options.item);
+  if (options.managedCatalogueItemId) params.set("managedCatalogueItemId", options.managedCatalogueItemId);
+  if (options.catalogueItemId) params.set("catalogueItemId", options.catalogueItemId);
   if (options.itemId) params.set("itemId", options.itemId);
   if (options.prefillTitle) params.set("title", options.prefillTitle);
   if (options.assetItem) params.set("assetItem", options.assetItem);

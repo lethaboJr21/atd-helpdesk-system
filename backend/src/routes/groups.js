@@ -27,6 +27,12 @@ const ELIGIBLE_AGENT_WHERE = `
   AND COALESCE(u.account_type, 'person') = 'person'
   AND COALESCE(u.microsoft_account_enabled, TRUE) = TRUE
   AND u.role IN ('agent','operator','manager','admin','superadmin')
+  AND EXISTS (
+    SELECT 1 FROM support_group_members governed_gm
+    JOIN support_groups governed_g ON governed_g.id=governed_gm.group_id
+    WHERE governed_gm.user_id=u.id AND COALESCE(governed_g.is_active,TRUE)=TRUE
+      AND (LOWER(governed_g.name) LIKE '%it%' OR LOWER(governed_g.name) LIKE '%helpdesk%' OR LOWER(governed_g.name) LIKE '%service desk%' OR LOWER(governed_g.name) LIKE '%infrastructure%' OR LOWER(governed_g.name) LIKE '%applications%' OR LOWER(governed_g.name) LIKE '%syspro%')
+  )
 `;
 
 async function groupExists(database, groupId) {
@@ -48,6 +54,15 @@ async function eligibleAgent(database, userId) {
   return result.rows[0] || null;
 }
 
+router.get("/request-beneficiaries", async (_request, response) => {
+  try {
+    const result = await pool.query(`SELECT id,name,email,department,job_title FROM users WHERE approved=TRUE AND status='active' AND archived_at IS NULL AND deactivated_at IS NULL AND COALESCE(account_type,'person')='person' ORDER BY name,email LIMIT 2000`);
+    return response.json(result.rows);
+  } catch (error) {
+    console.error("Fetch request beneficiaries failed:", error);
+    return response.status(500).json({ error: "Active employees could not be loaded." });
+  }
+});
 router.get("/catalogue", async (_request, response) => {
   try {
     const result = await pool.query(`
@@ -82,13 +97,68 @@ router.get("/catalogue", async (_request, response) => {
 });
 
 /**
- * Agent directory for assignment pickers — open to all authenticated users.
+ * Agent directory for assignment pickers â€” open to all authenticated users.
  * Recommendation order factors, in priority order:
- *   1. availability — rostered agents currently off shift sink to the bottom
- *   2. relevant experience — has resolved this sub-category / category before
- *   3. current workload — fewer active tickets wins
- *   4. depth of experience — resolution counts (never shown to the user)
+ *   1. availability â€” rostered agents currently off shift sink to the bottom
+ *   2. relevant experience â€” has resolved this sub-category / category before
+ *   3. current workload â€” fewer active tickets wins
+ *   4. depth of experience â€” resolution counts (never shown to the user)
  */
+router.get("/requesters", allowRoles(...OPERATIONS_ROLES), async (_request, response) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, email, department, job_title, position
+      FROM users
+      WHERE approved = TRUE
+        AND status = 'active'
+        AND archived_at IS NULL
+        AND COALESCE(account_type, 'person') = 'person'
+      ORDER BY name, email
+      LIMIT 2000
+    `);
+    return response.json({ users: result.rows });
+  } catch (error) {
+    if (error.code === "42703") {
+      const result = await pool.query(`
+        SELECT id, name, email, department, job_title
+        FROM users
+        WHERE approved = TRUE
+          AND status = 'active'
+          AND archived_at IS NULL
+          AND COALESCE(account_type, 'person') = 'person'
+        ORDER BY name, email
+        LIMIT 2000
+      `);
+      return response.json({ users: result.rows });
+    }
+    console.error("Fetch requester directory failed:", error);
+    return response.status(500).json({ error: "Failed to fetch active employees." });
+  }
+});
+router.get("/catalogue-agents", async (_request, response) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        u.id, u.name, u.email, u.role, u.job_title, u.department,
+        COALESCE(
+          json_agg(DISTINCT jsonb_build_object('id', g.id, 'name', g.name, 'isDefaultAssignment', gm.is_default_assignment))
+            FILTER (WHERE g.id IS NOT NULL),
+          '[]'::json
+        ) AS groups
+      FROM users u
+      LEFT JOIN support_group_members gm ON gm.user_id = u.id
+      LEFT JOIN support_groups g
+        ON g.id = gm.group_id AND COALESCE(g.is_active, TRUE) = TRUE
+      WHERE ${ELIGIBLE_AGENT_WHERE}
+      GROUP BY u.id
+      ORDER BY u.name, u.email
+    `);
+    return response.json(result.rows);
+  } catch (error) {
+    console.error("Fetch catalogue agents failed:", error);
+    return response.status(500).json({ error: "Failed to fetch catalogue agents." });
+  }
+});
 router.get("/agents", async (request, response) => {
   const category = cleanText(request.query.category, 120) || null;
   const subCategory = cleanText(request.query.subCategory, 120) || null;
@@ -96,7 +166,9 @@ router.get("/agents", async (request, response) => {
     const result = await pool.query(`
       SELECT
         u.id, u.name, u.job_title, u.department,
-        COALESCE(json_agg(DISTINCT jsonb_build_object('id', g.id, 'name', g.name))
+        COALESCE(pref.availability_status, 'available') AS availability_status,
+        pref.availability_note, pref.available_from, COALESCE(pref.group_alert_mode, 'all_groups') AS group_alert_mode,
+        COALESCE(json_agg(DISTINCT jsonb_build_object('id', g.id, 'name', g.name, 'isDefaultAssignment', gm.is_default_assignment))
           FILTER (WHERE g.id IS NOT NULL), '[]'::json) AS groups,
         stats.resolved_total,
         stats.resolved_category,
@@ -104,6 +176,7 @@ router.get("/agents", async (request, response) => {
         stats.open_count
       FROM users u
       LEFT JOIN support_group_members gm ON gm.user_id = u.id
+      LEFT JOIN agent_work_preferences pref ON pref.user_id = u.id
       LEFT JOIN support_groups g
         ON g.id = gm.group_id AND COALESCE(g.is_active, TRUE) = TRUE
       LEFT JOIN LATERAL (
@@ -125,7 +198,7 @@ router.get("/agents", async (request, response) => {
         WHERE t.assigned_to_user_id = u.id
       ) stats ON TRUE
       WHERE ${ELIGIBLE_AGENT_WHERE}
-      GROUP BY u.id, stats.resolved_total, stats.resolved_category,
+      GROUP BY u.id, pref.availability_status, pref.availability_note, pref.available_from, pref.group_alert_mode, stats.resolved_total, stats.resolved_category,
                stats.resolved_sub, stats.open_count
     `, [category, subCategory]);
 
@@ -137,6 +210,10 @@ router.get("/agents", async (request, response) => {
         name: row.name,
         job_title: row.job_title,
         department: row.department,
+        availabilityStatus: row.availability_status,
+        availabilityNote: row.availability_note,
+        availableFrom: row.available_from,
+        groupAlertMode: row.group_alert_mode,
         groups: row.groups,
         resolvedTotal: Number(row.resolved_total) || 0,
         resolvedCategory: Number(row.resolved_category) || 0,
@@ -328,6 +405,8 @@ router.post("/:id/members", allowRoles(...ADMIN_ROLES), async (request, response
   }
 });
 
+router.patch("/:id/members/:userId/default", allowRoles(...ADMIN_ROLES), async (request,response)=>{const groupId=parseId(request.params.id),userId=parseId(request.params.userId);if(!groupId||!userId)return response.status(400).json({error:"Invalid group or agent ID."});const client=await pool.connect();try{await client.query("BEGIN");await client.query("UPDATE support_group_members SET is_default_assignment=FALSE WHERE user_id=$1",[userId]);const result=await client.query("UPDATE support_group_members SET is_default_assignment=TRUE WHERE group_id=$1 AND user_id=$2 RETURNING *",[groupId,userId]);if(!result.rowCount){await client.query("ROLLBACK");return response.status(404).json({error:"Agent membership was not found."});}await client.query("COMMIT");return response.json({message:"Default assignment group updated."});}catch(error){await client.query("ROLLBACK").catch(()=>{});return response.status(500).json({error:"Default assignment group could not be updated."});}finally{client.release();}});
+
 router.delete("/:id/members/:userId", allowRoles(...ADMIN_ROLES), async (request, response) => {
   const groupId = parseId(request.params.id);
   const userId = parseId(request.params.userId);
@@ -359,4 +438,6 @@ router.get("/:id/members", async (request, response) => {
   }
 });
 
+
+router.put("/agents/:userId/work-preferences", allowRoles(...ADMIN_ROLES), async(request,response)=>{try{const userId=parseId(request.params.userId);if(!userId)return response.status(400).json({error:"Invalid agent ID."});const states=new Set(["available","busy","leave","unavailable"]);const modes=new Set(["all_groups","default_group","selected_groups","none"]);const state=states.has(request.body.availabilityStatus)?request.body.availabilityStatus:"available";const mode=modes.has(request.body.groupAlertMode)?request.body.groupAlertMode:"all_groups";const selected=Array.isArray(request.body.selectedGroupIds)?request.body.selectedGroupIds.map(Number).filter(Number.isInteger):[];const sql="INSERT INTO agent_work_preferences(user_id,availability_status,availability_note,available_from,group_alert_mode,selected_group_ids,teams_sync_enabled,updated_by_user_id,updated_at) VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8,NOW()) ON CONFLICT(user_id) DO UPDATE SET availability_status=EXCLUDED.availability_status,availability_note=EXCLUDED.availability_note,available_from=EXCLUDED.available_from,group_alert_mode=EXCLUDED.group_alert_mode,selected_group_ids=EXCLUDED.selected_group_ids,teams_sync_enabled=EXCLUDED.teams_sync_enabled,updated_by_user_id=EXCLUDED.updated_by_user_id,updated_at=NOW() RETURNING *";const result=await pool.query(sql,[userId,state,request.body.availabilityNote||null,request.body.availableFrom||null,mode,JSON.stringify(selected),Boolean(request.body.teamsSyncEnabled),request.user.id]);return response.json(result.rows[0]);}catch(error){return response.status(500).json({error:"Agent work preferences could not be updated."});}});
 module.exports = router;

@@ -1,4 +1,4 @@
-﻿import React from "react";
+import React from "react";
 import "./SmartDataGrid.css";
 
 export default function SmartDataGrid({ title, actions, filters, columns = [], rows = [], rowKey = "id", loading, error, emptyMessage = "No records found.", onRowClick, renderRowActions }) {

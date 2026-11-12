@@ -363,3 +363,77 @@ Updated: 2026-09-13 22:07:08
 - Database, email, notification delivery, Git, server restart, and deployment actions: NONE.
 - Script 516 failed safely and rolled back before this exact-source implementation.
 <!-- ATD-SCRIPT-519-FIX-VERIFIED-ROUTING-END -->
+
+## Finance Workspace completion and implementation learning - Script 838
+
+### Finance Workspace operating model
+- Finance Workspace is a governed departmental workspace, not a general portal area. Access derives from verified Finance department membership, approved Finance positions and the reporting-manager hierarchy.
+- Managers may work only within authorised reporting scope. Administrative override must be explicit, permission-controlled and auditable.
+- Finance duties are represented as tickets so ownership, prioritisation, due dates, delegation, unattended state, participant history and reporting remain traceable.
+- Authorised mailboxes and external senders may produce actionable work, but live email and Graph processing stay disabled until security approval and production readiness.
+- Structured reporting must retain the product families Rear Step Bumpers, Chassis Frames, Tailgates, Bedliners, Box Rails and Endcaps.
+- Excel output requires a review/preview stage before download and must preserve active filters and authorised scope.
+
+### Lessons from Scripts 834 through 837
+- PowerShell variables are case-insensitive. Never use path variables and source-content variables that differ only by case, such as `$Menu` and `$menu`.
+- Windows PowerShell 5.1 does not provide `[IO.Path]::GetRelativePath`; use a compatible URI-based relative-path function when required.
+- A source-context report can legitimately contain HTML such as `<br>`. Do not reject a consolidated source report merely because source content contains HTML markup.
+- UI child-to-parent navigation contracts must be preserved. `RequestEntryMenu` must pass the object shape expected by its parent, including `{ path }`, rather than silently switching to a raw string.
+- Verify third-party exports against the installed package. `MonitorCog` was unavailable in the installed `lucide-react`; `Monitor` was used as the supported replacement.
+- When a repair script fails, provide a complete replacement using the same sequential script number and retain rollback protections.
+- Exact multiline string transforms are fragile across line endings and formatting changes. Prefer complete validated replacement files when the full source is known, or semantic/anchored transformations with explicit verification.
+
+### Model-use guidance
+A model assisting this project must preserve working behavior, existing dedicated tracker filenames, audit history, access governance, Finance confidentiality, sequential lowercase underscore script naming and rollback safety. The model must not infer that a successful frontend build means deployment, migration or functional testing occurred. Build validation, milestone functional testing and production deployment are separate gates.
+
+## 2026-10-29 Finance Workspace, Authentication, Catalogue and Communications Checkpoint
+
+### Handoff state
+
+The working repository contains the completed local implementation through Script 896. Authentication and Finance assignment now use separate governed models: IT retains support-group assignment, while Finance uses direct verified Finance employee ownership. The Finance directory contains 24 verified active employees and Finance selectors must use that complete population.
+
+The immediate continuation priority is presentation readiness rather than production integration. Use controlled demonstration data to prove the Finance email-to-ticket journey, employee assignment, task completion, evidence linkage and Finance Management awareness. Do not represent demonstration data as live mailbox activity.
+
+Production server validation is still required for Company Communications delivery and interaction history. The local database contained Company Communications campaigns without delivery rows, so the next production session must inspect recipient generation, delivery processing and employee interaction capture before claiming end-to-end communication monitoring is operational.
+
+Preserve all existing tracker filenames, sections and history. Continue major implementation in groups of four tightly related functions, explain functions and impact before execution, and record files, database changes, tests, runtime results, risks, Git scope, commit status and next work afterward.
+
+## 2026-10-31 Finance/PDM major-batch implementation checkpoint
+- Preflight-first execution standard is mandatory: feasibility checks complete before implementation starts; blocked checks make zero implementation changes.
+- Finance and Process Engineering workspace route declarations and backend registrations were verified before changes.
+- Added Finance task collaboration lifecycle foundation for assistants, reviewers, collaborators, submission/review, ratings/KPI linkage, reminder configuration and classified task communications.
+- Database migration is generated but not executed locally by this implementation script; production DB execution requires its own schema/transaction/backup preflight.
+- Backend syntax and frontend production build passed after implementation.
+- Next work: connect UI controls and dashboards to the tasking APIs, then guarded DB migration/deployment and runtime Finance/PDM 404 validation.
+## 2026-11-01 Finance/PDM UI continuation completed
+- Finance participant/submission/review API client methods wired.
+- Finance task monitoring added for ownership, due dates, evidence, review, acknowledgement and KPI linkage.
+- PDM shared task surface inserted using a source-aware verified render boundary.
+- Both preflight and post-change frontend builds passed. Next: interactive task tables, reminders, evidence permissions, classified communication and guarded UI production deployment.
+
+## 2026-11-01 Finance work-control continuation
+- Added due/reminder controls, classified Finance task communications, participant visibility/edit permissions and consolidated task-control API.
+- Added Finance frontend API methods and dashboard guidance for assignment, reminders, communication and visibility.
+- Preflight/backend syntax/frontend build/post-change validation passed.
+- Next: production migration/API/UI deployment, interactive employee/manager drill-down tables and morning Finance reminder scheduling.
+
+## 2026-11-01 Weekly milestone transfer and reporting foundation
+- Completed task entries are transferred by copy/linkage into ATD_HELPDESK_MILESTONE_TRACKER.md/.json/.csv; original task history is preserved.
+- Milestones are grouped by week and include project, workstream, completion date, source, environment and production server scope.
+- JSON/CSV are reusable for Helpdesk reporting and preview-first Excel export.
+- Morning reminder enhancement queued as implementation priority: split New (<7 days) and Older (>=7 days), with due today, overdue, due soon, awaiting review and assignment counts.
+
+## 2026-11-01 Login-options repair + morning reminder reporting batch
+- Production login error 'Sign-in options could not be loaded' is included in the guarded production diagnosis/deployment gate and validates both /api/auth/login-options and /helpdesk/api/auth/login-options before source activation.
+- Morning reminder reporting now has a reusable 7-day age model: New <7 days and Older >=7 days, with overdue, due-today, awaiting-review and unassigned summaries.
+- The reminder structure is intended for email cards, dashboard preview, filtering and Excel/report exports.
+
+## 2026-11-02 Complete backend dependency sync and login deployment
+- The previous isolated-file deployment was replaced by complete backend/src synchronization after validating every JavaScript file and the previously missing Finance/workspace dependencies.
+- Production validates npm dependencies, PM2 stability, port 3001, direct/public login-options, and all required workspace routes before retaining changes.
+- Automatic rollback protects backend source, frontend roots, Apache configuration, and PM2 runtime.
+
+## 2026-11-02 Assignment and catalogue foundation repair
+- Restored and verified the agent work-preferences and shared workspace catalogue schema foundations.
+- Recovery validation skips already-present relations, checks the live PM2 process and non-5xx authenticated endpoints, and does not treat historical pre-migration PM2 log entries as fresh failures.
+- Follow-on batch: requester/beneficiary workflow, governed IT assignees, simplified assignee selector, and default IT Helpdesk landing with governed Finance switching.

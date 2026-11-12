@@ -61,7 +61,7 @@ export default function OperationsShell({
               ) : null}
             </div>
 
-            <div className="relative flex flex-wrap items-center gap-2 overflow-visible xl:justify-end">
+            <div className="operations-header-actions relative flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2 overflow-visible">
               {actions}
               {operationsUser ? (
                 <button type="button" onClick={() => navigate("/ticket-monitor")} className="portal-control inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold">

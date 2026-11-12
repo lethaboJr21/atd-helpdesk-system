@@ -438,4 +438,6 @@ try {
   }
 });
 
-module.exports = router;
+// SCRIPT_896_COMMUNICATION_MONITORING
+router.get("/monitoring/summary",async(req,res,next)=>{try{const r=await pool.query(`SELECT c.id,c.title,c.status,c.created_at,c.scheduled_at,c.sent_at,COUNT(d.id)::int intended_recipients,COUNT(d.id) FILTER(WHERE d.status='sent')::int sent,COUNT(d.id) FILTER(WHERE d.status='failed')::int failed,COUNT(d.id) FILTER(WHERE d.read_at IS NOT NULL)::int read_count,COUNT(i.id)::int interaction_count,MAX(i.occurred_at) latest_interaction_at FROM company_communication_campaigns c LEFT JOIN company_communication_deliveries d ON d.campaign_id=c.id LEFT JOIN company_communication_interactions i ON i.campaign_id=c.id GROUP BY c.id ORDER BY c.created_at DESC`);res.json({campaigns:r.rows})}catch(e){next(e)}});
+router.post("/:id/interactions",async(req,res,next)=>{try{const type=String(req.body.interactionType||'view').slice(0,40);const r=await pool.query("INSERT INTO company_communication_interactions(campaign_id,delivery_id,user_id,interaction_type,interaction_detail) VALUES($1,$2,$3,$4,$5::jsonb) RETURNING *",[req.params.id,req.body.deliveryId||null,req.user.id,type,JSON.stringify(req.body.detail||{})]);res.status(201).json(r.rows[0])}catch(e){next(e)}});module.exports = router;

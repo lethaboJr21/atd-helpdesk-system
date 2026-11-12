@@ -1,3 +1,4 @@
+import * as React from "react";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -57,12 +58,7 @@ const WORKSPACE_OPTIONS = [
   "Applications",
   "Access & Security",
 ];
-const ALLOWED_ATTACH = [
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "application/pdf",
-];
+const ALLOWED_ATTACH = ["image/png", "image/jpeg", "image/webp", "application/pdf", "text/plain", "text/csv", "application/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
 
 function getErrorMessage(error, fallback) {
   return error?.response?.data?.error || error?.message || fallback;
@@ -320,7 +316,7 @@ export default function TicketDetailPage() {
   const [closureClassification, setClosureClassification] = useState("");
   const [reopenReason, setReopenReason] = useState("");
   const [pendingFiles, setPendingFiles] = useState([]);
-  const attachmentInputRef = useRef(null);
+  const attachmentInputRef = React.useRef(null);
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [edit, setEdit] = useState({
@@ -416,25 +412,10 @@ export default function TicketDetailPage() {
     };
   }, [canSelfAssign, ticket?.category, ticket?.sub_category]);
 
-  const recommendedAgents = useMemo(() => {
-    const scored = agentDirectory.filter(
-      (agent) => agent.resolvedSub > 0 || agent.resolvedCategory > 0
-    );
-    const pool = scored.length
-      ? scored
-      : agentDirectory.filter((agent) => agent.resolvedTotal > 0);
-    const available = pool.filter((agent) => agent.onShift !== false);
-    return (available.length ? available : pool).slice(0, 3);
-  }, [agentDirectory]);
-
-  const otherDirectoryAgents = useMemo(() => {
-    const recommendedIds = new Set(recommendedAgents.map((agent) => agent.id));
-    return agentDirectory
-      .filter((agent) => !recommendedIds.has(agent.id))
-      .slice()
-      .sort((a, b) => String(a.name).localeCompare(String(b.name)));
-  }, [agentDirectory, recommendedAgents]);
-//
+  const eligibleDirectoryAgents = useMemo(
+    () => agentDirectory.slice().sort((a, b) => String(a.name).localeCompare(String(b.name))),
+    [agentDirectory]
+  );
   const selectedGroup = groups.find(
     (group) => String(group.id) === String(edit.assignedGroupId)
   );
@@ -833,7 +814,7 @@ export default function TicketDetailPage() {
                   </div>
                 )}
 
-                <div className="mt-4 rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                <div className="mt-4 rounded-2xl border border-slate-100 bg-white dark:bg-slate-900 p-4">
                   <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
                     Description
                   </p>
@@ -1236,7 +1217,7 @@ export default function TicketDetailPage() {
               </ul>
             )}
 
-            <label className="mt-4 block cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-5 text-center transition hover:border-[#172b57]/40 hover:bg-slate-50">
+            <div className="mt-4 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-5 text-center transition hover:border-[#172b57]/40 hover:bg-slate-50">
               <UploadCloud
                 className="mx-auto h-7 w-7"
                 style={{ color: BRAND }}
@@ -1245,22 +1226,31 @@ export default function TicketDetailPage() {
                 Add evidence or screenshots
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                PNG, JPG, WebP, or PDF  -  up to 5 files.
+                PNG, JPG, WebP, PDF, TXT, CSV, XLS, or XLSX - up to 5 files, 8 MB each.
               </p>
-              <input id="ticket-attachment-picker" ref={attachmentInputRef}
+              <input
+                id="ticket-attachment-picker"
+                ref={attachmentInputRef}
                 type="file"
                 multiple
                 accept={ALLOWED_ATTACH.join(",")}
-                onChange={(event) => {
-                  const selectedFiles = Array.from(event.target.files || [])
-                    .filter((file) => ALLOWED_ATTACH.includes(file.type))
-                    .slice(0, 5);
-                  setPendingFiles(selectedFiles);
-                  event.target.value = "";
-                }}
-                className="hidden"
+                onChange={(event) => { const selected = Array.from(event.target.files || []); setAttachments((current) => [...current, ...selected].slice(0, 5)); event.target.value = ""; }}
+                className="sr-only"
               />
-            </label>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => attachmentInputRef.current?.click()}
+                  className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 shadow-sm hover:bg-slate-50"
+                >
+                  <Paperclip className="h-4 w-4" />
+                  Browse files
+                </button>
+                <span className="text-xs font-semibold text-slate-500">
+                  Select one or more files from this device
+                </span>
+              </div>
+            </div>
             {pendingFiles.length ? (
               <div className="mt-3 space-y-2">
                 {pendingFiles.map((file, index) => (
@@ -1452,46 +1442,21 @@ export default function TicketDetailPage() {
                     className={`${inputClass} mt-2`}
                   >
                     <option value="">Team triage  -  no specific agent</option>
-                    {recommendedAgents.length ? (
-                      <optgroup
-                        label={
-                          ticket.category
-                            ? `Recommended for ${ticket.category}`
-                            : "Recommended"
-                        }
-                      >
-                        {recommendedAgents.map((agent) => (
-                          <option key={agent.id} value={agent.id}>
-                            {agent.name}
-                            {agent.job_title ? `  -  ${agent.job_title}` : ""}
-                            {agent.onShift === true && agent.shiftLabel
-                              ? ` (on ${agent.shiftLabel.toLowerCase()})`
-                              : ""}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
-                    {otherDirectoryAgents.length ? (
-                      <optgroup label="All IT agents">
-                        {otherDirectoryAgents.map((agent) => (
-                          <option key={agent.id} value={agent.id}>
-                            {agent.name}
-                            {agent.job_title ? `  -  ${agent.job_title}` : ""}
-                            {agent.onShift === false ? " (off shift)" : ""}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ) : null}
+                    {eligibleDirectoryAgents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name}{agent.job_title ? ` - ${agent.job_title}` : ""}
+                      </option>
+                    ))}
                   </select>
                   <p className="mt-1.5 text-xs text-slate-500">
-                    Recommendations are based on who resolved similar issues.
+                    Only active, governed IT support-group members are shown.
                     IT may still reassign.
                   </p>
                 </div>
               ) : null}
               <Info
                 label="Group"
-                value={ticket.assigned_group_name || "Triage"}
+                value={ticket.assigned_group_name || "Prioritisation"}
               />
             </div>
           </div>

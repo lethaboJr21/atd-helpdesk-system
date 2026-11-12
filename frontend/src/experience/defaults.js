@@ -1,4 +1,4 @@
-﻿export const EXPERIENCE_TEMPLATES = [
+export const EXPERIENCE_TEMPLATES = [
   { key: "service_hub", name: "Service Hub" },
   { key: "guided_assistant", name: "Guided Assistant" },
   { key: "application_launcher", name: "Application Launcher" },
