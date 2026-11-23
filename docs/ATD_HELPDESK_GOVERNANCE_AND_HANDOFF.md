@@ -538,3 +538,9 @@ Preserve all existing tracker filenames, sections and history. Continue major im
 - Service Request and Incident routing continue to use managed catalogue IDs.
 - Production rows are backed up before catalogue synchronization.
 
+
+## 2026-11-23 - Final optional Agent selector recovery
+- Preferred IT Agent dropdown is now visible on auto-routed Incident and Service Request forms.
+- Blank selection uses the support-group queue; selecting an eligible agent uses proposed-assignee routing.
+- Production Incident catalogue remains 25 active unique items with one canonical Other.
+
