@@ -21,6 +21,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Send,
   ShoppingCart,
   Ticket,
   UserCircle,
@@ -75,10 +76,36 @@ const DASHBOARD_PAGE_SIZE_KEY = "atd-helpdesk-dashboard-priority-page-size";
 const NOTIFICATION_MODULES = ["admin", "helpdesk"];
 const SEARCH_DEBOUNCE_MS = 300;
 const ADMIN_ROLES = new Set(["manager", "admin", "superadmin"]);
+const WORKSPACE_OPTIONS = [
+  { code: "IT", label: "Information Technology" },
+  { code: "HR", label: "Human Resources" },
+  { code: "FIN", label: "Finance" },
+  { code: "PDM", label: "Process Engineering (PDM)" },
+  { code: "FAC", label: "Facilities" },
+];
 const DASHBOARD_VIEW_STORAGE_KEY = "atd-helpdesk-dashboard-view";
 const DASHBOARD_SEARCH_SCOPE_KEY = "atd-helpdesk-dashboard-search-scope";
 const DASHBOARD_ASSIGNMENT_SCOPE_KEY = "atd-helpdesk-dashboard-assignment-scope";
 const DASHBOARD_VIEW_OPTIONS = new Set(["simple", "explorative"]);
+
+function ticketWorkspaceCode(value) {
+  const workspace = String(value || "").trim().toLowerCase();
+  if (["hr", "human resources", "hr workspace"].includes(workspace)) return "HR";
+  if (["fin", "finance", "finance department", "finance workspace", "finance service desk"].includes(workspace)) return "FIN";
+  if (["pdm", "process engineering", "process engineering (pdm)", "process engineering workspace"].includes(workspace)) return "PDM";
+  if (["fac", "facilities"].includes(workspace)) return "FAC";
+  if (["it", "information technology", "it helpdesk", "it workspace", "helpdesk"].includes(workspace)) return "IT";
+  return "IT";
+}
+
+function notificationWorkspace(notification, payload) {
+  return ticketWorkspaceCode(
+    payload?.workspace ||
+    payload?.ticket?.workspace ||
+    notification?.workspace ||
+    "IT"
+  );
+}
 
 function storedPreference(key, allowedValues, fallback) {
   try {
@@ -234,6 +261,7 @@ async function resolveNotificationTicketId(notification, payload, targetUrl, dir
   if (Number.isInteger(directTicketId) && directTicketId > 0) return directTicketId;
   for (const reference of ticketReferenceCandidates(notification, payload, targetUrl)) {
     const response = await ticketsApi.getAll({
+      workspace: notificationWorkspace(notification, payload),
       page: 1,
       per_page: 10,
       search: reference,
@@ -253,6 +281,8 @@ export default function Dashboard() {
   const toast = useToast();
   const { logout, user } = useAuth();
   const adminUser = ADMIN_ROLES.has(user?.role);
+  const canSelectTicketWorkspace = ["superadmin", "system_administrator"].includes(user?.role);
+  const userWorkspaceCode = ticketWorkspaceCode(user?.department);
   const canDeleteTickets = ["admin", "superadmin"].includes(user?.role);
   const { appearance, setMode } = useAppearance();
 
@@ -273,12 +303,15 @@ export default function Dashboard() {
     return DASHBOARD_PAGE_SIZES.includes(stored) ? stored : 25;
   });
   const [ticketPagination, setTicketPagination] = useState({ page: 1, perPage: 25, total: 0, totalPages: 1 });
-  const [knownWorkspaces, setKnownWorkspaces] = useState(["All"]);
   const [query, setQuery] = useState(() => sessionStorage.getItem("atd-helpdesk-dashboard-search") || "");
   const [debouncedQuery, setDebouncedQuery] = useState("");
   const [searchScope, setSearchScope] = useState(() => localStorage.getItem(DASHBOARD_SEARCH_SCOPE_KEY) || "everything");
   const [assignmentScope, setAssignmentScope] = useState(() => localStorage.getItem(DASHBOARD_ASSIGNMENT_SCOPE_KEY) || "mine-or-groups");
-  const [workspaceFilter, setWorkspaceFilter] = useState("All");
+  const [workspaceFilter, setWorkspaceFilter] = useState(() => (
+    ["superadmin", "system_administrator"].includes(user?.role)
+      ? "IT"
+      : ticketWorkspaceCode(user?.department)
+  ));
   const [requesterFilter, setRequesterFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
@@ -459,7 +492,7 @@ export default function Dashboard() {
         search: debouncedQuery || undefined,
         searchScope,
         assignmentScope,
-        workspace: workspaceFilter === "All" ? undefined : workspaceFilter,
+        workspace: workspaceFilter,
         requester: requesterFilter || undefined,
         department: departmentFilter || undefined,
         priority: priorityFilter || undefined,
@@ -476,11 +509,6 @@ export default function Dashboard() {
       setTickets(ticketData);
       const pagination = !Array.isArray(payload) && payload?.pagination ? payload.pagination : { page: ticketPage, perPage: ticketPageSize, total: ticketData.length, totalPages: 1 };
       setTicketPagination(pagination);
-      setKnownWorkspaces((current) => {
-        const next = new Set(current);
-        ticketData.map((item) => item.workspace).filter(Boolean).forEach((workspace) => next.add(workspace));
-        return ["All", ...Array.from(next).filter((item) => item !== "All").sort()];
-      });
       if (ticketPage > pagination.totalPages) setTicketPage(Math.max(1, pagination.totalPages));
       setSectionErrors((currentErrors) => {
         const nextErrors = { ...currentErrors };
@@ -562,11 +590,21 @@ export default function Dashboard() {
       : [];
   }, [serviceMixStats]);
 
-  const workspaces = knownWorkspaces;
+  const workspaces = canSelectTicketWorkspace
+    ? WORKSPACE_OPTIONS
+    : WORKSPACE_OPTIONS.filter((workspace) => workspace.code === userWorkspaceCode);
 
   useEffect(() => { sessionStorage.setItem("atd-helpdesk-dashboard-search", query); }, [query]);
   useEffect(() => { localStorage.setItem(DASHBOARD_SEARCH_SCOPE_KEY, searchScope); }, [searchScope]);
   useEffect(() => { localStorage.setItem(DASHBOARD_ASSIGNMENT_SCOPE_KEY, assignmentScope); }, [assignmentScope]);
+  useEffect(() => {
+    setWorkspaceFilter((current) => {
+      if (canSelectTicketWorkspace) {
+        return WORKSPACE_OPTIONS.some((workspace) => workspace.code === current) ? current : "IT";
+      }
+      return userWorkspaceCode;
+    });
+  }, [canSelectTicketWorkspace, userWorkspaceCode]);
   useEffect(() => { setTicketPage(1); }, [debouncedQuery, searchScope, assignmentScope, workspaceFilter, requesterFilter, departmentFilter, priorityFilter]);
 
   const selectedGroup = useMemo(() => {
@@ -967,6 +1005,16 @@ export default function Dashboard() {
                 </Link>
               )}
 
+              {adminUser && (
+                <Link
+                  to="/company-communications"
+                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-900 shadow-sm hover:bg-blue-100"
+                >
+                  <Send className="h-4 w-4" />
+                  Send Communication
+                </Link>
+              )}
+
               <Link
                 to="/production"
                 className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold shadow-sm hover:bg-slate-50"
@@ -1156,7 +1204,14 @@ export default function Dashboard() {
                 workspaces={workspaces}
                 onSelectTicket={setSelectedTicket}
                 onWorkspaceChange={setWorkspaceFilter}
-                onOpenWorkspace={() => navigate("/tickets?status=Unresolved")}
+                onOpenWorkspace={() => {
+                  const workspaceRoutes = {
+                    FIN: "/finance-workspace",
+                    HR: "/hr-workspace",
+                    PDM: "/process-engineering-workspace",
+                  };
+                  navigate(workspaceRoutes[workspaceFilter] || `/tickets?status=Unresolved&workspace=${encodeURIComponent(workspaceFilter)}`);
+                }}
                 loading={ticketLoading}
                 error={sectionErrors.tickets}
                 selectedTicketIds={new Set(ticketSelection.ids)}
@@ -1626,10 +1681,12 @@ function TicketQueue({
           <div className="dashboard-priority-controls flex flex-wrap items-center gap-2"><select value={assignmentScope} onChange={(event)=>onAssignmentScopeChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold" aria-label="Assignment scope"><option value="mine">Assigned to me</option><option value="my-groups">My support groups</option><option value="mine-or-groups">Me or my groups</option><option value="unassigned">Unassigned</option><option value="all">All authorised</option></select><input value={requesterFilter} onChange={(event)=>onRequesterChange(event.target.value)} placeholder="Requester" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><input value={departmentFilter} onChange={(event)=>onDepartmentChange(event.target.value)} placeholder="Department" className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm"/><select value={priorityFilter} onChange={(event)=>onPriorityChange(event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold"><option value="">All priorities</option><option value="Critical">Critical</option><option value="High">High</option><option value="Medium">Medium</option><option value="Low">Low</option></select><button type="button" onClick={onSelectVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Select current page</button><button type="button" onClick={onClearVisible} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold">Clear current page</button><select value={pageSize} onChange={(event) => onPageSizeChange(Number(event.target.value))} className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold">{DASHBOARD_PAGE_SIZES.map((size) => <option key={size} value={size}>{size} rows</option>)}</select><select
             value={workspaceFilter}
             onChange={(event) => onWorkspaceChange(event.target.value)}
+            disabled={workspaces.length === 1}
+            aria-label="Ticket workspace"
             className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
           >
             {workspaces.map((workspace) => (
-              <option key={workspace}>{workspace}</option>
+              <option key={workspace.code} value={workspace.code}>{workspace.label}</option>
             ))}
           </select></div>
         </div>

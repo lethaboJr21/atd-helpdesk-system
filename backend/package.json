@@ -1,36 +1,42 @@
 {
-  "name": "atd-helpdesk-backend",
-  "version": "1.0.0",
-  "private": true,
-  "main": "src/server.js",
-  "scripts": {
-    "start": "node src/server.js",
-    "dev": "nodemon src/server.js",
-    "migrate": "node src/db/migrate.js",
-    "seed": "node src/db/seed.js",
-    "test:graph-email": "node src/scripts/testGraphEmail.js"
-  },
-  "dependencies": {
-    "@azure/msal-node": "^5.2.4",
-    "axios": "^1.17.0",
-    "bcryptjs": "^3.0.3",
-    "cors": "^2.8.6",
-    "csv-parser": "^3.2.1",
-    "dotenv": "^16.6.1",
-    "express": "^4.22.2",
-    "express-rate-limit": "^7.3.1",
-    "fs": "^0.0.1-security",
-    "helmet": "^7.1.0",
-    "jsonwebtoken": "^9.0.3",
-    "mssql": "^12.5.5",
-    "multer": "^2.2.0",
-    "node-cron": "^4.4.1",
-    "nodemailer": "^8.0.8",
-    "pg": "^8.12.0",
-    "sharp": "^0.35.4",
-    "socket.io": "^4.2.0"
-  },
-  "devDependencies": {
-    "nodemon": "^3.1.4"
-  }
+    "name":  "atd-helpdesk-backend",
+    "version":  "1.0.0",
+    "private":  true,
+    "main":  "src/server.js",
+    "scripts":  {
+                    "start":  "node src/server.js",
+                    "dev":  "nodemon src/server.js",
+                    "migrate":  "node src/db/migrate.js",
+                    "seed":  "node src/db/seed.js",
+                    "test":  "jest --testPathPattern=tests/unit --forceExit",
+                    "test:integration":  "jest --testPathPattern=tests/integration --forceExit",
+                    "test:graph-email":  "node src/scripts/testGraphEmail.js"
+                },
+    "dependencies":  {
+                         "@azure/msal-node":  "^5.2.4",
+                         "axios":  "^1.17.0",
+                         "bcryptjs":  "^3.0.3",
+                         "cors":  "^2.8.6",
+                         "csv-parser":  "^3.2.1",
+                         "dotenv":  "^16.6.1",
+                         "express":  "^4.22.2",
+                         "express-rate-limit":  "^7.3.1",
+                         "fs":  "^0.0.1-security",
+                         "helmet":  "^7.1.0",
+                         "jsonwebtoken":  "^9.0.3",
+                         "mssql":  "^12.5.5",
+                         "multer":  "^2.2.0",
+                         "node-cron":  "^4.4.1",
+                         "nodemailer":  "^8.0.8",
+                         "pg":  "^8.12.0",
+                         "sharp":  "^0.35.4",
+                         "socket.io":  "^4.2.0"
+                     },
+    "devDependencies":  {
+                            "jest":  "^29.7.0",
+                            "nodemon":  "^3.1.4",
+                            "@babel/core":  "^7.29.0",
+                            "@babel/preset-env":  "^7.29.0",
+                            "babel-jest":  "^29.7.0"
+                        }
 }

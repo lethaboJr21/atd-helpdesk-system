@@ -1,7 +1,9 @@
 const express = require("express");
 
 const auth = require("../middleware/auth");
+const allowRoles = require("../middleware/roles");
 const pool = require("../db/pool");
+const catalogueCategoryMappingService = require("../services/catalogueCategoryMappingService");
 const {
   getCatalog,
   partitionCatalog,
@@ -119,12 +121,56 @@ router.get("/fields", async (_req, res) => {
 router.get("/managed-it-services", async (req,res,next) => {
   const client=await pool.connect();
   try {
+    const popularOnly=req.query.popular==="true";
     await client.query("BEGIN");
     await client.query("SET LOCAL statement_timeout='5000ms'");
-    const result=await client.query(`SELECT i.id,i.category,i.sub_category,i.item_name,i.user_description,i.default_priority,i.priority_locked,i.summary_locked,i.default_summary,i.default_group_id,i.default_assignee_user_id,i.display_order FROM workspace_catalogue_items i JOIN service_workspaces w ON w.id=i.workspace_id WHERE UPPER(w.code)='IT' AND LOWER(COALESCE(w.status,'draft')) NOT IN ('archived','disabled','inactive') AND i.catalogue_type='service_request' AND i.is_active=TRUE AND i.archived_at IS NULL ORDER BY i.category,i.sub_category NULLS FIRST,i.display_order,i.item_name`);
+    const result=await client.query(`SELECT i.id,i.category,i.sub_category,i.item_name,i.user_description,i.default_priority,i.priority_locked,i.summary_locked,i.default_summary,i.default_group_id,i.default_assignee_user_id,i.display_order,i.is_popular,i.is_other,i.default_impact,i.default_urgency FROM workspace_catalogue_items i JOIN service_workspaces w ON w.id=i.workspace_id WHERE UPPER(w.code)='IT' AND LOWER(COALESCE(w.status,'draft')) NOT IN ('archived','disabled','inactive') AND i.catalogue_type='service_request' AND i.is_active=TRUE AND i.archived_at IS NULL ${popularOnly?"AND i.is_popular=TRUE":""} ORDER BY i.is_popular DESC,i.category,i.sub_category NULLS FIRST,i.display_order,i.item_name`);
     await client.query("COMMIT");
-    return res.json({items:result.rows.map(x=>({id:x.id,managedCatalogueItemId:x.id,name:x.item_name,description:x.user_description||"",categoryId:x.category,categoryName:x.category,ticketCategory:x.category,ticketSubCategory:x.sub_category,subCategory:x.sub_category,priority:x.default_priority||"Medium",priorityLocked:x.priority_locked,summaryLocked:x.summary_locked,defaultSummary:x.default_summary,defaultGroupId:x.default_group_id,defaultAssigneeUserId:x.default_assignee_user_id,workspace:"IT",displayOrder:x.display_order}))});
+    return res.json({items:result.rows.map(x=>({id:x.id,managedCatalogueItemId:x.id,name:x.item_name,description:x.user_description||"",categoryId:x.category,categoryName:x.category,ticketCategory:x.category,ticketSubCategory:x.sub_category,subCategory:x.sub_category,priority:x.default_priority||"Medium",priorityLocked:x.priority_locked,summaryLocked:x.summary_locked,defaultSummary:x.default_summary,defaultGroupId:x.default_group_id,defaultAssigneeUserId:x.default_assignee_user_id,workspace:"IT",displayOrder:x.display_order,popular:x.is_popular,isOther:x.is_other,defaultImpact:x.default_impact,defaultUrgency:x.default_urgency}))});
   } catch(error){await client.query("ROLLBACK").catch(()=>{});next(error);} finally {client.release();}
+});
+
+router.get("/managed-it-incidents", async (req,res,next) => {
+  const client=await pool.connect();
+  try {
+    const popularOnly=req.query.popular==="true";
+    await client.query("BEGIN");
+    await client.query("SET LOCAL statement_timeout='5000ms'");
+    const result=await client.query(`SELECT i.id,i.category,i.sub_category,i.item_name,i.user_description,i.default_priority,i.priority_locked,i.summary_locked,i.default_summary,i.default_group_id,i.default_assignee_user_id,i.display_order,i.is_popular,i.is_other,i.default_impact,i.default_urgency,i.icon_key,i.colour_key FROM workspace_catalogue_items i JOIN service_workspaces w ON w.id=i.workspace_id WHERE UPPER(w.code)='IT' AND LOWER(COALESCE(w.status,'draft')) NOT IN ('archived','disabled','inactive') AND i.catalogue_type='incident' AND i.is_active=TRUE AND i.archived_at IS NULL AND i.visibility->>'employee'='true' ${popularOnly?"AND i.is_popular=TRUE":""} ORDER BY i.is_popular DESC,i.category,i.sub_category NULLS FIRST,i.display_order,i.item_name`);
+    await client.query("COMMIT");
+    return res.json({items:result.rows.map(x=>({id:x.id,managedCatalogueItemId:x.id,name:x.item_name,description:x.user_description||"",categoryId:x.category,categoryName:x.category,ticketCategory:x.category,ticketSubCategory:x.sub_category,subCategory:x.sub_category,priority:x.default_priority||"Medium",priorityLocked:x.priority_locked,summaryLocked:x.summary_locked,defaultSummary:x.default_summary,defaultGroupId:x.default_group_id,defaultAssigneeUserId:x.default_assignee_user_id,workspace:"IT",displayOrder:x.display_order,popular:x.is_popular,isOther:x.is_other,defaultImpact:x.default_impact,defaultUrgency:x.default_urgency,iconKey:x.icon_key,colourKey:x.colour_key}))});
+  } catch(error){await client.query("ROLLBACK").catch(()=>{});next(error);} finally {client.release();}
+});
+
+router.get("/resolve-category", auth, async (req, res, next) => {
+  try {
+    const { catalogueItemId, catalogueType } = req.query;
+    if (!catalogueItemId || !catalogueType) return res.status(400).json({ error: "catalogueItemId and catalogueType are required" });
+    const result = await catalogueCategoryMappingService.resolveMapping(Number(catalogueItemId), catalogueType);
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.get("/sync-validation", auth, allowRoles("admin", "superadmin"), async (req, res, next) => {
+  try {
+    const result = await catalogueCategoryMappingService.validateSync(req.query.catalogueType || null);
+    res.json(result);
+  } catch (e) { next(e); }
+});
+
+router.post("/category-mappings", auth, allowRoles("admin", "superadmin"), async (req, res, next) => {
+  try {
+    const result = await catalogueCategoryMappingService.upsertMapping({ ...req.body, updatedBy: req.user.id });
+    res.status(201).json(result);
+  } catch (e) { next(e); }
+});
+
+router.put("/category-mappings/:id", auth, allowRoles("admin", "superadmin"), async (req, res, next) => {
+  try {
+    const result = await catalogueCategoryMappingService.updateMapping(Number(req.params.id), { ...req.body, updatedBy: req.user.id });
+    if (!result) return res.status(404).json({ error: "Mapping not found" });
+    res.json(result);
+  } catch (e) { next(e); }
 });
 
 module.exports = router;

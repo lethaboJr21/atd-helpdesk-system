@@ -5,6 +5,84 @@ const pool = require("../db/pool");
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
 const { createNotification } = require("../utils/notifications");
+const { createNotifications } = require("../services/notificationService");
+
+const LINE_ASSISTANCE_STATIONS = new Set([
+  "MES",
+  "PLC-RSB assembly",
+  "PLC-SRS - Finished RSB Electronic Storage with Robot lift",
+  "Qmuzik App on the line",
+  "Blowmoulding station",
+  "RSB",
+  "Thermoforming",
+  "Checking Fixtures",
+  "Jigs tools",
+  "Other",
+]);
+
+router.post(
+  "/assistance-alerts",
+  auth,
+  allowRoles("user", "operator", "agent", "manager", "admin", "superadmin"),
+  async (req, res, next) => {
+    try {
+      const station = String(req.body?.station || "").trim();
+      if (!LINE_ASSISTANCE_STATIONS.has(station)) {
+        return res.status(400).json({ error: "Select a valid production station." });
+      }
+
+      const requester = await pool.query(
+        `SELECT id, name, department
+         FROM users
+         WHERE id = $1 AND status = 'active' AND archived_at IS NULL`,
+        [req.user.id]
+      );
+      const employee = requester.rows[0];
+      if (!employee) {
+        return res.status(403).json({ error: "An active employee account is required." });
+      }
+
+      const department = String(employee.department || "").toLowerCase();
+      if (!department.includes("production") && !department.includes("pdm")) {
+        return res.status(403).json({ error: "Station assistance is available to Production and PDM employees." });
+      }
+
+      const alert = `${employee.name || "A line employee"} needs a supervisor at ${station}.`;
+      const supervisors = await pool.query(
+        `SELECT id
+         FROM users
+         WHERE status = 'active'
+           AND archived_at IS NULL
+           AND LOWER(BTRIM(department)) = 'production'
+           AND LOWER(BTRIM(job_title)) IN (
+             'production supervisor',
+             'senior production supervisor'
+           )`
+      );
+
+      if (!supervisors.rowCount) {
+        return res.status(409).json({ error: "No active Production supervisors are available to notify." });
+      }
+
+      const notifications = await createNotifications({
+        recipientUserIds: supervisors.rows.map((supervisor) => supervisor.id),
+        type: "warning",
+        module: "production",
+        message: alert,
+        targetType: "station_assistance",
+        targetUrl: "/line-assistance",
+      });
+
+      return res.status(201).json({
+        station,
+        supervisorsNotified: notifications.length,
+        message: "Production supervisors have been notified.",
+      });
+    } catch (error) {
+      return next(error);
+    }
+  }
+);
 
 // ✅ GET /api/production
 // Fetches production metrics.

@@ -27,7 +27,7 @@ import RequesterIdentityCard from "../components/tickets/RequesterIdentityCard";
 import TicketAttachmentPreview, { canPreviewTicketAttachment } from "../components/tickets/TicketAttachmentPreview";
 import { useToast } from "../components/notifications/ToastProvider";
 import { showLatestTicketActivity } from "../components/notifications/ticketActivityToast";
-import { groupsApi, ticketsApi } from "../services/api";
+import { groupsApi, processEngineeringWorkspaceApi, ticketsApi } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
 
 const BRAND = "#172b57";
@@ -293,8 +293,12 @@ export default function TicketDetailPage() {
   const navigate = useNavigate();
   const toast = useToast();
   const { user, employeeView } = useAuth();
-  const operationsUser = OPERATIONS_ROLES.has(user?.role) && !employeeView;
-  const ticketsPath = operationsUser ? "/tickets" : "/tickets?view=mine";
+  const [pdmSupportUser,setPdmSupportUser]=useState(false);
+  const globalOperationsUser = OPERATIONS_ROLES.has(user?.role) && !employeeView;
+  const operationsUser = globalOperationsUser || pdmSupportUser;
+  const ticketsPath = pdmSupportUser&&!globalOperationsUser
+    ?"/process-engineering-workspace"
+    :operationsUser?"/tickets":"/tickets?view=mine";
 
   const [ticket, setTicket] = useState(null);
   const [history, setHistory] = useState([]);
@@ -339,9 +343,20 @@ export default function TicketDetailPage() {
           ticketsApi.getById(id),
           ticketsApi.getHistory(id).catch(() => ({ data: [] })),
           ticketsApi.getComments(id).catch(() => ({ data: [] })),
-          operationsUser ? ticketsApi.getEmailParticipants(id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+          globalOperationsUser ? ticketsApi.getEmailParticipants(id).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
         ]);
       setTicket(ticketResponse.data);
+      if(String(ticketResponse.data?.workspace||"").toUpperCase()==="PDM"&&!globalOperationsUser){
+        try{
+          const access=await processEngineeringWorkspaceApi.accessContext();
+          setPdmSupportUser(access.data?.accessLevel==="pdm-support-group");
+        }catch(requestError){
+          setPdmSupportUser(false);
+          setError(getErrorMessage(requestError,"PDM support permissions could not be verified."));
+        }
+      }else{
+        setPdmSupportUser(false);
+      }
       setAttachments(
         Array.isArray(ticketResponse.data?.attachments)
           ? ticketResponse.data.attachments
@@ -372,14 +387,21 @@ export default function TicketDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!operationsUser) return;
+    if(!globalOperationsUser){
+      if(pdmSupportUser&&ticket?.assigned_group_id){
+        setGroups([{id:ticket.assigned_group_id,name:ticket.assigned_group_name||"PDM Line Support"}]);
+      }else{
+        setGroups([]);
+      }
+      return;
+    }
     groupsApi
       .getAll()
       .then((response) =>
         setGroups(Array.isArray(response.data) ? response.data : [])
       )
       .catch(() => setGroups([]));
-  }, [operationsUser]);
+  }, [globalOperationsUser,pdmSupportUser,ticket?.assigned_group_id,ticket?.assigned_group_name]);
 
   const canSelfAssign =
     !operationsUser &&
@@ -870,22 +892,26 @@ export default function TicketDetailPage() {
                   </select>
                 </Field>
                 <Field label="Workspace">
-                  <select
-                    value={edit.workspace}
-                    onChange={(event) =>
-                      setEdit((current) => ({
-                        ...current,
-                        workspace: event.target.value,
-                      }))
-                    }
-                    className={inputClass}
-                  >
-                    {WORKSPACE_OPTIONS.map((value) => (
-                      <option key={value}>{value}</option>
-                    ))}
-                  </select>
+                  {pdmSupportUser&&!globalOperationsUser
+                    ?<input readOnly value="PDM" className={inputClass}/>
+                    :<select
+                      value={edit.workspace}
+                      onChange={(event) =>
+                        setEdit((current) => ({
+                          ...current,
+                          workspace: event.target.value,
+                        }))
+                      }
+                      className={inputClass}
+                    >
+                      {WORKSPACE_OPTIONS.map((value) => (
+                        <option key={value}>{value}</option>
+                      ))}
+                    </select>}
                 </Field>
-                <Field label="Support Group">
+                {pdmSupportUser&&!globalOperationsUser
+                  ?null
+                  :<Field label="Support Group">
                   <select
                     value={edit.assignedGroupId}
                     onChange={(event) =>
@@ -904,8 +930,10 @@ export default function TicketDetailPage() {
                       </option>
                     ))}
                   </select>
-                </Field>
-                <Field label="Assignee">
+                </Field>}
+                {pdmSupportUser&&!globalOperationsUser
+                  ?null
+                  :<Field label="Assignee">
                   <select
                     value={edit.assignedToUserId}
                     disabled={!edit.assignedGroupId}
@@ -924,7 +952,7 @@ export default function TicketDetailPage() {
                       </option>
                     ))}
                   </select>
-                </Field>
+                </Field>}
                 <Field label="Due Date">
                   <input
                     type="datetime-local"
@@ -1333,8 +1361,7 @@ export default function TicketDetailPage() {
             </div>
           ) : null}
 
-          {operationsUser ? (
-
+          {globalOperationsUser ? (
             <AssignmentAcceptancePanel
               ticketId={ticket.id}
               ticket={ticket}
@@ -1348,7 +1375,7 @@ export default function TicketDetailPage() {
             <div className={cardClass}>
               <h2 className="text-lg font-bold text-slate-950">Actions</h2>
               <div className="mt-4 grid gap-3">
-                <button
+                {globalOperationsUser ? <button
                   type="button"
                   onClick={() =>
                     runAction(
@@ -1366,8 +1393,8 @@ export default function TicketDetailPage() {
                 >
                   <UserCheck className="h-4 w-4" />
                   Assign to Me
-                </button>
-                <select id="governed-closure" value={closureClassification} onChange={(event) => setClosureClassification(event.target.value)} className={inputClass}><option value="">Closure classification</option><option value="Irrelevant">Irrelevant</option><option value="Not IT Related">Not IT Related</option>{["manager","admin","superadmin"].includes(user?.role)?<option value="Completed and approved">Completed and approved</option>:null}</select>
+                </button> : null}
+                <select id="governed-closure" value={closureClassification} onChange={(event) => setClosureClassification(event.target.value)} className={inputClass}><option value="">Closure classification</option><option value="Irrelevant">Irrelevant</option><option value="Not IT Related">Not IT Related</option>{["manager","admin","superadmin"].includes(user?.role)||pdmSupportUser?<option value="Completed and approved">Completed and approved</option>:null}</select>
                 <textarea
                   rows="2"
                   value={resolutionNote}

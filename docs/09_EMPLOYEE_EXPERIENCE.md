@@ -112,6 +112,8 @@ The request should include a business reason and should remain traceable through
 
 The employee experience may expose authorised knowledge content, solution articles, service categories, catalogue items, and guided request paths. The system should direct employees toward an appropriate request type without blocking legitimate ticket creation when assistance is still required.
 
+Production line reports are limited to active Network catalogue items in IT or active line-issue items in PDM. These tickets are routed automatically to the appropriate support group. A Production operator may report a PDM issue for a supervisor only when the supervisor cannot access their email account, and the reason must be recorded. Finance ticket requesters may link an active employee KPI or skip KPI linking and provide an issue summary; linked KPIs remain visible in the Finance ticket register.
+
 ## 14. Privacy and safe use
 
 Employees should:

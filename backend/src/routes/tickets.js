@@ -20,7 +20,15 @@ const {
 const { getPersonalizedModules } = require("../services/personalization");
 const { getSlaPolicy, calculateSla } = require("../services/slaPolicy");
 const ticketGovernance = require("../services/ticketGovernance");
+const pdmTicketIntake = require("../services/pdmTicketIntake");
 const ticketExperience = require("../services/ticketExperienceGovernance");
+const { normaliseWorkspaceCode } = require("../services/workspaceCodeRegistry");
+const { scopeTo } = require("../services/workspaceQueryService");
+const { resolveUserWorkspace } = require("../middleware/financeAccess");
+const financeItSurveyService = require("../services/financeItSurveyService");
+const pdmSupportAccess = require("../services/pdmSupportAccess");
+const lineTicketIntake = require("../services/lineTicketIntake");
+const catalogueLinkService = require("../services/catalogueLinkService");
 
 const router = express.Router();
 router.use(auth);
@@ -59,9 +67,18 @@ function operations(user){ return OPERATIONS_ROLES.has(text(user?.role,50).toLow
 function age(value){ const created=new Date(value).getTime(); if(!Number.isFinite(created))return "N/A"; const m=Math.max(0,Math.floor((Date.now()-created)/60000)); if(m<60)return `${m}m`; const h=Math.floor(m/60); return h<24?`${h}h ${m%60}m`:`${Math.floor(h/24)}d ${h%24}h`; }
 function decorate(ticket){ const active=!['Resolved','Closed'].includes(ticket.status); const now=Date.now(); const createdAt=new Date(ticket.created_at).getTime(); const isNew=Number.isFinite(createdAt)&&now-createdAt>=0&&now-createdAt<24*60*60*1000; return {...ticket,is_new:isNew,new_expires_at:isNew?new Date(createdAt+24*60*60*1000).toISOString():null,age:age(ticket.created_at),overdue:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active),response_overdue:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now&&active),sla:{policyKey:ticket.sla_policy_key||null,policyVersion:ticket.sla_policy_version||null,responseDueAt:ticket.response_due_at||null,resolutionDueAt:ticket.due_at||null,responseMinutes:ticket.sla_response_minutes||null,resolutionMinutes:ticket.sla_resolution_minutes||null,responseBreached:Boolean(ticket.response_due_at&&!ticket.first_responded_at&&new Date(ticket.response_due_at).getTime()<now),resolutionBreached:Boolean(ticket.due_at&&new Date(ticket.due_at).getTime()<now&&active)}}; }
 function prefix(typeValue,title,workspace){ const normalized=text(typeValue,50).toLowerCase().replace(/[\s-]+/g,"_"); if(TYPE_PREFIX[normalized])return TYPE_PREFIX[normalized]; const context=`${title} ${workspace}`.toLowerCase(); if(context.includes("change"))return "CHG"; if(context.includes("request")||context.includes("asset"))return "REQ"; return "INC"; }
-async function canView(user,ticket,database=pool){if(operations(user)||Number(ticket.requester_id)===Number(user?.id)||Number(ticket.created_by_user_id)===Number(user?.id))return true;try{const r=await database.query(`SELECT 1 FROM ticket_participants WHERE ticket_id=$1 AND user_id=$2 AND is_active=TRUE AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>NOW()) LIMIT 1`,[ticket.id,user?.id]);return Boolean(r.rowCount);}catch(error){if(error.code==="42P01")return false;throw error;}}
+async function isPdmSupportTicketUser(user,ticket,database=pool){
+  return normaliseWorkspaceCode(ticket?.workspace)==="PDM"&&
+    await pdmSupportAccess.isSupportMember(database,user?.id);
+}
+async function canView(user,ticket,database=pool){
+  if(operations(user)||Number(ticket.requester_id)===Number(user?.id)||Number(ticket.created_by_user_id)===Number(user?.id))return true;
+  if(await isPdmSupportTicketUser(user,ticket,database))return true;
+  if(normaliseWorkspaceCode(ticket.workspace)==='FIN'&&Number(ticket.assigned_to_user_id)===Number(user?.id)){try{const f=await database.query("SELECT 1 FROM finance_employee_responsibilities WHERE user_id=$1 AND active=TRUE LIMIT 1",[user.id]);if(f.rowCount)return true;}catch(error){if(error.code!=="42P01")throw error;}}
+  try{const r=await database.query(`SELECT 1 FROM ticket_participants WHERE ticket_id=$1 AND user_id=$2 AND is_active=TRUE AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>NOW()) LIMIT 1`,[ticket.id,user?.id]);return Boolean(r.rowCount);}catch(error){if(error.code==="42P01")return false;throw error;}
+}
 async function canContribute(user,ticket,database=pool){
-  if(operations(user)||Number(ticket.requester_id)===Number(user?.id))return true;
+  if(operations(user)||Number(ticket.requester_id)===Number(user?.id)||await isPdmSupportTicketUser(user,ticket,database))return true;
   try{
     const result=await database.query(`SELECT 1 FROM ticket_participants WHERE ticket_id=$1 AND user_id=$2 AND access_scope='reply_only' AND is_active=TRUE AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>NOW()) LIMIT 1`,[ticket.id,user?.id]);
     return Boolean(result.rowCount);
@@ -69,6 +86,17 @@ async function canContribute(user,ticket,database=pool){
     if(error.code==="42P01")return false;
     throw error;
   }
+}
+async function allowTicketOperations(req,res,next){
+  if(operations(req.user))return next();
+  try{
+    const ticket=await getTicket(req.params.id);
+    if(!ticket)return res.status(404).json({code:"TICKET_NOT_FOUND",error:"Ticket not found."});
+    if(!await isPdmSupportTicketUser(req.user,ticket))return res.status(403).json({code:"TICKET_OPERATION_FORBIDDEN",error:"Ticket handling requires an authorised support role or membership in the ticket's workspace support group."});
+    req.pdmSupportLimited=true;
+    req.pdmSupportGroupId=await pdmSupportAccess.supportGroupId(pool);
+    return next();
+  }catch(error){return next(error);}
 }
 function parseDetails(value){
   if(value==null||value==="")return {};
@@ -91,6 +119,12 @@ function assignmentLabel(ticket){
   const agent=ticket.assigned_to_name||(ticket.assigned_to_user_id?`User #${ticket.assigned_to_user_id}`:"Unassigned");
   const group=ticket.assigned_group_name||(ticket.assigned_group_id?`Group #${ticket.assigned_group_id}`:"No group");
   return `${agent} · ${group}`;
+}
+function emitTicketChange(req,changeType,ticket){
+  const io=req.app.get("io");
+  if(io){
+    io.emit("it-dashboard:metrics-updated",{changeType,ticketId:ticket?.id,workspace:ticket?.workspace,timestamp:Date.now()});
+  }
 }
 async function logAssignmentChange(database,ticketId,actorId,before,after){
   const from=assignmentLabel(before);
@@ -236,6 +270,30 @@ router.get("/",async(req,res)=>{
     ))`);
   }
 
+  // Every queue is limited to one workspace, including administrator queues.
+  // Cross-workspace access to an individual ticket is governed separately by
+  // requireCrossWorkspaceTicketAccess on detail routes.
+  const userWorkspace = resolveUserWorkspace(req);
+  const isWorkspaceAdmin = userWorkspace === null;
+  const requestedWorkspace = text(req.query.workspace, 100);
+  if (requestedWorkspace && requestedWorkspace.toLowerCase() === "all") {
+    return res.status(403).json({
+      code: "WORKSPACE_SCOPE_DENIED",
+      error: "Combined ticket lists are disabled. Select one workspace.",
+    });
+  }
+  const selectedWorkspace = requestedWorkspace || userWorkspace || "IT";
+  const requestedCanonical = normaliseWorkspaceCode(selectedWorkspace);
+  if (!requestedCanonical) {
+    return res.status(400).json({ code: "WORKSPACE_CODE_UNRECOGNISED", error: "Unrecognised workspace filter." });
+  }
+  if (!isWorkspaceAdmin && requestedCanonical !== userWorkspace) {
+    return res.status(403).json({ code: "WORKSPACE_SCOPE_DENIED", error: "You may only view tickets within your assigned workspace." });
+  }
+  const ws = scopeTo(requestedCanonical, { alias: "t", paramStart: values.length + 1 });
+  values.push(...ws.params);
+  conditions.push(ws.sql);
+
   const baseWhere=conditions.length?`WHERE ${conditions.join(" AND ")}`:"";
   const baseValues=[...values];
 
@@ -289,11 +347,6 @@ router.get("/",async(req,res)=>{
   if(String(req.query.view||"")==="aged-overdue")listConditions.push("t.created_at <= NOW()-INTERVAL '7 days' AND t.due_at < NOW() AND t.status NOT IN ('Resolved','Closed')");
   if(String(req.query.view||"")==="high")listConditions.push("t.priority IN ('Critical','High')");
 
-  const requestedWorkspace=text(req.query.workspace,100);
-  if(requestedWorkspace && requestedWorkspace.toLowerCase() !== "all"){
-    listValues.push(requestedWorkspace);
-    listConditions.push(`t.workspace = $${listValues.length}`);
-  }
 
   const listWhere=listConditions.length?`WHERE ${listConditions.join(" AND ")}`:"";
 
@@ -400,6 +453,7 @@ router.post("/:id/reopen",async(req,res)=>{
     await client.query(`UPDATE tickets SET status='Open',resolved_at=NULL,closed_at=NULL,reopen_count=$2,latest_reopened_at=NOW(),latest_reopened_by_user_id=$3,latest_reopen_reason=$4,updated_at=NOW() WHERE id=$1`,[ticket.id,cycle,req.user.id,reason]);
     await history(client,ticket.id,req.user.id,"requester_reopened_repeat_issue",ticket.status,JSON.stringify({cycle,reason}));
     await client.query("COMMIT");
+    emitTicketChange(req,"reopened",ticket);
     return res.json({message:"Ticket reopened and returned to the active support queue.",ticketId:ticket.id,reopenCount:cycle,repeatIssue:true});
   }catch(error){
     await client.query("ROLLBACK").catch(()=>{});
@@ -475,7 +529,7 @@ router.get("/:id/comments",async(req,res)=>{
     const ticket=await getTicket(req.params.id);
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
     if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only view tickets requested by your account."});
-    const ops=operations(req.user);
+    const ops=operations(req.user)||await isPdmSupportTicketUser(req.user,ticket);
     const result=await pool.query(
       `SELECT c.id, c.ticket_id, c.author_user_id, c.body, c.is_internal, c.created_at,
               c.author_name, c.author_email, c.origin,
@@ -505,7 +559,7 @@ router.post("/:id/comments",async(req,res)=>{
     if(!ticket)return res.status(404).json({error:"Ticket not found."});
     if(!await canView(req.user,ticket))return res.status(403).json({error:"You may only comment on tickets you can view."});
     if(!await canContribute(req.user,ticket))return res.status(403).json({code:"PARTICIPANT_READ_ONLY",error:"This ticket participation is read-only. Reply Only access is required to post a message."});
-    const ops=operations(req.user);
+    const ops=operations(req.user)||await isPdmSupportTicketUser(req.user,ticket);
     const isInternal=ops&&wantInternal;
     const inserted=await pool.query(
       `INSERT INTO ticket_comments (
@@ -538,7 +592,7 @@ router.post("/:id/comments",async(req,res)=>{
   }
 });
 
-router.post("/:id/reply-action",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+router.post("/:id/reply-action",allowTicketOperations,async(req,res)=>{
   const body=text(req.body.body || req.body.comment);
   const action=text(req.body.action || "send",30).toLowerCase();
   if(action==="send_close"&&!["manager","superadmin"].includes(req.user.role))return res.status(403).json({error:"Immediate closure requires manager or superadministrator authority."});
@@ -593,7 +647,7 @@ router.post("/",optionalAttachments,async(req,res)=>{
   const title=text(req.body.title,180);
   const description=text(req.body.description);
   let ticketPriority=priority(req.body.priority)||"Medium";
-  try{ticketPriority=ticketGovernance.requesterPriority(req.user,ticketPriority);}catch(error){cleanupFiles(files);return res.status(error.status||400).json({code:error.code,error:error.message});}
+  const priorityProvided=Boolean(priority(req.body.priority));
   const workspace=text(req.body.workspace||"IT",100);
   const ticketType=text(req.body.ticketType,50).toLowerCase().replace(/[\s-]+/g,"_")||null;
   const category=text(req.body.category,120)||null;
@@ -602,7 +656,16 @@ router.post("/",optionalAttachments,async(req,res)=>{
   const impact=level(req.body.impact,["Low","Medium","High"]);
   const urgency=level(req.body.urgency,["Low","Medium","High"]);
   const source=text(req.body.source,50)||"Portal";
+  const financeWorkspace=normaliseWorkspaceCode(workspace)==="FIN";
+  const financeMetadata=req.body.financeMetadata&&typeof req.body.financeMetadata==="object"&&!Array.isArray(req.body.financeMetadata)
+    ?req.body.financeMetadata:{};
+  const rawFinanceKpiId=req.body.financeKpiId??financeMetadata.financeKpiId;
+  const financeKpiId=id(rawFinanceKpiId);
+  const financeFunction=text(req.body.financeFunction||financeMetadata.financeFunction||category,80)||null;
   const details=parseDetails(req.body.requestDetails||req.body.request_details);
+  if(financeWorkspace&&Object.keys(financeMetadata).length){
+    details.financeMetadata=financeMetadata;
+  }
   let catalogue=null;
   try{catalogue=ticketGovernance.catalogueRequirement(ticketType,details,category,subCategory);}catch(error){cleanupFiles(files);return res.status(error.status||400).json({code:error.code,error:error.message});}
   let groupId=id(req.body.assignedGroupId);
@@ -611,9 +674,11 @@ router.post("/",optionalAttachments,async(req,res)=>{
 
   if(!title){ cleanupFiles(files); return res.status(400).json({error:"A ticket title is required."}); }
   if(!description){ cleanupFiles(files); return res.status(400).json({error:"A ticket description is required."}); }
-  const financeWorkspace=workspace.trim().toLowerCase()==="finance";
-  if(!assigneeId&&!financeWorkspace){ cleanupFiles(files); return res.status(400).json({code:"AGENT_REQUIRED",error:"Select an eligible agent before submitting this ticket."}); }
-  if(!groupId&&!financeWorkspace){ cleanupFiles(files); return res.status(400).json({code:"SUPPORT_GROUP_REQUIRED",error:"Select the support team for the chosen agent."}); }
+  if(rawFinanceKpiId!=null&&rawFinanceKpiId!==""&&!financeKpiId){cleanupFiles(files);return res.status(400).json({code:"FINANCE_KPI_ID_INVALID",error:"Select a valid Finance KPI."});}
+  const actorWorkspace=resolveUserWorkspace(req);
+  if(financeWorkspace&&actorWorkspace&&actorWorkspace!=="FIN"){cleanupFiles(files);return res.status(403).json({code:"FINANCE_WORKSPACE_SCOPE_DENIED",error:"Only authorised Finance users may create Finance tickets."});}
+  const workspaceCode=normaliseWorkspaceCode(workspace);
+  if(!financeWorkspace&&!groupId&&!assigneeId&&!["IT","PDM"].includes(workspaceCode)){ cleanupFiles(files); return res.status(400).json({code:"SUPPORT_GROUP_REQUIRED",error:"Select a support group or eligible agent."}); }
   if(financeWorkspace)groupId=null;
 
   const requestedFor=id(req.body.requesterId||req.body.requestedForUserId);
@@ -631,6 +696,65 @@ router.post("/",optionalAttachments,async(req,res)=>{
   try{
     await client.query("BEGIN");
     open=true;
+    let catalogueLink=null;
+    if(catalogue)catalogueLink=await catalogueLinkService.resolve(client,{itemId:catalogue.itemId,itemName:catalogue.itemName});
+    const requester=await validRequester(client,requesterId);
+    if(!requester){
+      await client.query("ROLLBACK"); open=false; cleanupFiles(files);
+      return res.status(400).json({error:"The selected requester is not an active person account."});
+    }
+    const lineIntake=await lineTicketIntake.authorizeLineTicketIntake(client,{
+      actorId:req.user.id,
+      workspace,
+      ticketType,
+      details,
+      category,
+      subCategory,
+      itemCategory,
+    });
+    const pdmIntake=await pdmTicketIntake.authorizePdmTicketIntake(client,{
+      actorId:req.user.id,
+      requesterId,
+      workspace,
+      ticketType,
+      details,
+      priority:ticketPriority,
+      category,
+      subCategory,
+      itemCategory,
+    });
+    if(pdmIntake.isPdm){
+      if(!pdmIntake.defaultGroupId)throw Object.assign(new Error("PDM line tickets require the governed PDM Line Support group."),{status:409,code:"PDM_SUPPORT_GROUP_REQUIRED"});
+      if(groupId&&Number(groupId)!==Number(pdmIntake.defaultGroupId)){
+        throw Object.assign(new Error("PDM catalogue tickets must remain with the PDM Line Support group."),{status:403,code:"PDM_SUPPORT_GROUP_LOCKED"});
+      }
+      groupId=pdmIntake.defaultGroupId;
+    }else if(lineIntake.isLineReporter&&normaliseWorkspaceCode(workspace)==="IT"){
+      const itGroupId=await defaultGroup(client);
+      if(!itGroupId)throw Object.assign(new Error("No default IT support group is configured."),{status:409,code:"IT_SUPPORT_GROUP_REQUIRED"});
+      if(groupId&&Number(groupId)!==Number(itGroupId)){
+        throw Object.assign(new Error("Production line Network tickets must remain with the default IT support group."),{status:403,code:"LINE_IT_SUPPORT_GROUP_LOCKED"});
+      }
+      groupId=itGroupId;
+    }
+    if(catalogueLink&&catalogueLink.linked&&!financeWorkspace){
+      if(!groupId&&catalogueLink.defaults.groupId)groupId=catalogueLink.defaults.groupId;
+      if(!assigneeId&&catalogueLink.defaults.assigneeUserId)assigneeId=catalogueLink.defaults.assigneeUserId;
+    }
+    if(!financeWorkspace&&!groupId&&!assigneeId){
+      if(pdmIntake.isPdm)throw Object.assign(new Error("PDM line tickets require the governed PDM Line Support group."),{status:409,code:"PDM_SUPPORT_GROUP_REQUIRED"});
+      groupId=await defaultGroup(client);
+    }
+    if(!financeWorkspace&&!groupId){
+      throw Object.assign(new Error("No eligible support group is available for this ticket."),{status:409,code:"SUPPORT_GROUP_REQUIRED"});
+    }
+    if(catalogueLink&&catalogueLink.defaults.priority&&!priorityProvided&&!catalogueLink.defaults.priorityLocked){
+      ticketPriority=catalogueLink.defaults.priority;
+    }
+    ticketPriority=ticketGovernance.requesterPriority(req.user,ticketPriority,{allowHigh:pdmIntake.allowHigh});
+    if(catalogueLink&&catalogueLink.defaults.priorityLocked&&catalogueLink.defaults.priority){
+      ticketPriority=catalogueLink.defaults.priority;
+    }
     const slaPolicy=await getSlaPolicy(client);
     const sla=calculateSla(slaPolicy,ticketPriority,new Date(),{
       workspace,
@@ -640,12 +764,22 @@ router.post("/",optionalAttachments,async(req,res)=>{
       itemCategory,
       title,
     });
-    const requester=await validRequester(client,requesterId);
-    if(!requester){
-      await client.query("ROLLBACK"); open=false; cleanupFiles(files);
-      return res.status(400).json({error:"The selected requester is not an active person account."});
-    }
     if(financeWorkspace){
+      let linkedKpi=null;
+      if(financeKpiId){
+        const kpiResult=await client.query(
+          `SELECT id,owner_user_id,name
+           FROM finance_kpis
+           WHERE id=$1 AND status='active'
+           LIMIT 1`,
+          [financeKpiId]
+        );
+        linkedKpi=kpiResult.rows[0]||null;
+        const expectedOwnerId=assigneeId||requesterId;
+        if(!linkedKpi||Number(linkedKpi.owner_user_id)!==Number(expectedOwnerId)){
+          throw Object.assign(new Error("The selected KPI is not active or does not belong to the Finance employee assigned to this ticket."),{status:400,code:"FINANCE_KPI_OWNER_MISMATCH"});
+        }
+      }
       if(assigneeId){
         const eligible=await client.query(`SELECT u.id FROM users u WHERE u.id=$1 AND u.approved=TRUE AND u.status='active' AND u.archived_at IS NULL AND COALESCE(u.account_type,'person')='person' AND LOWER(COALESCE(u.department,''))='finance' LIMIT 1`,[assigneeId]);
         if(!eligible.rows[0])throw Object.assign(new Error("The selected owner is not an active verified Finance employee."),{status:400});
@@ -675,14 +809,26 @@ router.post("/",optionalAttachments,async(req,res)=>{
       `INSERT INTO tickets(
          id,ticket_ref,title,description,requester_id,created_by_user_id,priority,status,workspace,
          assigned_group_id,assigned_to_user_id,ticket_type,category,sub_category,item_category,
-         impact,urgency,source,request_details,response_due_at,due_at,sla_policy_key,sla_policy_version,sla_calculated_at,sla_response_minutes,sla_resolution_minutes,catalogue_item_id,catalogue_item_name
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21,$22,$23,NOW(),$24,$25,$26,$27)`,
+         impact,urgency,source,request_details,response_due_at,due_at,sla_policy_key,sla_policy_version,sla_calculated_at,sla_response_minutes,sla_resolution_minutes,catalogue_item_id,catalogue_item_name,catalogue_snapshot,catalogue_other_route
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21,$22,$23,NOW(),$24,$25,$26,$27,$28::jsonb,$29)`,
       [
         nextId,reference,title,description,requesterId,req.user.id,ticketPriority,openStatus,workspace,
         groupId,assigneeId,ticketType,category,subCategory,itemCategory,
-        impact,urgency,source,JSON.stringify(details),sla.responseDueAt,sla.resolutionDueAt,sla.policyKey,sla.policyVersion,sla.responseMinutes,sla.resolutionMinutes,catalogue?.itemId||null,catalogue?.itemName||null,
+        impact,urgency,source,JSON.stringify(details),sla.responseDueAt,sla.resolutionDueAt,sla.policyKey,sla.policyVersion,sla.responseMinutes,sla.resolutionMinutes,catalogueLink?catalogueLink.itemId:null,catalogueLink?catalogueLink.itemName:null,catalogueLink&&catalogueLink.snapshot?JSON.stringify(catalogueLink.snapshot):"{}",catalogueLink?Boolean(catalogueLink.otherRoute):false,
       ]
     );
+    if(financeWorkspace){
+      await client.query(
+        `INSERT INTO finance_ticket_operations(ticket_id,triage_state,finance_function,finance_kpi_id)
+         VALUES($1,'actionable',$2,$3)
+         ON CONFLICT(ticket_id) DO UPDATE SET
+           triage_state='actionable',
+           finance_function=EXCLUDED.finance_function,
+           finance_kpi_id=EXCLUDED.finance_kpi_id,
+           updated_at=NOW()`,
+        [nextId,financeFunction||"General Finance Administration",financeKpiId||null]
+      );
+    }
 
     const attachments=await saveUploadedFiles(client,nextId,req.user.id,files);
     if(attachments.length){
@@ -714,12 +860,16 @@ router.post("/",optionalAttachments,async(req,res)=>{
         sendTicketCreatedLifecycle({ requester, ticket, attachmentCount: attachments.length }),
       ]);
     });
-    return res.status(201).json({...decorate(ticket),attachments,confirmationQueued:true});
+    emitTicketChange(req,"created",ticket);
+    return res.status(201).json({...decorate(ticket),attachments,confirmationQueued:true,...(catalogueLink&&catalogueLink.notice?{catalogueNotice:catalogueLink.notice}:{})});
   }catch(error){
     if(open)await client.query("ROLLBACK").catch(()=>{});
     cleanupFiles(files);
     console.error("Create ticket failed:",error);
-    return res.status(error.status||500).json({error:error.status?error.message:"Failed to create ticket."});
+    return res.status(error.status||500).json({
+      ...(error.code?{code:error.code}:{}),
+      error:error.status?error.message:"Failed to create ticket.",
+    });
   }finally{
     client.release();
   }
@@ -874,7 +1024,7 @@ router.post("/bulk",allowRoles("agent","operator","manager","admin","superadmin"
  finally{client.release();}
 });
 
-router.put("/:id",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+router.put("/:id",allowTicketOperations,async(req,res)=>{
   try{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
@@ -888,6 +1038,13 @@ router.put("/:id",allowRoles("agent","operator","manager","admin","superadmin"),
     const nextDescription=text(req.body.description??existing.description);
     const nextWorkspace=text(req.body.workspace??existing.workspace,100);
     const nextDueAt=req.body.dueAt===undefined?existing.due_at:req.body.dueAt||null;
+    if(req.pdmSupportLimited&&(
+      normaliseWorkspaceCode(existing.workspace)!=="PDM"||
+      normaliseWorkspaceCode(nextWorkspace)!=="PDM"||
+      Number(groupId)!==Number(req.pdmSupportGroupId)
+    )){
+      return res.status(403).json({code:"PDM_SUPPORT_SCOPE_LOCKED",error:"PDM Line Support members may only keep tickets in the PDM workspace and PDM Line Support group."});
+    }
     await pool.query(
       `UPDATE tickets SET title=$1,description=$2,priority=$3,status=$4,workspace=$5,assigned_group_id=$6,assigned_to_user_id=$7,due_at=$8,
        resolved_at=CASE WHEN $4 IN ('Resolved','Closed') THEN COALESCE(resolved_at,NOW()) ELSE NULL END,
@@ -910,24 +1067,29 @@ router.put("/:id",allowRoles("agent","operator","manager","admin","superadmin"),
     if(Number(existing.assigned_to_user_id)!==Number(ticket.assigned_to_user_id)||Number(existing.assigned_group_id)!==Number(ticket.assigned_group_id)){
       setImmediate(()=>notify(ticket));
     }
+    emitTicketChange(req,"updated",ticket);
     return res.json(decorate(ticket));
   }catch(error){
     return res.status(error.status||500).json({error:error.status?error.message:"Failed to update ticket."});
   }
 });
-router.post("/:id/assign",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+router.post("/:id/assign",allowTicketOperations,async(req,res)=>{
   try{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
     const groupId=req.body.assignedGroupId===undefined?existing.assigned_group_id:id(req.body.assignedGroupId);
     const assigneeId=id(req.body.assignedToUserId);
     if(!groupId&&!assigneeId)return res.status(400).json({error:"Select a support group or eligible agent."});
+    if(req.pdmSupportLimited&&Number(groupId)!==Number(req.pdmSupportGroupId)){
+      return res.status(403).json({code:"PDM_SUPPORT_GROUP_LOCKED",error:"PDM Line Support members may only assign tickets to the PDM Line Support group."});
+    }
     await validateAssignment(pool,groupId,assigneeId);
     await pool.query(`UPDATE tickets SET assigned_group_id=$1,assigned_to_user_id=$2,status='Assigned',resolved_at=NULL,closed_at=NULL,updated_at=NOW() WHERE id=$3`,[groupId,assigneeId,req.params.id]);
     const ticket=await getTicket(req.params.id);
     await logAssignmentChange(pool,req.params.id,req.user.id,existing,ticket);
     await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status);
     setImmediate(()=>notify(ticket));
+    emitTicketChange(req,"assigned",ticket);
     return res.json(decorate(ticket));
   }catch(error){
     return res.status(error.status||500).json({error:error.status?error.message:"Failed to assign ticket."});
@@ -943,7 +1105,8 @@ router.post("/:id/assign-agent",async(req,res)=>{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
     const operational=["agent","operator","manager","admin","superadmin"].includes(req.user.role);
-    if(!operational&&Number(existing.requester_id)!==Number(req.user.id)){
+    const pdmSupportMember=await isPdmSupportTicketUser(req.user,existing);
+    if(!operational&&Number(existing.requester_id)!==Number(req.user.id)&&!pdmSupportMember){
       return res.status(403).json({error:"You may only assign agents on your own tickets."});
     }
     if(["Resolved","Closed"].includes(existing.status)){
@@ -957,6 +1120,9 @@ router.post("/:id/assign-agent",async(req,res)=>{
 
     if (groupId === undefined) {
       groupId = existing.assigned_group_id;
+    }
+    if(pdmSupportMember&&Number(groupId)!==Number(await pdmSupportAccess.supportGroupId(pool))){
+      return res.status(403).json({code:"PDM_SUPPORT_GROUP_LOCKED",error:"PDM Line Support members may only assign tickets to the PDM Line Support group."});
     }
 
     if (assigneeId) {
@@ -989,12 +1155,13 @@ router.post("/:id/assign-agent",async(req,res)=>{
     if(Number(existing.assigned_to_user_id)!==Number(ticket.assigned_to_user_id)||Number(existing.assigned_group_id)!==Number(ticket.assigned_group_id)){
       setImmediate(()=>notify(ticket));
     }
+    emitTicketChange(req,"assigned",ticket);
     return res.json(decorate(ticket));
   }catch(error){
     return res.status(error.status||500).json({error:error.status?error.message:"Failed to assign agent."});
   }
 });
-router.patch("/:id/status",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+router.patch("/:id/status",allowTicketOperations,async(req,res)=>{
   const next=status(req.body.status);
   if(!next)return res.status(400).json({error:"Invalid ticket status."});
   if(["Resolved","Closed"].includes(next))return res.status(409).json({code:"GOVERNED_STATUS_REQUIRED",error:"Resolve and Close must use their governed workflows."});
@@ -1010,24 +1177,27 @@ router.patch("/:id/status",allowRoles("agent","operator","manager","admin","supe
     );
     const ticket=await getTicket(req.params.id);
     await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status);
+    emitTicketChange(req,"status_changed",ticket);
     return res.json(decorate(ticket));
   }catch(error){
     return res.status(500).json({error:"Failed to update ticket status."});
   }
 });
-router.patch("/:id/resolve",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+router.patch("/:id/resolve",allowTicketOperations,async(req,res)=>{
   try{
     const existing=await getTicket(req.params.id);
     if(!existing)return res.status(404).json({error:"Ticket not found."});
     await pool.query(`UPDATE tickets SET status='Resolved',resolved_at=COALESCE(resolved_at,NOW()),closed_at=NULL,updated_at=NOW() WHERE id=$1`,[req.params.id]);
     const ticket=await getTicket(req.params.id);
     await logStatusChange(pool,req.params.id,req.user.id,existing.status,ticket.status,"resolve");
+    emitTicketChange(req,"resolved",ticket);
+    financeItSurveyService.triggerSurveyOnResolution(req.params.id).catch(()=>{});
     return res.json(decorate(ticket));
   }catch(error){
     return res.status(500).json({error:"Failed to resolve ticket."});
   }
 });
-router.patch("/:id/close",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{
+router.patch("/:id/close",allowTicketOperations,async(req,res)=>{
   const classification=text(req.body.classification,80);
   const reason=text(req.body.reason,1000);
   const agentClassifications=new Set(["Irrelevant","Not IT Related"]);
@@ -1045,17 +1215,20 @@ router.patch("/:id/close",allowRoles("agent","operator","manager","admin","super
     await history(client,req.params.id,req.user.id,"governed_closed",existing.status,JSON.stringify({status:"Closed",classification,reason}));
     await logStatusChange(client,req.params.id,req.user.id,existing.status,"Closed","closed");
     await client.query("COMMIT");
-    return res.json({...decorate(await getTicket(req.params.id)),closure:{classification,reason}});
+    const closedTicket=await getTicket(req.params.id);
+    emitTicketChange(req,"closed",closedTicket);
+    financeItSurveyService.triggerSurveyOnResolution(req.params.id).catch(()=>{});
+    return res.json({...decorate(closedTicket),closure:{classification,reason}});
   }catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(error.status||500).json({code:error.code||"CLOSE_FAILED",error:error.status?error.message:"Failed to close ticket."});}
   finally{client.release();}
 });
 
 
-router.get("/:id/escalation-targets",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{return res.json({targets:await ticketGovernance.escalationTargets(pool,req.params.id)});}catch(error){return res.status(error.status||500).json({code:error.code||"ESCALATION_TARGETS_FAILED",error:error.message});}});
-router.post("/:id/escalate",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{const reason=text(req.body.reason,1000);if(reason.length<10)return res.status(400).json({code:"ESCALATION_REASON_REQUIRED",error:"Provide an escalation reason of at least 10 characters."});const client=await pool.connect();try{await client.query("BEGIN");const escalation=await ticketGovernance.escalate(client,{ticketId:req.params.id,actorId:req.user.id,targetUserId:req.body.targetUserId,targetLevel:req.body.targetLevel,reason,requestedAction:req.body.requestedAction,source:req.body.source||"helpdesk"});await history(client,req.params.id,req.user.id,"governed_escalation",null,JSON.stringify(escalation));await client.query("COMMIT");return res.status(201).json(escalation);}catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(error.status||500).json({code:error.code||"ESCALATION_FAILED",error:error.message});}finally{client.release();}});
-router.patch("/:id/important",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const important=req.body.important!==false;const result=await pool.query("UPDATE tickets SET is_important=$1,importance_source=$2,important_marked_at=CASE WHEN $1 THEN NOW() ELSE NULL END,important_marked_by_user_id=CASE WHEN $1 THEN $3 ELSE NULL END,updated_at=NOW() WHERE id=$4 AND status NOT IN ('Resolved','Closed') RETURNING *",[important,text(req.body.source||"manual",40),req.user.id,req.params.id]);if(!result.rowCount)return res.status(409).json({code:"IMPORTANT_FINAL_TICKET_DISABLED",error:"Important status cannot be changed on Resolved or Closed tickets."});await history(pool,req.params.id,req.user.id,"important_changed",String(!important),String(important));return res.json(decorate(result.rows[0]));}catch(error){return res.status(500).json({error:"Important status could not be updated."});}});
+router.get("/:id/escalation-targets",allowTicketOperations,async(req,res,next)=>{try{return res.json({targets:await ticketGovernance.escalationTargets(pool,req.params.id)});}catch(error){return res.status(error.status||500).json({code:error.code||"ESCALATION_TARGETS_FAILED",error:error.message});}});
+router.post("/:id/escalate",allowTicketOperations,async(req,res)=>{const reason=text(req.body.reason,1000);if(reason.length<10)return res.status(400).json({code:"ESCALATION_REASON_REQUIRED",error:"Provide an escalation reason of at least 10 characters."});const client=await pool.connect();try{await client.query("BEGIN");const escalation=await ticketGovernance.escalate(client,{ticketId:req.params.id,actorId:req.user.id,targetUserId:req.body.targetUserId,targetLevel:req.body.targetLevel,reason,requestedAction:req.body.requestedAction,source:req.body.source||"helpdesk"});await history(client,req.params.id,req.user.id,"governed_escalation",null,JSON.stringify(escalation));await client.query("COMMIT");return res.status(201).json(escalation);}catch(error){await client.query("ROLLBACK").catch(()=>{});return res.status(error.status||500).json({code:error.code||"ESCALATION_FAILED",error:error.message});}finally{client.release();}});
+router.patch("/:id/important",allowTicketOperations,async(req,res)=>{try{const important=req.body.important!==false;const result=await pool.query("UPDATE tickets SET is_important=$1,importance_source=$2,important_marked_at=CASE WHEN $1 THEN NOW() ELSE NULL END,important_marked_by_user_id=CASE WHEN $1 THEN $3 ELSE NULL END,updated_at=NOW() WHERE id=$4 AND status NOT IN ('Resolved','Closed') RETURNING *",[important,text(req.body.source||"manual",40),req.user.id,req.params.id]);if(!result.rowCount)return res.status(409).json({code:"IMPORTANT_FINAL_TICKET_DISABLED",error:"Important status cannot be changed on Resolved or Closed tickets."});await history(pool,req.params.id,req.user.id,"important_changed",String(!important),String(important));return res.json(decorate(result.rows[0]));}catch(error){return res.status(500).json({error:"Important status could not be updated."});}});
 
-router.get("/:id/conversation",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(!await canView(req.user,ticket))return res.status(403).json({error:"Access denied."});return res.json({ticketId:ticket.id,conversation:await ticketExperience.conversation(pool,ticket.id,operations(req.user)),internalNotesVisible:operations(req.user)});}catch(error){return res.status(500).json({error:"Conversation could not be loaded."});}});
+router.get("/:id/conversation",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(!await canView(req.user,ticket))return res.status(403).json({error:"Access denied."});const internalNotesVisible=operations(req.user)||await isPdmSupportTicketUser(req.user,ticket);return res.json({ticketId:ticket.id,conversation:await ticketExperience.conversation(pool,ticket.id,internalNotesVisible),internalNotesVisible});}catch(error){return res.status(500).json({error:"Conversation could not be loaded."});}});
 router.get("/:id/teams-conversation",allowRoles("agent","operator","manager","admin","superadmin"),async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});const result=await pool.query("SELECT * FROM ticket_teams_conversations WHERE ticket_id=$1",[ticket.id]);return res.json(result.rows[0]||{ticketId:ticket.id,status:"contract_ready",liveActionPerformed:false});}catch(error){return res.status(500).json({error:"Teams conversation contract could not be loaded."});}});
 router.post("/:id/teams-conversation/prepare",allowRoles("manager","admin","superadmin"),async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});if(["Resolved","Closed"].includes(ticket.status))return res.status(409).json({error:"Closed work cannot start a Teams conversation."});const result=await pool.query("INSERT INTO ticket_teams_conversations(ticket_id,status,created_by_user_id) VALUES($1,'pending_authorisation',$2) ON CONFLICT(ticket_id) DO UPDATE SET status='pending_authorisation',updated_at=NOW() RETURNING *",[ticket.id,req.user.id]);await history(pool,ticket.id,req.user.id,"teams_conversation_prepared",null,"pending_authorisation");return res.status(201).json({...result.rows[0],liveActionPerformed:false});}catch(error){return res.status(500).json({error:"Teams conversation preparation failed."});}});
 router.get("/:id/survey",async(req,res)=>{try{const ticket=await getTicket(req.params.id);if(!ticket)return res.status(404).json({error:"Ticket not found."});const survey=await ticketExperience.surveyFor(pool,ticket,req.user.id);return res.json(survey);}catch(error){return res.status(error.status||500).json({code:error.code,error:error.message});}});

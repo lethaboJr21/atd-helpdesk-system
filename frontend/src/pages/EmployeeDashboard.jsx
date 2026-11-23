@@ -6,6 +6,7 @@ import {
   Bell,
   CheckSquare,
   HardDrive,
+  Headset,
   Inbox,
   Lightbulb,
   BriefcaseBusiness,
@@ -27,6 +28,7 @@ import DashboardConfigurationPanel from "../components/dashboard/DashboardConfig
 import DashboardTemplate from "../components/dashboard/DashboardTemplate";
 import CompanyAnnouncements from "../components/dashboard/CompanyAnnouncements";
 import EmployeePinnedActions from "../components/dashboard/EmployeePinnedActions";
+import Modal from "../components/overlays/Modal";
 
 import {
   GUIDED_INCIDENTS,
@@ -91,6 +93,7 @@ export default function EmployeeDashboard() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [showRequestMenu, setShowRequestMenu] = useState(false);
+  const [showTeamsSupportPrompt, setShowTeamsSupportPrompt] = useState(false);
   const [showDashboardConfiguration, setShowDashboardConfiguration] = useState(false);
   const {
     templateId,
@@ -270,7 +273,7 @@ export default function EmployeeDashboard() {
       label: guide.title,
       hint: null,
       icon: guide.icon,
-      onClick: () => navigate(guidedIncidentPath(guide)),
+      onClick: () => navigate(`/incidents/catalogue?search=${encodeURIComponent(guide.title || "")}`),
     }));
 
     const all = [...guided, ...catalogLinks];
@@ -356,7 +359,7 @@ export default function EmployeeDashboard() {
         id: guide.key,
         title: guide.title,
         description: guide.description,
-        onSelect: () => navigate(guidedIncidentPath(guide)),
+        onSelect: () => navigate(`/incidents/catalogue?search=${encodeURIComponent(guide.title || "")}`),
       })),
       {
         id: "syspro-catalog",
@@ -431,6 +434,16 @@ export default function EmployeeDashboard() {
             <Plus className="h-4 w-4" />
             New Request
           </button>
+          {user?.role === "user" && (
+            <button
+              type="button"
+              onClick={() => setShowTeamsSupportPrompt(true)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[var(--portal-border)] bg-[var(--portal-surface-raised)] px-3.5 py-2 text-sm font-semibold text-[var(--portal-text-soft)] shadow-soft transition hover:bg-[var(--portal-surface-muted)]"
+            >
+              <Headset className="h-4 w-4" />
+              Teams call help
+            </button>
+          )}
         </>
       }
     >
@@ -788,6 +801,35 @@ export default function EmployeeDashboard() {
           navigate(entry.path);
         }}
       />
+
+      <Modal
+        open={showTeamsSupportPrompt}
+        title="Request help during a Teams call"
+        description="This is an employee-initiated Helpdesk request. Teams calls and network traffic are not monitored."
+        onClose={() => setShowTeamsSupportPrompt(false)}
+        footer={
+          <>
+            <button type="button" onClick={() => setShowTeamsSupportPrompt(false)} className="btn-secondary">Cancel</button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowTeamsSupportPrompt(false);
+                navigate("/tickets/new?type=incident&title=Teams%20Call%20IT%20Support");
+              }}
+              className="btn-primary"
+            >
+              Continue to IT request
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-3 text-sm text-slate-600">
+          <p>Continue to create an incident tagged for a Teams call so IT can navigate to the right support workflow.</p>
+          <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            Continuing does not grant remote access or share your screen. Any future remote support must use an approved tool and a separate, explicit consent step.
+          </p>
+        </div>
+      </Modal>
 
       <DashboardConfigurationPanel
         open={showDashboardConfiguration}

@@ -23,7 +23,7 @@ const FEATURE_BY_ACTION = {
   syspro_catalog:"request_service", qmuzik_catalog:"request_service"
 };
 const ACTION_DETAILS = {
-  incident:{label:"Report an Incident",description:"Report something broken, unavailable or working incorrectly.",path:"/incidents/new"},
+  incident:{label:"Report an Incident",description:"Report something broken, unavailable or working incorrectly.",path:"/incidents/catalogue"},
   service:{label:"Request a Service",description:"Browse IT services and submit a standard request.",path:"/services"},
   asset:{label:"Request an Asset",description:"Request new, replacement or temporary equipment.",path:"/request-asset"},
   change:{label:"Request a Change",description:"Submit a planned change for assessment and scheduling.",path:"/changes/new"},
@@ -31,10 +31,10 @@ const ACTION_DETAILS = {
   knowledge:{label:"Browse Solutions",description:"Find policies, FAQs and self-help guidance.",path:"/knowledge"},
   my_tickets:{label:"My Open Tickets",description:"Track requests and support work raised for you.",path:"/tickets?view=mine"},
   my_assets:{label:"My Assets",description:"Review equipment currently assigned to you.",path:"/assets"},
-  syspro_issue:{label:"Syspro Issue",description:"Report a Syspro access or application problem.",path:"/incidents/new?title=Syspro%20issue&category=Application%20Software&subCategory=Syspro"},
-  qmuzik_issue:{label:"QMuzik Issue",description:"Report QMuzik access, connection or transaction problems.",path:"/incidents/new?title=QMuzik%20issue&category=Application%20Software&subCategory=QMuzik"},
-  laptop_issue:{label:"Laptop or PC Issue",description:"Report a laptop or desktop problem.",path:"/incidents/new?title=Laptop%20%2F%20PC%20issue&category=Hardware%20%2FEquipment&subCategory=Laptop%20%2F%20Computer"},
-  printer_issue:{label:"Printer or Scanner Issue",description:"Report printing, scanner or connection problems.",path:"/incidents/new?title=Printer%20issue&category=Hardware%20%2FEquipment&subCategory=Office%20Printers"},
+  syspro_issue:{label:"Syspro Issue",description:"Report a Syspro access or application problem.",path:"/incidents/catalogue"},
+  qmuzik_issue:{label:"QMuzik Issue",description:"Report QMuzik access, connection or transaction problems.",path:"/incidents/catalogue"},
+  laptop_issue:{label:"Laptop or PC Issue",description:"Report a laptop or desktop problem.",path:"/incidents/catalogue"},
+  printer_issue:{label:"Printer or Scanner Issue",description:"Report printing, scanner or connection problems.",path:"/incidents/catalogue"},
   syspro_catalog:{label:"Syspro Support",description:"Open the Syspro service catalogue.",path:"/services?category=atd-syspro"},
   qmuzik_catalog:{label:"QMuzik Support",description:"Open the QMuzik service catalogue.",path:"/services?category=atd-qmuzik"}
 };

@@ -1,16 +1,20 @@
 import { Bell, Menu, Moon, Search, Sun } from "lucide-react";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import AccountMenu from "./account/AccountMenu";
 import useAppearance from "../hooks/useAppearance";
 import { useAuth } from "../hooks/useAuth";
+import CompanyAnnouncements from "./dashboard/CompanyAnnouncements";
 
 export default function WorkspaceShell({ children }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { appearance, toggleMode } = useAppearance();
   const [collapsed, setCollapsed] = useState(false);
+  const showAnnouncements = location.pathname === "/process-engineering-workspace"
+    || /^\/workspaces\/[^/]+$/.test(location.pathname);
 
   return (
     <div className="portal-page h-screen overflow-hidden">
@@ -30,7 +34,14 @@ export default function WorkspaceShell({ children }) {
             <AccountMenu />
           </div>
         </header>
-        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {showAnnouncements && (
+            <div className="max-h-[36vh] shrink-0 overflow-y-auto px-4 pt-3 sm:px-5 xl:px-8">
+              <CompanyAnnouncements />
+            </div>
+          )}
+          <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        </div>
       </div>
     </div>
   );

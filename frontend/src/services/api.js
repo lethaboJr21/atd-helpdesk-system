@@ -12,7 +12,7 @@ function getModuleBase() {
     : "/helpdesk";
 }
 
-// Dev uses a relative path so the Vite proxy forwards /api to the backend —
+// Dev uses a relative path so the Vite proxy forwards /api to the backend Ã¢â‚¬â€
 // works from any machine, not just the server itself.
 const API_BASE = import.meta.env.MODE === "production"
   ? `${window.location.origin}${getModuleBase()}/api`
@@ -228,9 +228,14 @@ export const assetsApi = {
 
 export const catalogApi = {
   getService: () => api.get("/catalog/service"),
-  getManagedItServices: () => api.get("/catalog/managed-it-services", { timeout: 8000 }),
+  getManagedItServices: (params) => api.get("/catalog/managed-it-services", { params, timeout: 8000 }),
+  getManagedItIncidents: (params) => api.get("/catalog/managed-it-incidents", { params, timeout: 8000 }),
   getAssets: () => api.get("/catalog/assets"),
   getFields: () => api.get("/catalog/fields"),
+  resolveCategory: (catalogueItemId, catalogueType) => api.get("/catalog/resolve-category", { params: { catalogueItemId, catalogueType } }),
+  getSyncValidation: (catalogueType) => api.get("/catalog/sync-validation", { params: { catalogueType } }),
+  createCategoryMapping: (data) => api.post("/catalog/category-mappings", data),
+  updateCategoryMapping: (id, data) => api.put(`/catalog/category-mappings/${id}`, data),
 };
 
 export const knowledgeApi = { getAll: (params) => api.get("/knowledge", { params }) };
@@ -337,6 +342,18 @@ export const statsApi = {
 export const productionApi = {
   getAll: () => api.get("/production"),
   create: (data) => api.post("/production", data),
+  requestSupervisorAssistance: (data) => api.post("/production/assistance-alerts", data),
+};
+
+export const lineIntakeApi = {
+  getSupervisors: () => api.get("/line-intake/supervisors"),
+
+  getTeamLeaders: () => api.get("/line-intake/team-leaders"),
+  saveTeamLeaderAssignment: data => api.post("/line-intake/team-leader-assignment",data),
+  register: (data) => api.post("/line-intake/register", data),
+  getCatalogue: (workspace) => api.get("/line-intake/catalogue", { params: { workspace } }),
+  stage: (data) => api.post("/line-intake/staged-tickets", data),
+  approve: (data) => api.post("/line-intake/approve", data),
 };
 
 export const logsApi = {
@@ -372,6 +389,8 @@ export const workspaceCatalogueApi = {
   updateItem: (id, data) => api.put(`/workspace-catalogue/items/${id}`, data),
   duplicateItem: (id) => api.post(`/workspace-catalogue/items/${id}/duplicate`, {}),
   changeStatus: (id, data) => api.patch(`/workspace-catalogue/items/${id}/status`, data),
+  itemTickets: (id, params = {}) => api.get(`/workspace-catalogue/items/${id}/tickets`, { params }),
+  deleteItem: (id) => api.delete(`/workspace-catalogue/items/${id}`),
   ensureOther: (data) => api.post("/workspace-catalogue/ensure-other", data),
   requestOptions: (params) => api.get("/workspace-catalogue/request-options", { params }),
 };
@@ -399,7 +418,33 @@ export const processEngineeringWorkspaceApi = {
   completionReport: () => api.get("/process-engineering-workspace/completion-report"),
   downloadExport: () => api.get("/process-engineering-workspace/export.xlsx?reviewed=true",{responseType:"blob"}),
     ticketContext: (ticketId) => api.get(`/process-engineering-workspace/ticket-context/${ticketId}`),
+    bulkAssign: (data) => api.post("/process-engineering-workspace/tickets/bulk-assign", data),
+    bulkStatus: (data) => api.post("/process-engineering-workspace/tickets/bulk-status", data),
     saveTicketContext: (ticketId, data) => api.put(`/process-engineering-workspace/ticket-context/${ticketId}`, data),
+};
+
+export const hrWorkspaceApi = {
+    getEmployees: () => api.get("/hr-workspace/employees"),
+    getRequests: () => api.get("/hr-workspace/requests"),
+    createRequest: (data) => api.post("/hr-workspace/requests", data),
+    setManagerApprovalEnabled: (enabled) => api.put("/hr-workspace/approval-setting", { enabled }),
+    reviewRequest: (requestId, data) => api.post(`/hr-workspace/requests/${requestId}/review`, data),
+    linkItTicket: (requestId, ticketId) => api.post(`/hr-workspace/requests/${requestId}/it-ticket`, { ticketId }),
+    updateOnboardingStep: (requestId, data) => api.post(`/hr-workspace/requests/${requestId}/onboarding-step`, data),
+    saveIssuanceSignature: (requestId, data) => api.post(`/hr-workspace/requests/${requestId}/issuance-signature`, data),
+    getIssuance: (requestId) => api.get(`/hr-workspace/requests/${requestId}/issuance`),
+};
+export const projectManagementApi = {
+  getProjects: () => api.get("/project-management/projects"),
+  createProject: (data) => api.post("/project-management/projects", data),
+  updateProjectStatus: (projectId, status) => api.patch(`/project-management/projects/${projectId}/status`, { status }),
+  getWorkspace: (projectId) => api.get(`/project-management/projects/${projectId}`),
+  searchMembers: (projectId, search) => api.get(`/project-management/projects/${projectId}/member-candidates`, { params: { search } }),
+  addMember: (projectId, data) => api.post(`/project-management/projects/${projectId}/members`, data),
+  removeMember: (projectId, userId) => api.delete(`/project-management/projects/${projectId}/members/${userId}`),
+  createTask: (projectId, data) => api.post(`/project-management/projects/${projectId}/tasks`, data),
+  updateTask: (projectId, taskId, data) => api.patch(`/project-management/projects/${projectId}/tasks/${taskId}`, data),
+  createAnnouncement: (projectId, data) => api.post(`/project-management/projects/${projectId}/announcements`, data),
 };
 export const financeWorkspaceManagementApi = {
   financeFunctions: () => api.get("/finance-workspace/management/functions"),
@@ -431,6 +476,7 @@ export const financeWorkspaceManagementApi = {
   bookBoardroom: data => api.post("/finance-workspace/management/boardroom-bookings",data),
 };
 export const financeWorkspaceApi = {
+  myWork: () => api.get("/finance-workspace/my-work"),
   financeTaskControl: ticketId => api.get(`/finance-workspace/tasking/${ticketId}/control`),
   updateFinanceTaskReminder: (ticketId,data) => api.put(`/finance-workspace/tasking/${ticketId}/reminders`,data),
   classifyFinanceCommunication: (ticketId,data) => api.post(`/finance-workspace/tasking/${ticketId}/communications`,data),
@@ -474,16 +520,21 @@ export const financeWorkspaceApi = {
   monthEndPeriod: period => api.get(`/finance-workspace/month-end/${period}`),
   governanceRecords: area => api.get(`/finance-workspace/governance/${area}`),
   peoplePerformanceDashboard: period => api.get("/finance-workspace/people-performance/dashboard",{params:{period}}),
+  activityFeed: (params={}) => api.get("/finance-workspace/activity-feed",{params}),
+  kpiRiskContributingItems: (employeeId,period) => api.get(`/finance-workspace/kpi-risk/${employeeId}/contributing-items`,{params:{period}}),
   financeDuties: params => api.get("/finance-workspace/people-performance/duties",{params}),
   createFinanceDuty: data => api.post("/finance-workspace/people-performance/duties",data),
   updateFinanceDuty: (id,data) => api.put(`/finance-workspace/people-performance/duties/${id}`,data),
-  financeKpis: period => api.get("/finance-workspace/people-performance/kpis",{params:{period}}),
+  financeKpis: (period,ownerUserId) => api.get("/finance-workspace/people-performance/kpis",{params:{period,ownerUserId}}),
   createFinanceKpi: data => api.post("/finance-workspace/people-performance/kpis",data),
   reviewFinanceKpi: (id,data) => api.post(`/finance-workspace/people-performance/kpis/${id}/review`,data),
   teamAdminAction: (userId,data) => api.post(`/finance-workspace/people-performance/team/${userId}/action`,data),
   createAudit: data => api.post("/finance-workspace/governance/audits",data),
   createAuditItem: (id,data) => api.post(`/finance-workspace/governance/audits/${id}/items`,data),
   createFinanceEvidence: data => api.post("/finance-workspace/governance/evidence",data),
+  financeEvidenceConfiguration: () => api.get("/finance-workspace/evidence/configuration"),
+  financeEvidence: (recordType,recordId) => api.get(`/finance-workspace/evidence/${recordType}/${recordId}`),
+  uploadFinanceEvidence: (recordType,recordId,files,classification="confidential") => { const body=new FormData(); (files||[]).forEach(file=>body.append("evidence",file,file.name)); body.append("classification",classification); return api.post(`/finance-workspace/evidence/${recordType}/${recordId}/upload`,body,{headers:{"Content-Type":undefined},transformRequest:[(payload,headers)=>{if(payload instanceof FormData&&headers)delete headers["Content-Type"];return payload}]}); },
   reviewFinanceEvidence: (id,data) => api.post(`/finance-workspace/governance/evidence/${id}/review`,data),
   financeNotificationAction: (id,data) => api.post(`/finance-workspace/governance/notifications/${id}/action`,data),
   createFinanceAccessRequest: data => api.post("/finance-workspace/governance/access",data),
@@ -508,6 +559,15 @@ export const financeWorkspaceApi = {
   convertCorrespondence: (id,data={}) => api.post(`/finance-workspace/correspondence/${id}/convert-to-ticket`,data),
   exportPreview: (params={}) => api.get("/finance-workspace/export-preview",{params}),
   downloadExport: () => api.get("/finance-workspace/export.xlsx?reviewed=true",{responseType:"blob"}),
+  myKpi: (period) => api.get("/finance-workspace/my-kpi",{params:{period}}),
+  kpiScores: (params={}) => api.get("/finance-workspace/kpi-scores",{params}),
+  recalculateKpiScores: (data={}) => api.post("/finance-workspace/kpi-scores/recalculate",data),
+  kpiObjectives: () => api.get("/finance-workspace/kpi-objectives"),
+  createExtensionRequest: data => api.post("/finance-workspace/extensions",data),
+  decideExtension: (id,data) => api.post(`/finance-workspace/extensions/${id}/decision`,data),
+  exemptApproval: (type,id,data) => api.post(`/finance-workspace/approvals/${type}/${id}/exempt`,data),
+  portfolioItems: (portfolio,params={}) => api.get(`/finance-workspace/portfolios/${portfolio}/items`,{params}),
+  reminderStatus: () => api.get("/finance-workspace/reminders/status"),
 };
 
 export default api;
@@ -533,4 +593,29 @@ export const profileMediaApi = {
     return api.post(`/profile-media/users/${userId}/${mediaType}`, data, { });
   },
   remove: (userId, mediaType, reason) => api.delete(`/profile-media/users/${userId}/${mediaType}`, { data: { reason } }),
+};
+export const pulseApi = {
+  logError: (payload) => api.post("/pulse/errors/ingest", payload),
+  listEntries: (filters) => api.get("/pulse/errors", { params: filters }),
+  getEntry: (correlationId) => api.get(`/pulse/errors/${correlationId}`),
+  confirmRootCause: (correlationId, refinement) => api.patch(`/pulse/errors/${correlationId}/root-cause`, refinement),
+  updateResolution: (correlationId, resolution) => api.patch(`/pulse/errors/${correlationId}/resolution`, resolution),
+};
+
+export const itDashboardApi = {
+  getMetrics: (params) => api.get("/it-dashboard/metrics", { params }),
+  getAgentWorkload: (params) => api.get("/it-dashboard/agent-workload", { params }),
+  getAgeingTickets: (params) => api.get("/it-dashboard/ageing-tickets", { params }),
+  getTrends: (params) => api.get("/it-dashboard/trends", { params }),
+  getDrilldown: (params) => api.get("/it-dashboard/drilldown", { params }),
+  getTaskQueue: (params) => api.get("/it-dashboard/task-queue", { params }),
+};
+export const projectReviewApi = {
+  triggerScan: (data) => api.post("/project-review/scan", data),
+  getFindings: (params) => api.get("/project-review/findings", { params }),
+};
+export const dashboardStandardisationApi = {
+  getConformanceReport: () => api.get("/dashboard-standardisation/conformance-report"),
+  validateConformance: (dashboardId) => api.get(`/dashboard-standardisation/conformance/${dashboardId}`),
+  getRedundantWidgets: (dashboardId) => api.get(`/dashboard-standardisation/redundant-widgets/${dashboardId}`),
 };

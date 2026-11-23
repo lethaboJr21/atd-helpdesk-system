@@ -17,10 +17,12 @@ The current frontend build uses `/helpdesk/` as its Vite base and writes generat
 ### Employee experience
 
 - Report incidents and request services through guided entry points.
+- Production operators can use the station-only guest flow to select an IT Network or PDM catalogue issue; it remains staged until a supervisor confirms through a one-time email link and work-ID check.
 - View personal tickets, pending actions, announcements, and company communications.
 - Open ticket previews, attachments, activity, conversations, and full ticket records.
 - Use governed access requests and employee experience workflows.
 - Manage profile media and appearance preferences.
+- Start an employee-initiated IT incident from the dashboard while on a Teams call; the portal does not monitor calls or grant remote access.
 
 ### Helpdesk and operations
 
@@ -33,6 +35,9 @@ The current frontend build uses `/helpdesk/` as its Vite base and writes generat
 ### Administration and governance
 
 - User, role, support-group, permission, access-request, settings, and administrative control routes.
+- Read-only workspace and role layout preview for administrators; it does not impersonate employees or access their devices.
+- ATD Pulse frontend error capture with a live-refreshing error snapshot viewer.
+- Workflow Observatory with synthetic stage traces, explicitly tagged Pulse fault simulations, and in-session service-health observations.
 - JWT authentication, password hashing, CORS allowlisting, Helmet security headers, rate limiting, and governed API access.
 - PostgreSQL migrations, controlled archive behaviour, audit-oriented workflows, and protected production deployment procedures.
 
@@ -92,7 +97,7 @@ Browser
         -> Socket.IO
 ```
 
-Major backend route groups include authentication, terms, employee experience, request routing, assignment acceptance, operational monitoring, access requests, tickets, statistics, logs, notifications, groups, Microsoft integration, users, settings, administrative controls, assets, workspaces, company communications, catalogue, email intake, archives, archive rules, production, knowledge, and profile media.
+Major backend route groups include authentication, line intake, terms, employee experience, request routing, assignment acceptance, operational monitoring, access requests, tickets, statistics, logs, notifications, groups, Microsoft integration, users, settings, administrative controls, assets, workspaces, company communications, catalogue, email intake, archives, archive rules, production, knowledge, and profile media.
 
 ## Repository structure
 
@@ -176,6 +181,18 @@ npm run seed
 ```
 
 Do not run data-changing migrations blindly in production. Business-data migrations require their own review, backup, validation, and rollback plan.
+
+Before enabling `/guest-line-assistance`, review and apply the staged station-ticket migration from the backend directory:
+
+```powershell
+node src/db/runMigration.js 2026-12-02-staged-line-ticket-approval.sql
+```
+
+If Finance reporting warns that `finance_ticket_operations.finance_kpi_id` is missing, review and apply the isolated compatibility migration from the backend directory:
+
+```powershell
+node src/db/runMigration.js 2026-11-20-finance-kpi-link-schema-compatibility.sql
+```
 
 ### Start the backend
 

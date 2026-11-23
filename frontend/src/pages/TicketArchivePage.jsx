@@ -306,7 +306,7 @@ function TicketDrawer({ fsId, onClose }) {
                   ["Support group", ticket.resolved_group_name],
                   ["Department", ticket.resolved_department_name],
                   ["Source", ticket.source_label],
-                  ["Category", [ticket.category, ticket.sub_category, ticket.item_category].filter(Boolean).join(" › ")],
+                  ["Category", [ticket.category, ticket.sub_category, ticket.item_category].filter(Boolean).join(" â€º ")],
                   ["Logged", formatDateTime(ticket.created_at)],
                   ["First response", formatDateTime(ticket.first_responded_at)],
                   ["Resolved", formatDateTime(ticket.resolved_at)],
@@ -578,7 +578,7 @@ export default function TicketArchivePage() {
               value={Number(totals.tickets).toLocaleString("en-ZA")}
               hint={
                 coverage?.oldest
-                  ? `${formatDate(coverage.oldest)} – ${formatDate(coverage.newest)}`
+                  ? `${formatDate(coverage.oldest)} â€“ ${formatDate(coverage.newest)}`
                   : null
               }
             />

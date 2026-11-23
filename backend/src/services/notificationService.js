@@ -1,5 +1,6 @@
 
 const pool = require("../db/pool");
+let notificationSchemaReady = false;
 
 const VALID_MODULES = new Set([
   "admin",
@@ -16,6 +17,24 @@ function normalizeModule(moduleName) {
   return VALID_MODULES.has(normalized)
     ? normalized
     : "system";
+}
+
+async function ensureNotificationColumns() {
+  if (notificationSchemaReady) return;
+
+  await pool.query(`
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS module VARCHAR(50) DEFAULT 'system';
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_type VARCHAR(50);
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_id INTEGER;
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_url TEXT;
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS attachment_count INTEGER DEFAULT 0;
+    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
+    UPDATE notifications
+    SET module = LOWER(COALESCE(module, 'system')),
+        attachment_count = COALESCE(attachment_count, 0);
+  `);
+
+  notificationSchemaReady = true;
 }
 
 function normalizeRecipientIds(recipientUserIds) {
@@ -124,6 +143,8 @@ async function createNotifications({
     return [];
   }
 
+  await ensureNotificationColumns();
+
   const created = [];
 
   for (const userId of recipients) {
@@ -229,6 +250,7 @@ async function createTicketCreatedNotification({ ticket, requesterUserId, attach
 module.exports = {
   normalizeModule,
   normalizeRecipientIds,
+  ensureNotificationColumns,
   createNotifications,
   createAccountApprovalNotifications,
   createTicketAssignmentNotifications,

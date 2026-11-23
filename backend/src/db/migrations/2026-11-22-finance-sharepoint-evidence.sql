@@ -1,0 +1,12 @@
+BEGIN;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS sharepoint_site_id TEXT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS sharepoint_drive_id TEXT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS sharepoint_item_id TEXT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS sharepoint_parent_item_id TEXT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS sharepoint_web_url TEXT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS file_name TEXT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS content_type TEXT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS size_bytes BIGINT;
+ALTER TABLE finance_evidence_register ADD COLUMN IF NOT EXISTS sha256 TEXT;
+CREATE INDEX IF NOT EXISTS ix_finance_evidence_sharepoint_item ON finance_evidence_register(sharepoint_drive_id,sharepoint_item_id) WHERE sharepoint_item_id IS NOT NULL;
+COMMIT;

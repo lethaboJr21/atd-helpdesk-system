@@ -23,8 +23,9 @@ export const REQUEST_MODULES = {
     label: "Report an Incident",
     shortLabel: "Incident",
     description: "Something is broken, unavailable, or working incorrectly.",
-    path: "/incidents/new",
-    catalogPath: null,
+    path: "/incidents/catalogue",
+    catalogPath: "/incidents/catalogue",
+    formPath: "/incidents/new",
     workspace: "IT",
     icon: LifeBuoy,
     tone: "green",
@@ -182,7 +183,7 @@ export const ASSET_REASONS = [
   "Damaged",
 ];
 
-/** Freshservice-aligned impact Ãƒâ€” urgency Ã¢â€ â€™ priority (ITIL style). */
+/** Freshservice-aligned impact Ã— urgency â†’ priority (ITIL style). */
 export function suggestPriority(impact, urgency) {
   const rank = { Low: 1, Medium: 2, High: 3 };
   const score = (rank[impact] || 2) + (rank[urgency] || 2);
@@ -213,7 +214,7 @@ export function formPathForType(ticketType, options = {}) {
   if (options.assetItem) params.set("assetItem", options.assetItem);
   if (options.category) params.set("category", options.category);
   if (options.subCategory) params.set("subCategory", options.subCategory);
-  if (options.itemCategory) params.set("itemCategory", options.itemCategory);
+  
 
   const query = params.toString();
   const base =

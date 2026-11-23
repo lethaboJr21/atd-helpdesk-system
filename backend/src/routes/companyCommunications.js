@@ -41,7 +41,7 @@ function isAllowedTestRecipient(email, requestUser) {
 
 
 async function canAccessCampaign(request,campaignId){
- if (["admin","superadmin"].includes(request.user.role)) return true;
+ if (["admin","superadmin","manager"].includes(request.user.role)) return true;
  const result=await pool.query(`SELECT 1 FROM company_communication_deliveries WHERE campaign_id=$1 AND user_id=$2 LIMIT 1`,[campaignId,request.user.id]);
  return result.rowCount>0;
 }
@@ -53,7 +53,7 @@ router.post("/:id/comments",async(request,response)=>{try{if(!(await canAccessCa
 router.patch("/:id/comments/:commentId",async(request,response)=>{try{const body=cleanText(request.body.body,4000);if(!body)return response.status(400).json({error:"Comment text is required."});const result=await pool.query(`UPDATE company_communication_comments SET body=$1,updated_at=NOW() WHERE id=$2 AND campaign_id=$3 AND author_user_id=$4 AND is_hidden=FALSE RETURNING *`,[body,request.params.commentId,request.params.id,request.user.id]);if(!result.rows[0])return response.status(404).json({error:"Editable comment not found."});return response.json(result.rows[0]);}catch(error){return response.status(500).json({error:"Failed to edit announcement comment."});}});
 router.patch("/:id/comments/:commentId/hide",allowRoles("admin","superadmin"),async(request,response)=>{try{const result=await pool.query(`UPDATE company_communication_comments SET is_hidden=TRUE,hidden_by=$1,hidden_at=NOW(),updated_at=NOW() WHERE id=$2 AND campaign_id=$3 RETURNING *`,[request.user.id,request.params.commentId,request.params.id]);if(!result.rows[0])return response.status(404).json({error:"Comment not found."});await writeAudit(request,"company_communication_comment_hidden",{campaignId:Number(request.params.id),commentId:Number(request.params.commentId)});return response.json(result.rows[0]);}catch(error){return response.status(500).json({error:"Failed to moderate announcement comment."});}});
 
-router.use(allowRoles("admin", "superadmin"));
+router.use(allowRoles("admin", "superadmin", "manager"));
 
 function serializeCampaign(row) {
   if (!row) return null;

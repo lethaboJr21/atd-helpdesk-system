@@ -1,0 +1,21 @@
+BEGIN;
+WITH ranked AS (
+ SELECT id,ROW_NUMBER() OVER(PARTITION BY workspace_id,catalogue_type,category,COALESCE(sub_category,'') ORDER BY is_active DESC,archived_at NULLS FIRST,id) rn
+ FROM workspace_catalogue_items WHERE is_other=TRUE OR LOWER(TRIM(item_name))='other'
+)
+UPDATE workspace_catalogue_items i SET item_name='Other',is_other=TRUE,is_active=(r.rn=1),archived_at=CASE WHEN r.rn=1 THEN NULL ELSE COALESCE(i.archived_at,NOW()) END,updated_at=NOW()
+FROM ranked r WHERE i.id=r.id;
+CREATE UNIQUE INDEX IF NOT EXISTS workspace_catalogue_one_other_per_branch_idx
+ ON workspace_catalogue_items(workspace_id,catalogue_type,category,COALESCE(sub_category,''))
+ WHERE is_other=TRUE AND archived_at IS NULL;
+WITH branches AS (
+ SELECT DISTINCT workspace_id,catalogue_type,category,sub_category FROM workspace_catalogue_items
+ WHERE archived_at IS NULL AND is_active=TRUE AND category IS NOT NULL AND TRIM(category)<>''
+), missing AS (
+ SELECT b.* FROM branches b WHERE NOT EXISTS(
+  SELECT 1 FROM workspace_catalogue_items i WHERE i.workspace_id=b.workspace_id AND i.catalogue_type=b.catalogue_type AND i.category=b.category
+   AND COALESCE(i.sub_category,'')=COALESCE(b.sub_category,'') AND i.is_other=TRUE AND i.archived_at IS NULL)
+)
+INSERT INTO workspace_catalogue_items(workspace_id,catalogue_type,category,sub_category,item_name,default_priority,priority_locked,summary_locked,is_other,is_active,display_order,visibility,required_fields,optional_fields)
+SELECT workspace_id,catalogue_type,category,sub_category,'Other','Medium',FALSE,FALSE,TRUE,TRUE,999,'{"employee":true,"operations":true,"plant":true,"workspace":true}'::jsonb,'[]'::jsonb,'[]'::jsonb FROM missing;
+COMMIT;

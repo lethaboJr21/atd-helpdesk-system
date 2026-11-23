@@ -1,4 +1,6 @@
 const pool = require("../db/pool");
+const crossWorkspaceAccess = require("../services/crossWorkspaceAccess");
+const { normaliseWorkspaceCode } = require("../services/workspaceCodeRegistry");
 const FINANCE_DEPARTMENTS = new Set(["finance", "finance department"]);
 const CONFIDENTIALITY = ["Internal","Finance Restricted","Confidential","CFO Restricted","Boardroom Restricted","Payment Restricted","Employee Financial Information","Supplier Banking Information"];
 const normalize = value => String(value || "").trim().toLowerCase();
@@ -44,10 +46,54 @@ async function resolve(req) {
   return {source:override?"temporary_override":"department_position_responsibility",accessLevel,jobTitle:row.job_title,officeCode:row.office_code,financeFunction:row.finance_function,managerUserId:row.manager_user_id,reportingScope:scope,allowedOffices:jsonArray(override?row.override_offices:row.allowed_offices),allowedFunctions:jsonArray(override?row.override_functions:row.allowed_functions),maxConfidentiality:override?row.override_confidentiality:row.max_confidentiality,overrideExpiresAt:row.override_expires_at||null};
 }
 async function requireEntry(req,res,next){try{req.financeAccess=await resolve(req);await audit(req,"allowed","FINANCE_ACCESS_ALLOWED",req.financeAccess);next();}catch(error){await audit(req,"denied",error.code||"FINANCE_ACCESS_DENIED",{},{});res.status(error.status||403).json({code:error.code||"FINANCE_ACCESS_DENIED",error:error.message||"Finance Workspace access is not currently assigned to this account."});}}
-function requireManagerScope(req,res,next){if(!["manager","workspace_manager","security_admin"].includes(req.financeAccess?.accessLevel))return res.status(403).json({code:"FINANCE_MANAGER_SCOPE_REQUIRED",error:"Finance management authority is required."});next();}
+async function requireManagerScope(req,res,next){if(["manager","workspace_manager","security_admin"].includes(req.financeAccess?.accessLevel))return next();try{const d=await pool.query(`SELECT id FROM finance_delegated_authority WHERE delegate_user_id=$1::bigint AND scope IN ('all_actions','journal_approval') AND revoked_at IS NULL AND expires_at>NOW() LIMIT 1`,[req.user?.id]);if(d.rowCount)return next();}catch(error){if(!["42P01","42703"].includes(error.code))console.warn("Delegated authority check failed:",error.message);}return res.status(403).json({code:"FINANCE_MANAGER_SCOPE_REQUIRED",error:"Finance management authority is required."});}
 function requireSecurityAdmin(req,res,next){if(req.financeAccess?.accessLevel!=="security_admin")return res.status(403).json({code:"FINANCE_SECURITY_ADMIN_REQUIRED",error:"Finance Security Administrator authority is required."});next();}
+function requireHodScope(req,res,next){if(!["director","executive"].includes(req.financeAccess?.accessLevel)&&req.user?.role!=="superadmin")return res.status(403).json({code:"HOD_SCOPE_REQUIRED",error:"Head of Department authority is required."});next();}
 function confidentialityAllowed(context,level){const maximum=CONFIDENTIALITY.indexOf(context.maxConfidentiality||"Internal");const requested=CONFIDENTIALITY.indexOf(level||"Internal");return requested>=0&&maximum>=requested;}
 function ticketScope(req,start=1){const c=req.financeAccess;if(["workspace_manager","security_admin","auditor"].includes(c.accessLevel)){const clauses=[],params=[];if(c.allowedOffices.length){params.push(c.allowedOffices);clauses.push(`COALESCE(fo.office_code,'')=ANY($${start+params.length-1}::text[])`);}if(c.allowedFunctions.length){params.push(c.allowedFunctions);clauses.push(`COALESCE(fo.finance_function,'')=ANY($${start+params.length-1}::text[])`);}return {sql:clauses.length?`(${clauses.join(" OR ")})`:"TRUE",params};}const ids=[Number(req.user.id),...(c.reportingScope||[])];return {sql:`t.assigned_to_user_id=ANY($${start}::bigint[])`,params:[ids]};}
-async function requireTicketAccess(req,res,next){try{const scope=ticketScope(req,2);const result=await pool.query(`SELECT t.id,COALESCE(fo.confidentiality_level,'Internal') confidentiality_level FROM tickets t LEFT JOIN finance_ticket_operations fo ON fo.ticket_id=t.id WHERE t.id=$1 AND LOWER(COALESCE(t.workspace,'')) LIKE '%finance%' AND ${scope.sql}`,[req.params.ticketId,...scope.params]);if(!result.rowCount||!confidentialityAllowed(req.financeAccess,result.rows[0].confidentiality_level))return res.status(403).json({code:"FINANCE_TICKET_SCOPE_DENIED",error:"This Finance record is outside the authorised scope."});next();}catch(error){next(error);}}
+async function requireTicketAccess(req,res,next){try{const scope=ticketScope(req,2);const result=await pool.query(`SELECT t.id,COALESCE(fo.confidentiality_level,'Internal') confidentiality_level FROM tickets t LEFT JOIN finance_ticket_operations fo ON fo.ticket_id=t.id WHERE t.id=$1 AND t.workspace='FIN' AND ${scope.sql}`,[req.params.ticketId,...scope.params]);if(!result.rowCount||!confidentialityAllowed(req.financeAccess,result.rows[0].confidentiality_level))return res.status(403).json({code:"FINANCE_TICKET_SCOPE_DENIED",error:"This Finance record is outside the authorised scope."});next();}catch(error){next(error);}}
 async function accessContext(req,res){res.json({allowed:true,source:req.financeAccess.source,accessLevel:req.financeAccess.accessLevel,officeCode:req.financeAccess.officeCode,financeFunction:req.financeAccess.financeFunction,reportingScopeCount:req.financeAccess.reportingScope.length,maxConfidentiality:req.financeAccess.maxConfidentiality,overrideExpiresAt:req.financeAccess.overrideExpiresAt});}
-module.exports={requireEntry,requireManagerScope,requireSecurityAdmin,requireTicketAccess,ticketScope,confidentialityAllowed,accessContext,audit};
+
+function resolveUserWorkspace(req) {
+  if (req.user?.role === "superadmin" || req.user?.role === "system_administrator") return null;
+  if (req.financeAccess || FINANCE_DEPARTMENTS.has(normalize(req.user?.department))) return "FIN";
+  return normaliseWorkspaceCode(req.user?.department) || "IT";
+}
+
+async function requireCrossWorkspaceTicketAccess(req,res,next) {
+  try {
+    const ticketId = req.params.ticketId || req.params.id;
+    if (!ticketId) return next();
+
+    const result = await pool.query(`SELECT workspace FROM tickets WHERE id=$1`, [ticketId]);
+    if (!result.rowCount) return res.status(404).json({code:"TICKET_NOT_FOUND",error:"Ticket not found."});
+
+    const targetWorkspace = result.rows[0].workspace;
+    const userWorkspace = resolveUserWorkspace(req);
+
+    if (!userWorkspace || userWorkspace === targetWorkspace) return next();
+
+    const exceptionCheck = await crossWorkspaceAccess.checkException(req.user.id, targetWorkspace);
+    if (!exceptionCheck.allowed) {
+      await audit(req, "denied", exceptionCheck.reason, {}, { ticketId, targetWorkspace, userWorkspace });
+      return res.status(403).json({
+        code: exceptionCheck.reason,
+        error: "Cross-workspace access is not authorised for this resource."
+      });
+    }
+
+    await crossWorkspaceAccess.logAccess(
+      req.user.id, userWorkspace, targetWorkspace,
+      "ticket", Number(ticketId), exceptionCheck.exception?.id, exceptionCheck.reason
+    );
+    req.crossWorkspaceException = exceptionCheck.exception;
+    next();
+  } catch(error) {
+    if (error.code === "AUDIT_LOG_FAILURE") {
+      return res.status(403).json({code:"AUDIT_LOG_FAILURE",error:"Access denied due to audit logging failure."});
+    }
+    next(error);
+  }
+}
+
+module.exports={requireEntry,requireManagerScope,requireSecurityAdmin,requireHodScope,requireTicketAccess,requireCrossWorkspaceTicketAccess,ticketScope,confidentialityAllowed,accessContext,audit,resolveUserWorkspace,resolve};

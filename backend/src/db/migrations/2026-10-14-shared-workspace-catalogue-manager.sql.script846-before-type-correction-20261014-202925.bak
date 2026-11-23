@@ -1,0 +1,80 @@
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS workspace_templates (
+  id BIGSERIAL PRIMARY KEY,
+  code VARCHAR(80) NOT NULL UNIQUE,
+  name VARCHAR(160) NOT NULL,
+  source_workspace_id BIGINT REFERENCES service_workspaces(id) ON DELETE SET NULL,
+  description TEXT,
+  capabilities JSONB NOT NULL DEFAULT '{}'::jsonb,
+  catalogue_defaults JSONB NOT NULL DEFAULT '{}'::jsonb,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE service_workspaces ADD COLUMN IF NOT EXISTS template_id BIGINT REFERENCES workspace_templates(id) ON DELETE SET NULL;
+ALTER TABLE service_workspaces ADD COLUMN IF NOT EXISTS department_name VARCHAR(180);
+
+CREATE TABLE IF NOT EXISTS workspace_catalogue_items (
+  id BIGSERIAL PRIMARY KEY,
+  workspace_id BIGINT NOT NULL REFERENCES service_workspaces(id) ON DELETE CASCADE,
+  catalogue_type VARCHAR(30) NOT NULL CHECK (catalogue_type IN ('incident','service_request')),
+  category VARCHAR(160) NOT NULL,
+  sub_category VARCHAR(180),
+  item_name VARCHAR(200) NOT NULL,
+  user_description TEXT,
+  internal_guidance TEXT,
+  icon_key VARCHAR(80),
+  colour_key VARCHAR(40),
+  default_priority VARCHAR(20) NOT NULL DEFAULT 'Medium' CHECK (default_priority IN ('Low','Medium','High','Critical')),
+  priority_locked BOOLEAN NOT NULL DEFAULT FALSE,
+  summary_locked BOOLEAN NOT NULL DEFAULT FALSE,
+  default_summary TEXT,
+  description_template TEXT,
+  default_impact VARCHAR(20),
+  default_urgency VARCHAR(20),
+  sla_policy_key VARCHAR(120),
+  default_group_id BIGINT REFERENCES support_groups(id) ON DELETE SET NULL,
+  default_assignee_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  required_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+  optional_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+  visibility JSONB NOT NULL DEFAULT '{"employee":true,"operations":true,"plant":false,"workspace":true}'::jsonb,
+  display_order INTEGER NOT NULL DEFAULT 0,
+  is_other BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  archived_at TIMESTAMPTZ,
+  created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  updated_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (workspace_id,catalogue_type,category,sub_category,item_name)
+);
+
+CREATE TABLE IF NOT EXISTS workspace_catalogue_item_history (
+  id BIGSERIAL PRIMARY KEY,
+  item_id BIGINT REFERENCES workspace_catalogue_items(id) ON DELETE SET NULL,
+  workspace_id BIGINT REFERENCES service_workspaces(id) ON DELETE CASCADE,
+  catalogue_type VARCHAR(30),
+  action VARCHAR(40) NOT NULL,
+  reason TEXT,
+  old_value JSONB,
+  new_value JSONB,
+  actor_user_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS catalogue_item_id BIGINT REFERENCES workspace_catalogue_items(id) ON DELETE SET NULL;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS catalogue_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE tickets ADD COLUMN IF NOT EXISTS catalogue_other_route BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS workspace_catalogue_lookup_idx ON workspace_catalogue_items(workspace_id,catalogue_type,is_active,category,sub_category,display_order);
+CREATE INDEX IF NOT EXISTS workspace_catalogue_history_idx ON workspace_catalogue_item_history(item_id,created_at DESC);
+
+INSERT INTO workspace_templates(code,name,description,capabilities,catalogue_defaults)
+VALUES('IT_DEFAULT','IT Workspace Template','Reusable default for departmental workspaces. Configuration is copied; tickets, users, conversations, attachments and credentials are never copied.','{"ticketQueue":true,"listView":true,"kanbanView":true,"assignment":true,"delegation":true,"sla":true,"notifications":true,"reporting":true,"reviewedExcelExport":true}'::jsonb,'{"incident":true,"serviceRequest":true,"otherRequired":true}'::jsonb)
+ON CONFLICT(code) DO UPDATE SET name=EXCLUDED.name,description=EXCLUDED.description,capabilities=EXCLUDED.capabilities,catalogue_defaults=EXCLUDED.catalogue_defaults,updated_at=NOW();
+
+COMMIT;

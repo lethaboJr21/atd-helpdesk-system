@@ -63,11 +63,11 @@ async function seed() {
       `, [a.name, a.icon, a.status, a.score])
     }
 
-    console.log('✅  Seed complete')
+    console.log('âœ…  Seed complete')
     console.log('   Admin login: admin@atdalliance.co.za / Admin@ATD2024!')
-    console.log('   ⚠️   Change this password immediately after first login!')
+    console.log('   âš ï¸   Change this password immediately after first login!')
   } catch (err) {
-    console.error('❌  Seed failed:', err.message)
+    console.error('âŒ  Seed failed:', err.message)
     process.exit(1)
   } finally {
     client.release()

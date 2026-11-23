@@ -15,6 +15,8 @@ import { io } from "socket.io-client";
 
 import ProductionChart from "../components/ProductionChart";
 import ProductionForm from "../components/ProductionForm";
+import CompanyAnnouncements from "../components/dashboard/CompanyAnnouncements";
+import LineAssistancePanel from "../components/pdm/LineAssistancePanel";
 import {
   logsApi,
   notificationApi,
@@ -487,7 +489,7 @@ export default function ProductionDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-6 text-slate-900">
+    <div className="min-h-screen bg-slate-100 p-4 text-slate-900 sm:p-6">
       <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div>
           <div className="flex items-center gap-2 text-sm text-slate-500">
@@ -630,6 +632,11 @@ export default function ProductionDashboard() {
             Download CSV
           </button>
         </div>
+      </div>
+
+      <div className="mb-6 grid gap-4 2xl:grid-cols-[1.4fr_1fr]">
+        <LineAssistancePanel />
+        <CompanyAnnouncements />
       </div>
 
       <div className="mb-6 rounded-2xl border border-blue-200 bg-blue-50 p-5 shadow-sm">

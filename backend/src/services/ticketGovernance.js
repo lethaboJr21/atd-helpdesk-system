@@ -67,10 +67,11 @@ async function governedAssignment(database,groupId,assigneeId){
         groupName:group.name
     };
 }
-function requesterPriority(user,value)
+function requesterPriority(user,value,options={})
         {
             const p=clean(value,30)||'Medium';
-            if(!OPS.has(clean(user?.role,30).toLowerCase())&&['High','Critical'].includes(p))
+            const permittedPdmHigh=options.allowHigh===true&&p==='High';
+            if(!OPS.has(clean(user?.role,30).toLowerCase())&&['High','Critical'].includes(p)&&!permittedPdmHigh)
                 throw Object.assign(new Error('Requesters may create only Low or Medium priority tickets.'),
                     {status:403,code:'REQUESTER_PRIORITY_RESTRICTED'});
                     return p;

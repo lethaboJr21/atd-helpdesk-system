@@ -282,6 +282,7 @@ export default function TicketWorkspace() {
     user?.role === "user" ||
     employeeView ||
     location.pathname.startsWith("/employee");
+  const selectedWorkspace = searchParams.get("workspace") || "IT";
 
   // Two years of imported Freshservice history shares the list with live work, so
   // staff land on unresolved tickets and reach the rest through search / Closed.
@@ -411,7 +412,7 @@ export default function TicketWorkspace() {
         return;
       }
 
-      const response = await ticketsApi.getAll({ workspace: "IT", // WORKSPACE_ISOLATION_983
+      const response = await ticketsApi.getAll({ workspace: selectedWorkspace,
         page,
         per_page: pageSize,
         ...(selectedStatuses.length
@@ -443,7 +444,7 @@ export default function TicketWorkspace() {
     } finally {
       setLoading(false);
     }
-  }, [advancedFilters, appliedQuery, assignmentScope, employeeExperience, page, pageSize, selectedPriority, selectedStatuses]);
+  }, [advancedFilters, appliedQuery, assignmentScope, employeeExperience, page, pageSize, selectedPriority, selectedStatuses, selectedWorkspace]);
 
   useEffect(() => {
     fetchTickets();
@@ -569,7 +570,9 @@ export default function TicketWorkspace() {
     setPage(1);
     setSelectedTicket(null);
     setFilterPanelOpen(false);
-    setSearchParams(new URLSearchParams(), { replace: true });
+    const resetParams = new URLSearchParams();
+    if (selectedWorkspace !== "IT") resetParams.set("workspace", selectedWorkspace);
+    setSearchParams(resetParams, { replace: true });
   };
 
   const changePage = (nextPage) => {
@@ -737,10 +740,22 @@ export default function TicketWorkspace() {
     navigate("/login", { replace: true });
   };
 
-  const pageTitle = employeeExperience ? "My Tickets" : "Ticket Workspace";
+  const workspaceLabel =
+    {
+      IT: "IT",
+      HR: "HR",
+      FIN: "Finance",
+      PDM: "Process Engineering (PDM)",
+      FAC: "Facilities",
+    }[selectedWorkspace.toUpperCase()] || selectedWorkspace;
+  const pageTitle = employeeExperience
+    ? "My Tickets"
+    : selectedWorkspace.toUpperCase() === "IT"
+      ? "Ticket Workspace"
+      : `${workspaceLabel} Ticket Workspace`;
   const pageSubtitle = employeeExperience
     ? "Track support requests created for your account."
-    : "Review, prioritise, assign and manage all authorised tickets.";
+    : `Review, prioritise, assign and manage authorised ${workspaceLabel} tickets.`;
 
   return (
     <OperationsShell
@@ -822,7 +837,7 @@ export default function TicketWorkspace() {
         )}
       >
         <div ref={listScrollRef} onScroll={(event)=>sessionStorage.setItem("atd-ticket-workspace-scroll",String(event.currentTarget.scrollTop))} className="scroll-slim min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-auto" data-portal-wheel-scroll="ticket-workspace"><StickyListShell label={employeeExperience ? "My tickets" : "Ticket workspace results"} className="xl:min-h-0">
-          {!employeeExperience ? <AdvancedTicketFilterBar value={advancedFilters} onChange={setAdvancedFilters} onApply={()=>{const presets={unresolved:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},mine:{assignment:"mine",statuses:[...UNRESOLVED_STATUSES]},"my-groups":{assignment:"my-groups",statuses:[...UNRESOLVED_STATUSES]},today:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},overdue:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-seven":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-overdue":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},high:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},all:{assignment:"all",statuses:[]}};const preset=presets[advancedFilters.view]||presets.unresolved;setAssignmentScope(preset.assignment);setDraftAssignmentScope(preset.assignment);setSelectedStatuses(preset.statuses);setDraftStatuses(preset.statuses);const next=new URLSearchParams(searchParams);next.delete("status");if(preset.assignment==="all")next.delete("assignment");else next.set("assignment",preset.assignment);if(preset.statuses.length)next.set("statuses",preset.statuses.join(","));else next.delete("statuses");Object.entries(advancedFilters).forEach(([key,value])=>value?next.set(key,value):next.delete(key));setQuery(advancedFilters.search||"");setAppliedQuery((advancedFilters.search||"").trim());next.delete("page");setPage(1);setSearchParams(next,{replace:true});}} onReset={()=>{const reset={view:"unresolved",search:"",requester:"",department:"",source:"",type:"",priority:"",sort:"created_at",direction:"desc"};setAdvancedFilters(reset);setQuery("");setAppliedQuery("");setPage(1);setSearchParams(new URLSearchParams(),{replace:true});}} /> : null}
+          {!employeeExperience ? <AdvancedTicketFilterBar value={advancedFilters} onChange={setAdvancedFilters} onApply={()=>{const presets={unresolved:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},mine:{assignment:"mine",statuses:[...UNRESOLVED_STATUSES]},"my-groups":{assignment:"my-groups",statuses:[...UNRESOLVED_STATUSES]},today:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},overdue:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-seven":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},"aged-overdue":{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},high:{assignment:"all",statuses:[...UNRESOLVED_STATUSES]},all:{assignment:"all",statuses:[]}};const preset=presets[advancedFilters.view]||presets.unresolved;setAssignmentScope(preset.assignment);setDraftAssignmentScope(preset.assignment);setSelectedStatuses(preset.statuses);setDraftStatuses(preset.statuses);const next=new URLSearchParams(searchParams);next.delete("status");if(preset.assignment==="all")next.delete("assignment");else next.set("assignment",preset.assignment);if(preset.statuses.length)next.set("statuses",preset.statuses.join(","));else next.delete("statuses");Object.entries(advancedFilters).forEach(([key,value])=>value?next.set(key,value):next.delete(key));setQuery(advancedFilters.search||"");setAppliedQuery((advancedFilters.search||"").trim());next.delete("page");setPage(1);setSearchParams(next,{replace:true});}} onReset={()=>{const reset={view:"unresolved",search:"",requester:"",department:"",source:"",type:"",priority:"",sort:"created_at",direction:"desc"};setAdvancedFilters(reset);setQuery("");setAppliedQuery("");setPage(1);const next=new URLSearchParams();if(selectedWorkspace!=="IT")next.set("workspace",selectedWorkspace);setSearchParams(next,{replace:true});}} /> : null}
           <div className="shrink-0 border-b border-slate-200 px-3 py-2.5 xl:px-4 xl:py-3">
             <div className="relative min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />

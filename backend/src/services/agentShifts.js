@@ -2,9 +2,9 @@
  * Temporary hardcoded shift roster (per Resego, 2026-08-05) — replace with a
  * proper shift admin screen later.
  *
- * - Pearl: fixed morning shift 07:00–16:00 (interim arrangement).
+ * - Pearl: fixed morning shift 07:00â€“16:00 (interim arrangement).
  * - Clinton and Zintle alternate weekly between the afternoon shift
- *   (14:00–22:00) and the night shift (22:00–06:00). Week of Monday
+ *   (14:00â€“22:00) and the night shift (22:00â€“06:00). Week of Monday
  *   2026-08-03: Clinton afternoon, Zintle night; they swap every week.
  *
  * Times are server-local (SAST). Agents not on this roster are treated as

@@ -10,7 +10,7 @@ import {
   Home,
   KeyRound,
   Laptop,
-  Loader2,
+
   Monitor,
   PackagePlus,
   RotateCcw,
@@ -25,6 +25,7 @@ import {
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import OperationsShell from "../components/OperationsShell";
+import CatalogueSkeletonGrid from "../components/catalogue/CatalogueSkeletonGrid";
 import {
   REQUEST_MODULES,
   formPathForType,
@@ -34,6 +35,7 @@ import { catalogApi , workspaceCatalogueApi,
   workspacesApi
 } from "../services/api";
 import { useAuth } from "../hooks/useAuth";
+import { resolveCatalogueCategory } from "../utils/resolveCatalogueCategory";
 
 const BRAND = "#172b57";
 
@@ -78,6 +80,13 @@ function iconForItem(item) {
   return hit?.icon || ShoppingCart;
 }
 
+function isNetworkServiceItem(item) {
+  const category = String(
+    item.categoryName || item.ticketCategory || item.category || ""
+  ).trim().toLowerCase();
+  return category.startsWith("network");
+}
+
 /**
  * Freshservice-style catalog portal.
  * Used separately for Service Catalog and Asset Requests  -  never mixed.
@@ -85,12 +94,13 @@ function iconForItem(item) {
 export default function RequestCatalogPage({ moduleKey }) {
   const navigate = useNavigate();
   const { user, employeeView } = useAuth();
+  const isProductionLineUser = String(user?.department || "").trim().toLowerCase() === "production";
   const canManageCatalogue = !employeeView && ["admin", "superadmin"].includes(user?.role);
   const [searchParams] = useSearchParams();
   const module = REQUEST_MODULES[moduleKey];
   const beneficiary = searchParams.get("beneficiary") === "other" ? "other" : "self";
 
-  const initialCategory = searchParams.get("category") || "popular";
+  const initialCategory = isProductionLineUser ? "all" : searchParams.get("category") || "popular";
   const [categoryId, setCategoryId] = useState(initialCategory);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -110,9 +120,13 @@ export default function RequestCatalogPage({ moduleKey }) {
       : "/";
 
   useEffect(() => {
+    if (isProductionLineUser) {
+      setCategoryId("all");
+      return;
+    }
     const fromQuery = searchParams.get("category");
     if (fromQuery) setCategoryId(fromQuery);
-  }, [searchParams]);
+  }, [searchParams, isProductionLineUser]);
 
   // MANAGED_REQUEST_WORKSPACE_LOADER
   useEffect(() => {
@@ -143,13 +157,14 @@ export default function RequestCatalogPage({ moduleKey }) {
     loadManagedWorkspace();
     return () => { cancelled = true; };
   }, []);
+  const [allItemsLoaded, setAllItemsLoaded] = useState(false);
+  const [loadingFull, setLoadingFull] = useState(false);
   useEffect(() => {
     let cancelled = false;
     const loadCatalogue = async () => {
-      // SCRIPT_1007_V2: server-side managed endpoint resolves the canonical IT workspace; do not gate employee catalogue loading on browser workspace enumeration.
       try {
         const managedResponse = await Promise.race([
-          catalogApi.getManagedItServices(),
+          catalogApi.getManagedItServices({ popular: "true" }),
           new Promise((_, reject) => setTimeout(() => reject(new Error("The managed service catalogue request timed out after 12 seconds.")), 12000)),
         ]).then((response) => ({
           ...response,
@@ -171,6 +186,7 @@ export default function RequestCatalogPage({ moduleKey }) {
           const itemName = String(item.item_name || item.name || "").trim().toLowerCase();
           const isOther = item.is_other === true || itemName === "other";
           if (isOther) return false;
+          if (isProductionLineUser && !isNetworkServiceItem(item)) return false;
           if (moduleKey !== "asset") return true;
           const category = String(item.category || item.categoryName || item.ticketCategory || "").trim().toLowerCase();
           const subCategory = String(item.sub_category || item.subCategory || item.ticketSubCategory || "").trim().toLowerCase();
@@ -198,11 +214,50 @@ export default function RequestCatalogPage({ moduleKey }) {
           setCategories([]);
           setError(error?.response?.data?.error || error?.message || "The managed request catalogue could not be loaded.");
         }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     };
     loadCatalogue();
     return () => { cancelled = true; };
-  }, [moduleKey, managedWorkspace?.id, workspaceLoadError])
+  }, [moduleKey, managedWorkspace?.id, workspaceLoadError, isProductionLineUser])
+
+  const loadAllItems = async () => {
+    if (allItemsLoaded || loadingFull) return;
+    setLoadingFull(true);
+    try {
+      const managedResponse = await catalogApi.getManagedItServices();
+      const managedItems = (managedResponse.data?.items || [])
+        .filter((item) => {
+          const itemName = String(item.name || item.item_name || "").trim().toLowerCase();
+          const isOther = item.is_other === true || itemName === "other";
+          if (isOther) return false;
+          if (isProductionLineUser && !isNetworkServiceItem(item)) return false;
+          if (moduleKey !== "asset") return true;
+          const category = String(item.categoryName || item.category || item.ticketCategory || "").trim().toLowerCase();
+          const subCategory = String(item.subCategory || item.sub_category || item.ticketSubCategory || "").trim().toLowerCase();
+          return category === "hardware /equipment" && subCategory.startsWith("asset ");
+        })
+        .map((item) => ({
+          ...item,
+          id: item.managedCatalogueItemId || item.id,
+          managedCatalogueItemId: item.managedCatalogueItemId || item.id,
+          category: item.categoryName || item.category || item.ticketCategory || "Other",
+          sub_category: item.subCategory || item.sub_category || item.ticketSubCategory || null,
+          item_name: item.name || item.item_name || "Other",
+          user_description: item.description || item.user_description || "",
+          default_priority: item.priority || item.default_priority || "Medium",
+        }));
+      setItems(managedItems);
+      const categoryNames = [...new Set(managedItems.map((item) => item.categoryName).filter(Boolean))];
+      setCategories(categoryNames.map((name) => ({ id: name, name })));
+      setAllItemsLoaded(true);
+    } catch (error) {
+      setError(error?.response?.data?.error || error?.message || "The full catalogue could not be loaded.");
+    } finally {
+      setLoadingFull(false);
+    }
+  };
 
   const navCategories = useMemo(() => {
     const dynamic = categories.map((category) => ({
@@ -229,10 +284,11 @@ export default function RequestCatalogPage({ moduleKey }) {
         categoryId === "all"
           ? true
           : categoryId === "popular"
-            ? true
+            ? item.popular === true || item.popular === "true" || item.popular === 1
             : item.categoryId === categoryId;
 
       if (!matchesCategory) return false;
+      if (isProductionLineUser && !isNetworkServiceItem(item)) return false;
       if (!needle) return true;
 
       return (
@@ -241,9 +297,9 @@ export default function RequestCatalogPage({ moduleKey }) {
         (item.categoryName || "").toLowerCase().includes(needle)
       );
     });
-  }, [items, categoryId, query]);
+  }, [items, categoryId, query, isProductionLineUser]);
 
-  const openItem = (item) => {
+  const openItem = async (item) => {
     if (moduleKey === "asset") {
       navigate(
         formPathForType("asset_request", {
@@ -265,6 +321,8 @@ export default function RequestCatalogPage({ moduleKey }) {
       return;
     }
 
+    const resolved = await resolveCatalogueCategory(item.managedCatalogueItemId || item.id, "service_request");
+
     navigate(
       formPathForType("service_request", {
         managedCatalogueItemId: item.managedCatalogueItemId || item.id,
@@ -278,6 +336,9 @@ export default function RequestCatalogPage({ moduleKey }) {
           catalogItem: item,
           beneficiary,
           prefillTitle: item.name,
+          resolvedCategory: resolved.ticketCategory,
+          resolvedSubCategory: resolved.ticketSubCategory,
+          categoryLocked: resolved.isLocked,
         },
       }
     );
@@ -370,7 +431,10 @@ export default function RequestCatalogPage({ moduleKey }) {
                     <button
                       key={category.id}
                       type="button"
-                      onClick={() => setCategoryId(category.id)}
+                      onClick={() => {
+                        setCategoryId(category.id);
+                        if (category.id === "all") loadAllItems();
+                      }}
                       className={
                         active
                           ? "flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-bold text-[#172b57] bg-[#172b57]/[0.08]"
@@ -416,12 +480,14 @@ export default function RequestCatalogPage({ moduleKey }) {
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   {loading
-                    ? "Loading catalog..."
-                    : categoryId === "popular"
-                      ? moduleKey === "asset"
-                        ? "Most requested equipment"
-                        : "Top requested service items"
-                      : `${filtered.length} item${filtered.length === 1 ? "" : "s"}`}
+                    ? "Loading popular items..."
+                    : loadingFull
+                      ? "Loading all items..."
+                      : categoryId === "popular"
+                        ? moduleKey === "asset"
+                          ? "Most requested equipment"
+                          : "Top requested service items"
+                        : `${filtered.length} item${filtered.length === 1 ? "" : "s"}`}
                 </p>
               </div>
 
@@ -431,10 +497,9 @@ export default function RequestCatalogPage({ moduleKey }) {
                     <p className="font-bold">{error}</p>
                   </div>
                 ) : loading ? (
-                  <div className="flex items-center justify-center gap-3 py-20 text-slate-500">
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                    Loading catalog...
-                  </div>
+                  <CatalogueSkeletonGrid count={9} />
+                ) : loadingFull ? (
+                  <CatalogueSkeletonGrid count={9} />
                 ) : filtered.length > 0 ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                     {canManageCatalogue ? (

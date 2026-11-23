@@ -1581,3 +1581,174 @@ Priority: starts immediately after Batch A acceptance/freeze.
 - Do not run npm audit fix --force during deployment. Production npm install reported 12 vulnerabilities (1 moderate, 10 high, 1 critical); remediate separately with regression testing.
 - Do not run historical DB migrations blindly. Current deployment/recovery intentionally skipped migrations.
 - Keep rollback backups and update trackers after every implementation/validation/deployment batch.
+
+## 2026-11-14 Master Project Plan and DevOps Continuity Update
+
+### Current delivery structure
+The remaining ATD Helpdesk programme is consolidated into two primary implementation batches, followed by Process Engineering.
+
+### BATCH A - Canonical Helpdesk Workflow + Catalogue Platform
+Canonical reference: Helpdesk Ticket workflow.pdf.
+
+#### New Request / beneficiary
+- New Request begins with Ticket for Myself / For Someone Else.
+- For Someone Else must search and select a concrete active employee before request-type/module navigation; ticket requester_id is beneficiary and created_by_user_id is authenticated creator.
+- Request types remain Incident, Service Request, Asset Request, Change and Project according to governed module configuration.
+
+#### Incident
+- Quick Incident choices for common issues plus Browse All Incidents.
+- Browse All: Category -> Sub-category -> exact Item.
+- Managed item coherently governs managedCatalogueItemId, Category, Sub-category, Item, Short Summary and locked Priority where configured.
+- Other is a genuine blank editable IT Incident: no managed item; blank classification/title until employee selects/enters values.
+- Major Incident remains Critical with governed SLA; duplicate detection, attachments, Support Team/proposed Agent, Accept and Action and seven-day reopen remain preserved.
+
+#### Service / Asset performance
+- Quick Service cards render immediately; Browse All loads managed catalogue progressively.
+- One authenticated managed service-request fetch is cached for a short session/TTL and shared by Service and Asset.
+- Asset remains authoritative Hardware /Equipment plus Asset* subset.
+- Catalogue Manager mutations invalidate/bump the client/server catalogue version/cache.
+
+#### Catalogue Manager
+- Simplify to Service-Catalog-style workspace-first administration: Workspace, Catalogue Type, Search, category navigation, managed item cards, Add Item.
+- Existing items for selected department/workspace appear immediately.
+- Add/Edit/Duplicate/Reorder/Activate/Deactivate/Archive functions remain governed.
+- Workspace managers see only authorised workspace(s).
+- Superadmin sees All Workspaces and switches across all configured service_workspaces; backend authorization is authoritative.
+- Manager and employee catalogues consume the same workspace_catalogue_items records.
+
+#### Isolation
+- IT Ticket Workspace remains explicitly IT scoped.
+- Finance Workspace remains Finance scoped.
+- Finance employees can use ordinary Helpdesk, but Finance records never enter the IT operational queue merely because the employee has both access paths.
+
+### BATCH B - Finance Employee/Manager Workspace + Review/KPI Governance
+
+#### Finance Employee Dashboard / My Finance Work
+- Dedicated Finance Employee Dashboard showing personal governed work only.
+- Summary: Open, Due Today, Due This Week, Overdue, Returned, Awaiting Review, Evidence Required, Due in 24h, 50%+ elapsed.
+- Work lanes: Finance Tickets/Tasks, Journals, Reconciliations, Month-End, Finance Email/Correspondence actions.
+- Per-item tracker: reference, title, Finance Function/portfolio, status, priority, assigned date/baseline, original/effective due date, elapsed-time percentage/progress bar, evidence state, review state, KPI objective/period.
+- Quick actions: Open, Add Evidence, Add Progress/Task Note, Clarification, Submit for Review, View Reviewer Feedback, Correct Returned Work.
+- Generic ticket detail authorization must allow a directly assigned employee with active Finance responsibility/scope to open and contribute to assigned Finance tickets without exposing unrelated Finance work.
+
+#### Finance reminders
+- Assignment email once when responsibility/delegation becomes effective.
+- 50%-elapsed reminder once when at least half of the effective assignment-to-due window is consumed and item remains incomplete.
+- 24-hour reminder once when <=24 hours remain and item remains incomplete.
+- Existing overdue and review-overdue reminders stay separate.
+- Reminder events are server-side and idempotent per work item/current assignee/event; browser does not need to be open.
+- Approved extension changes effective due date used by progress bar, reminders and timeliness KPI; original due date remains auditable.
+- Reassignment transfers reminder ownership and generates a new assignment event for new assignee.
+- Completed/Closed/Resolved/Accepted/Cancelled work receives no due reminders.
+- Very short windows suppress duplicate reminder bursts; prefer most urgent unsent event when thresholds collide.
+- Email uses existing Microsoft Graph/system-email infrastructure and records send success/failure.
+
+#### Finance Review Centre
+- Unified review queue for Finance tickets/tasks, Journals, Reconciliations and Month-End.
+- Views: Awaiting My Review, Review Overdue, Returned, Approved, All.
+- Actions: Approve, Return, Reject, Extension decision, governed No Review Required exemption.
+- No-review exemption requires reason, approver and timestamp.
+- Reviewer routing is real-user/configuration driven, not hard-coded display-name logic.
+- Separation of duties, evidence requirements and full audit history remain mandatory.
+
+#### Finance KPI
+- Per accountable work item: Timeliness 50% + Quality 50%.
+- Approved dependency/extension adjusts effective due date; late without approved adjustment loses timeliness component.
+- Reviewer delay affects reviewer KPI independently from preparer KPI.
+- Periods: Monthly, Quarterly, Biannual, Annual, Custom.
+- Objective model: Month-End Close 30%; Reconciliation Control 25%; Cut-off Accuracy 15%; Financial Reporting Quality 20%; Internal Finance Service Delivery 10%.
+- Employee KPI dashboard shows supporting work; manager dashboard shows team workload, overdue/review queues, extensions, evidence, quality, timeliness and KPI risk with drill-down.
+
+### Project-wide planned capabilities after Finance
+- Process Engineering/PDM workspace becomes the next active development area after Finance deployment.
+- Continue shared workspace patterns: governed access, workspace catalogue, personal work dashboard, manager dashboard, evidence, approval/review, KPI/task tracking where applicable.
+- Preserve company communications/announcements, Knowledge Base, Assets, Access Requests, archive/retention, audit, notifications and system email controls already present in platform.
+
+### GitHub / clone continuation
+- GitHub continuation repository: https://github.com/lethaboJr21/atd-helpdesk-system.git
+- Development branch checkpoint: feature/launch-communications-queue-compatibility.
+- Continuation prompt: docs/ATD_HELPDESK_NEW_CONVERSATION_CONTINUATION_PROMPT.md.
+- Fresh conversation/device workflow: clone repository; checkout active branch; read continuation prompt + ATD_HELPDESK_DEVELOPMENT_TRACKER.md; run read-only preflight before modifying source.
+- Never commit .env, credentials/private keys, node_modules, production uploads/evidence, DB dumps, deployment backups or transient reports unless deliberately promoted as sanitized documentation.
+
+### DevOps operating procedure
+- Every script must locate/validate the actual ATD Helpdesk repository root before acting. Never assume current PowerShell directory is the project.
+- Source-changing batches: timestamped backup, exact source-shape preflight, narrow patch, backend syntax/frontend build validation, automatic rollback, report under reports/, tracker continuity update.
+- Use ASCII-safe PowerShell. Remote shell: upload LF-only .sh, bash -n, then explicit bash execution; do not rely on /bin/sh for pipefail.
+- Production: preserve backend/.env, uploads and database. Do not blindly run historical migrations. Do not run npm audit fix --force during deployment.
+- Production runtime: /etc/systemd/system/pm2-atdadmin.service; user atdadmin; PM2_HOME=/home/atdadmin/.pm2; backend /var/www/atd-helpdesk/backend/src/server.js; listener 127.0.0.1:3001.
+- Deployment permission invariant: backend/src must remain traversable/readable by atdadmin. Previous private drwx------ atddev:atddev caused MODULE_NOT_FOUND, PM2 crash loop and Apache 503. Normalize/preserve production group/traversal before PM2 restart.
+- Avoid unprivileged cp -a where root/www-data metadata cannot be preserved. Verify runtime process, port 3001 and protected API 401/403 after restart.
+- Update tracker files after every meaningful implementation/validation/deployment with root cause/context, changed files, validation results, rollback/deployment status, outstanding issues and exact next step.
+
+### Current immediate next steps
+1. Re-run Finance B1 implementation from the actual atd-helpdesk repository root. The prior attempt from C:\Users\jeffrey.motepe\IdeaProjects\ATDTraceability failed before modifications because backend/src/routes/tickets.js was absent there.
+2. Finance B1: assigned-ticket generic access + Finance Employee Dashboard/My Finance Work.
+3. Finance B1C: server-side assignment/50%-elapsed/24h reminder implementation using existing mail infrastructure and reminder history.
+4. Continue Batch A canonical Helpdesk workflow/catalogue changes in parallel, then joint IT/Finance isolation regression.
+5. Implement Finance Review Centre and KPI/dashboard layers, controlled deployment/report closeout, then Process Engineering.
+## 2026-11-17 - Scripts 1039/1040 + catalogue-first ticketing checkpoint
+
+### Script 1039 - combined ticket/catalogue discovery + Finance My Work attempt
+- Scope recorded existing user-added ticket/catalogue files as the current baseline while attempting a Finance My Work expansion.
+- Baseline backend syntax checks passed for Finance Workspace, Finance task reminders, and tickets; baseline frontend production build passed.
+- Intended Finance My Work expansion: add Journals, Reconciliations, and Finance Email Actions to the employee My Work endpoint/dashboard, with schema-safe undefined-table/column fallbacks and dedicated UI lanes.
+- Script 1039 DID NOT complete that Finance implementation. The exact run stopped at `MY_WORK_NORMALIZATION_ANCHOR_MISSING`, rolled back the Finance source files, and ended `IMPLEMENTATION_STATUS=FAILED_RESTORED`.
+- Therefore do not mark Finance Email Actions / new Finance My Work lanes as delivered by Script 1039. Treat them as pending/requires current-source implementation.
+- Important baseline discovered by the later exact-source scan: current `/finance-workspace/my-work` already includes Finance tickets, Month-End tasks, Journals, and Reconciliations in `allItems`, plus an `emailAttention` collection for unacknowledged Finance correspondence.
+
+### Script 1040 - Finance My Work exact-source preflight
+- Read-only source preflight only. `PREFLIGHT_STATUS=PASS`.
+- Confirmed `/finance-workspace/my-work` exists in `backend/src/routes/financeWorkspace.js`.
+- Confirmed current My Work aggregation includes: Finance tickets, Month-End close tasks, Finance Journals, and Finance Reconciliations.
+- Confirmed normalized risk/timing flags: overdue, due within 24 hours, due today, due this week, 50%+ elapsed, returned, awaiting review, and evidence required.
+- Confirmed separate Finance correspondence `emailAttention` query for assigned, unacknowledged, non-closed email correspondence.
+- Confirmed current `FinanceEmployeeDashboard` groups tickets, Month-End, Journals, and Reconciliations and includes an Email Attention section and KPI section.
+- No source, database, build, Git, or deployment change was performed by Script 1040.
+
+### Catalogue/ticketing work completed after the 1039 baseline
+- Managed Incident Catalogue established as the classification authority for Report an Incident.
+- Normal Incident entry is catalogue-first; direct Incident form access without governed managed identity is guarded.
+- Legacy Incident Common Issues and editable Incident Category/Sub-category/Item controls were removed from the governed managed Incident flow.
+- Major Incident controls remain separate and preserved.
+- Incident catalogue reuses the existing Service Request icon library, preferring governed `icon_key` and semantic shared fallbacks.
+- Production Service Catalogue outage was traced to missing `workspace_catalogue_items.is_popular`; targeted production migration was applied and the popular managed Service Request query returned seven records.
+- Exactly-one-Other rule: every active Incident and Service Request catalogue branch must have exactly one governed `Other` item. Application-side `/workspace-catalogue/ensure-other` governance and a migration are being prepared; database migration execution remains pending until preflight/verification.
+- Workspace Catalogue Manager is the authority for adding/removing catalogue items. Ticket forms consume managed catalogue identity rather than inventing classification locally.
+
+### Next controlled work
+1. Validate current exactly-one-Other migration against live local catalogue rows without writes.
+2. Execute locally only after missing/duplicate/canonical Other rows are known and rollback is available.
+3. Run Incident + Service Request catalogue regression, including Other, Major Incident, shared icons, For Myself, For Someone Else, attachment, review, and ticket POST 201.
+4. Reconcile Finance My Work current source before any new Finance extension, because Script 1039's attempted patch rolled back and Script 1040 shows the source has already evolved beyond Script 1039's original anchor.
+5. Build once after functional validation, then generate curated pre-GitLab evidence. Never use broad `git add .` or `git add -A` in the current dirty repository.
+### Tracker/context update safety rule - 2026-11-17
+- Future Helpdesk tracker/context scripts must update only canonical live files.
+- Never modify historical snapshots under `Folders for scripts backups`, `Batch backups`, `backups`, `reports`, release staging folders, `node_modules`, `dist`, `build`, or `.git`.
+- Repository task-tracker updates must preserve existing tracker filenames, sections, and history.
+
+## Script 1036 fixed-v2 checkpoint - 20261121_232854
+- Finance-native ticket route /finance-workspace/tickets/:id implemented.
+- Non-FIN tickets are redirected to generic /tickets/:id.
+- Finance-owned links now use the Finance-native detail route.
+- Shared ticket APIs remain authoritative for conversation/history; Finance task-control uses financeWorkspaceApi.
+- Final mojibake repair executed only when suspicious score decreased.
+- Backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1036-fixed-v2-20261121_232854
+
+
+
+## Script 1037 fixed-v2 checkpoint - 20261121_234652
+- Removed final FinanceWorkspace mojibake using exact semantic context replacements from the forensic report.
+- Verified Finance Workspace mojibake score zero and Finance-native ticket detail route/FIN guard.
+- Backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1037-fixed-v2-20261121_234652
+
+
+
+## Emergency recovery 1054 - 20261123_094547
+- Employee Incident and Service Request submission aligned with governed support-group queue; no mandatory employee-selected agent.
+- Operations users retain proposed-assignee workflow.
+- Restored workspaceQueryService as required backend dependency in production package.
+- Targeted TicketCreate mojibake repaired in change workflow strings.
+- Production deployment remains changed-files-only with server backup before overwrite.
+- Local backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1054-20261123_094547
+

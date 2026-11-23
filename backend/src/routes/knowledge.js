@@ -35,15 +35,15 @@ const ENTITIES = {
   gt: ">",
   quot: '"',
   apos: "'",
-  rsquo: "’",
-  lsquo: "‘",
-  rdquo: "”",
-  ldquo: "“",
-  ndash: "–",
+  rsquo: "â€™",
+  lsquo: "â€˜",
+  rdquo: "â€",
+  ldquo: "–",
+  ndash: "â€“",
   mdash: "—",
   hellip: "…",
   middot: "·",
-  bull: "•",
+  bull: "â€¢",
 };
 
 /** Freshservice description_text still carries HTML entities and stray tags. */
@@ -68,7 +68,7 @@ function summarise(text, limit = 180) {
   const clean = decodeEntities(text)
     .replace(/\s+/g, " ")
     // Drop leading punctuation/colons left behind by stripped markup.
-    .replace(/^[\s:;,.\-–—•·]+/, "")
+    .replace(/^[\s:;,.\-â€“—â€¢·]+/, "")
     .trim();
   if (!clean) return "";
   if (clean.length <= limit) return clean;

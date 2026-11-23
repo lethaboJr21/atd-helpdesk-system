@@ -17,6 +17,7 @@ import SystemEmailControls from "../components/SystemEmailControls";
 import CompanyCommunicationsPanel from "../components/CompanyCommunicationsPanel";
 import AdminUniversalHeader from "../components/admin/AdminUniversalHeader";
 import ArchiveRulesPanel from "../components/admin/ArchiveRulesPanel";
+import { useAuth } from "../hooks/useAuth";
 
 const ITEMS = [
   {
@@ -83,10 +84,20 @@ const ITEMS = [
     path: "/admin/health",
     available: true,
   },
+  {
+    icon: Activity,
+    title: "Workflow Observatory",
+    description:
+      "Trace request stages, inject tagged test failures, and review observed service downtime.",
+    path: "/admin/workflow-observability",
+    available: true,
+    roles: ["admin", "superadmin"],
+  },
 ];
 
 export default function AdminSettings() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [panel, setPanel] = useState(null);
 
   const activateItem = (item) => {
@@ -122,7 +133,7 @@ export default function AdminSettings() {
         </p>
 
         <section className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {ITEMS.map((item) => {
+          {ITEMS.filter((item) => !item.roles || item.roles.includes(user?.role)).map((item) => {
             const Icon = item.icon;
             return (
               <button

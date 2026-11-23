@@ -2,29 +2,12 @@ const router = require("express").Router();
 
 const pool = require("../db/pool");
 const auth = require("../middleware/auth");
-const { normalizeModule } = require("../services/notificationService");
+const {
+  ensureNotificationColumns,
+  normalizeModule,
+} = require("../services/notificationService");
 
 router.use(auth);
-
-let schemaReady = false;
-
-async function ensureNotificationColumns() {
-  if (schemaReady) return;
-
-  await pool.query(`
-    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS module VARCHAR(50) DEFAULT 'system';
-    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_type VARCHAR(50);
-    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_id INTEGER;
-    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS target_url TEXT;
-    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS attachment_count INTEGER DEFAULT 0;
-    ALTER TABLE notifications ADD COLUMN IF NOT EXISTS read_at TIMESTAMP;
-    UPDATE notifications
-    SET module = LOWER(COALESCE(module, 'system')),
-        attachment_count = COALESCE(attachment_count, 0);
-  `);
-
-  schemaReady = true;
-}
 
 function visibility(startIndex = 1) {
   return `(

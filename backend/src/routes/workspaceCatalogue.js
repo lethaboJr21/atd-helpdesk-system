@@ -121,6 +121,10 @@ where.push(`i.workspace_id=$${values.length}`);}
 if(req.query.catalogueType){
   values.push(clean(req.query.catalogueType,30));
   where.push(`i.catalogue_type=$${values.length}`);}
+const requestedEntry=clean(req.query.entry,20).toLowerCase();
+const validEntry=["employee","operations","plant","workspace"].includes(requestedEntry)?requestedEntry:"workspace";
+values.push(validEntry);
+where.push(`i.visibility->>$${values.length}='true'`);
   const r=await pool.query(`
     SELECT i.*,
     w.name workspace_name,
@@ -156,7 +160,55 @@ router.get("/items/:id/history",manage,async(req,res,next)=>{
     ORDER BY h.created_at DESC`,
     [req.params.id]);
     res.json({history:r.rows});}
-    catch(e){next(e);}});
+  catch(e){next(e);}});
+
+router.get("/items/:id/tickets",manage,async(req,res,next)=>{
+  try{
+    const itemId=Number(req.params.id);
+    if(!Number.isInteger(itemId)||itemId<=0)return res.status(400).json({error:"A valid catalogue item id is required."});
+    const page=Math.max(1,Number(req.query.page)||1);
+    let limit=Number(req.query.limit);
+    if(!Number.isFinite(limit)||limit<1||limit>50)limit=50;
+    const name=clean(req.query.name,200);
+    const item=await pool.query(`SELECT workspace_id FROM workspace_catalogue_items WHERE id=$1`,[itemId]);
+    if(!item.rowCount)return res.status(404).json({error:"Catalogue item not found."});
+    const offset=(page-1)*limit;
+    let rows,total;
+    if(name){
+      const like=`%${name.replace(/\\/g,"\\\\").replace(/[%_]/g,"\\$&")}%`;
+      const workspaceCode=await pool.query(`SELECT UPPER(w.code) code FROM service_workspaces w WHERE w.id=$1`,[item.rows[0].workspace_id]);
+      const code=workspaceCode.rows[0]?.code||null;
+      total=await pool.query(`SELECT COUNT(*)::int total FROM tickets WHERE workspace=$1 AND catalogue_item_name ILIKE $2`,[code,like]);
+      rows=await pool.query(`SELECT id,ticket_ref,title,status,priority,workspace,created_at,catalogue_item_id,catalogue_item_name FROM tickets WHERE workspace=$1 AND catalogue_item_name ILIKE $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4`,[code,like,limit,offset]);
+    }else{
+      total=await pool.query(`SELECT COUNT(*)::int total FROM tickets WHERE catalogue_item_id=$1`,[itemId]);
+      rows=await pool.query(`SELECT id,ticket_ref,title,status,priority,workspace,created_at,catalogue_item_id,catalogue_item_name FROM tickets WHERE catalogue_item_id=$1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`,[itemId,limit,offset]);
+    }
+    res.json({tickets:rows.rows,total:total.rows[0].total,page,limit});
+  }
+  catch(e){next(e);}
+});
+
+router.delete("/items/:id",manage,async(req,res,next)=>{
+  const db=await pool.connect();
+  try{
+    await db.query("BEGIN");
+    const before=await db.query(`SELECT * FROM workspace_catalogue_items WHERE id=$1 FOR UPDATE`,[req.params.id]);
+    if(!before.rowCount){await db.query("ROLLBACK");return res.status(404).json({error:"Catalogue item not found."});}
+    const refs=await db.query(`SELECT COUNT(*)::int total FROM tickets WHERE catalogue_item_id=$1`,[req.params.id]);
+    const referencedBy=refs.rows[0].total;
+    if(referencedBy>0){
+      await db.query("ROLLBACK");
+      return res.status(409).json({error:`This catalogue item is referenced by ${referencedBy} tickets. Archive it instead.`,referencedBy});
+    }
+    await history(db,before.rows[0],"deleted",clean(req.body?.reason),before.rows[0],null,req.user.id);
+    await db.query(`DELETE FROM workspace_catalogue_items WHERE id=$1`,[req.params.id]);
+    await db.query("COMMIT");
+    res.status(204).send();
+  }
+  catch(e){await db.query("ROLLBACK").catch(()=>{});next(e);}
+  finally{db.release();}
+});
 
 router.post("/items",manage,async(req,res,next)=>{
   const db=await pool.connect();
@@ -213,95 +265,28 @@ router.post(
   manage,
   async (req, res, next) => {
     try {
-      const workspaceId =
-        validWorkspaceId(req.body.workspaceId);
-
-      const catalogueType =
-        clean(req.body.catalogueType, 30);
-
-      const category =
-        clean(req.body.category, 160);
-
-      const subCategory =
-        clean(req.body.subCategory, 180) || null;
-
-      if (
-        !workspaceId ||
-        !validTypes.has(catalogueType) ||
-        !category
-      ) {
-        return res.status(400).json({
-          error:
-            "Workspace, catalogue type and category are required.",
-          code: !workspaceId
-            ? "INVALID_WORKSPACE_ID"
-            : "CATALOGUE_FIELDS_REQUIRED",
-        });
+      const workspaceId = validWorkspaceId(req.body.workspaceId);
+      const catalogueType = clean(req.body.catalogueType, 30);
+      if (!workspaceId || !validTypes.has(catalogueType)) {
+        return res.status(400).json({ error: "Workspace and catalogue type are required.", code: !workspaceId ? "INVALID_WORKSPACE_ID" : "CATALOGUE_FIELDS_REQUIRED" });
       }
-
-      const result = await pool.query(
-        `
-          INSERT INTO workspace_catalogue_items(
-            workspace_id,
-            catalogue_type,
-            category,
-            sub_category,
-            item_name,
-            default_priority,
-            priority_locked,
-            summary_locked,
-            is_other,
-            is_active,
-            created_by,
-            updated_by
-          )
-          VALUES(
-            $1,
-            $2,
-            $3,
-            $4,
-            'Other',
-            'Medium',
-            FALSE,
-            FALSE,
-            TRUE,
-            TRUE,
-            $5,
-            $5
-          )
-          ON CONFLICT(
-            workspace_id,
-            catalogue_type,
-            category,
-            sub_category,
-            item_name
-          )
-          DO UPDATE SET
-            is_other = TRUE,
-            is_active = TRUE,
-            archived_at = NULL,
-            priority_locked = FALSE,
-            summary_locked = FALSE,
-            updated_by = EXCLUDED.updated_by,
-            updated_at = NOW()
-          RETURNING *
-        `,
-        [
-          workspaceId,
-          catalogueType,
-          category,
-          subCategory,
-          req.user.id,
-        ]
-      );
-
-      return res.json(result.rows[0]);
-    } catch (error) {
-      return next(error);
-    }
+      // SINGLE_CATALOGUE_OTHER_GOVERNANCE: one Other record for the whole catalogue.
+      const result = await pool.query(`
+        INSERT INTO workspace_catalogue_items(
+          workspace_id,catalogue_type,category,sub_category,item_name,
+          default_priority,priority_locked,summary_locked,is_other,is_active,
+          display_order,created_by,updated_by
+        ) VALUES($1,$2,'Other',NULL,'Other','Medium',FALSE,FALSE,TRUE,TRUE,999,$3,$3)
+        ON CONFLICT(workspace_id,catalogue_type,category,sub_category,item_name)
+        DO UPDATE SET is_other=TRUE,is_active=TRUE,archived_at=NULL,priority_locked=FALSE,summary_locked=FALSE,updated_by=EXCLUDED.updated_by,updated_at=NOW()
+        RETURNING *`,[workspaceId,catalogueType,req.user.id]);
+      const ensured=result.rows[0];
+      await pool.query(`UPDATE workspace_catalogue_items SET is_active=FALSE,archived_at=COALESCE(archived_at,NOW()),updated_at=NOW()
+        WHERE workspace_id=$1 AND catalogue_type=$2 AND is_other=TRUE AND archived_at IS NULL AND id<>$3`,[workspaceId,catalogueType,ensured.id]);
+      return res.json(ensured);
+    } catch (error) { return next(error); }
   }
 );
-
 router.get("/request-options",async(req,res,next)=>{try{
   const requestedId=String(req.query.workspaceId || "").trim();
   const requestedWorkspace=clean(req.query.workspace || req.query.workspaceCode || req.query.workspaceName,160);
@@ -316,7 +301,9 @@ router.get("/request-options",async(req,res,next)=>{try{
     workspaceId=found?.id||null;
   }
   if(!workspaceId)return res.status(400).json({code:"WORKSPACE_CATALOGUE_WORKSPACE_NOT_FOUND",error:"The request workspace could not be resolved to an active managed workspace."});
-  const r=await pool.query(`SELECT id,workspace_id,catalogue_type,category,sub_category,item_name,user_description,icon_key,colour_key,default_priority,priority_locked,summary_locked,default_summary,description_template,default_impact,default_urgency,sla_policy_key,default_group_id,required_fields,optional_fields,visibility,is_other,display_order FROM workspace_catalogue_items WHERE workspace_id=$1 AND catalogue_type=$2 AND is_active=TRUE AND archived_at IS NULL ORDER BY category,sub_category NULLS FIRST,display_order,item_name`,[workspaceId,type]);
+  const requestedEntry=clean(req.query.entry,20).toLowerCase();
+  const validEntry=["employee","operations","plant","workspace"].includes(requestedEntry)?requestedEntry:"workspace";
+  const r=await pool.query(`SELECT id,workspace_id,catalogue_type,category,sub_category,item_name,user_description,icon_key,colour_key,default_priority,priority_locked,summary_locked,default_summary,description_template,default_impact,default_urgency,sla_policy_key,default_group_id,required_fields,optional_fields,visibility,is_other,display_order FROM workspace_catalogue_items WHERE workspace_id=$1 AND catalogue_type=$2 AND is_active=TRUE AND archived_at IS NULL AND visibility->>$3='true' ORDER BY category,sub_category NULLS FIRST,display_order,item_name`,[workspaceId,type,validEntry]);
   res.json({workspaceId,items:r.rows});
 }catch(e){next(e);}});
 module.exports = router;

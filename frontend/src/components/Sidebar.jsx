@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ExternalLink,
   Factory,
+  FolderKanban,
   HardDrive,
   Home,
   KeyRound,
@@ -58,6 +59,18 @@ export default function Sidebar({
 
   const employeeAccount = user?.role === "user";
   const admin = ADMIN_ROLES.has(user?.role);
+  const hrDepartment = ["hr", "human resources"].includes(
+    String(user?.department || "").trim().toLowerCase()
+  );
+  const department = String(user?.department || "").trim().toLowerCase();
+  const jobTitle = String(user?.job_title || user?.title || "").trim().toLowerCase();
+  const pdmReporter = (
+    ["pdm", "process engineering", "process engineering (pdm)"].includes(department) &&
+    (jobTitle.includes("process engineer") || jobTitle.includes("manager") || jobTitle.includes("supervisor") || jobTitle.includes("head"))
+  ) || (
+    department === "production" &&
+    (jobTitle.includes("supervisor") || jobTitle.includes("operator") || jobTitle.includes("manager"))
+  );
   const employeeExperience = employeeAccount || employeeView;
 
   const employeeItems = [
@@ -83,7 +96,36 @@ export default function Sidebar({
       label: "Solutions",
       path: "/knowledge",
     },
+    {
+      icon: FolderKanban,
+      label: "Project Workspace",
+      path: "/project-workspace",
+    },
   ];
+
+  if (hrDepartment) {
+    employeeItems.push({
+      icon: UsersRound,
+      label: "HR Workspace",
+      path: "/hr-workspace",
+    });
+  }
+
+  if (pdmReporter) {
+    const proxyQuery = department === "production" && jobTitle.includes("operator")
+      ? "&beneficiary=other&pdmProxy=true"
+      : "";
+    employeeItems.push({
+      icon: Ticket,
+      label: "PDM Line Issue",
+      path: `/incidents/new?workspace=PDM${proxyQuery}`,
+    });
+    employeeItems.push({
+      icon: Factory,
+      label: "Line Assistance",
+      path: "/line-assistance",
+    });
+  }
 
   const operationsItems = [
 
@@ -107,6 +149,11 @@ export default function Sidebar({
       label: "Workspaces",
       path: "/workspaces",
     },
+    {
+      icon: FolderKanban,
+      label: "Project Workspace",
+      path: "/project-workspace",
+    },
       {
         icon: DraftingCompass,
         label: "Process Engineering (PDM)",
@@ -129,6 +176,30 @@ export default function Sidebar({
     },
   ];
 
+  if (pdmReporter) {
+    const proxyQuery = department === "production" && jobTitle.includes("operator")
+      ? "&beneficiary=other&pdmProxy=true"
+      : "";
+    operationsItems.push({
+      icon: Ticket,
+      label: "PDM Line Issue",
+      path: `/incidents/new?workspace=PDM${proxyQuery}`,
+    });
+    operationsItems.push({
+      icon: Factory,
+      label: "Line Assistance",
+      path: "/line-assistance",
+    });
+  }
+
+  if (["admin", "superadmin"].includes(user?.role) || hrDepartment) {
+    operationsItems.push({
+      icon: UsersRound,
+      label: "HR Workspace",
+      path: "/hr-workspace",
+    });
+  }
+
   if (admin) {
     operationsItems.push(
       { section: "Administration" },
@@ -142,6 +213,26 @@ export default function Sidebar({
         icon: Settings,
         label: "Admin Settings",
         path: "/admin",
+      },
+      {
+        icon: ShieldCheck,
+        label: "Workspace & Role Preview",
+        path: "/admin/employee-access",
+      }
+    );
+  }
+
+  if (["admin", "superadmin"].includes(user?.role)) {
+    operationsItems.push(
+      {
+        icon: Zap,
+        label: "Workflow Observatory",
+        path: "/admin/workflow-observability",
+      },
+      {
+        icon: AlertTriangle,
+        label: "Live Error Snapshots",
+        path: "/error-logger",
       }
     );
   }
@@ -167,7 +258,8 @@ export default function Sidebar({
       });
   }
 
-  const agentAllowed = new Set(["Operations Dashboard","Ticket Workspace","Solutions"]);
+  const agentAllowed = new Set(["Operations Dashboard","Ticket Workspace","Solutions","Project Workspace"]);
+  if (hrDepartment) agentAllowed.add("HR Workspace");
   const governedOperationsItems = ["agent","operator"].includes(user?.role) ? operationsItems.filter((item) => item.section || agentAllowed.has(item.label)) : operationsItems;
   const items = employeeExperience
     ? [
@@ -404,7 +496,7 @@ export default function Sidebar({
           const wrapperProps = employeeExperience
             ? {
                 type: "button",
-                onClick: () => navigate("/incidents/new"),
+                onClick: () => navigate("/incidents/catalogue"),
                 onMouseEnter: (event) =>
                   showTooltip(event, "Report an incident"),
                 onMouseLeave: () => setTooltip(null),

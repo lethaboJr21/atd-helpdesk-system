@@ -2,9 +2,7 @@ const router = require("express").Router();
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
 const { getMssqlPool } = require("../db/mssqlPool");
-const {
-  syncBedlinerDailyProduction,
-} = require("../services/syncBedlinerDailyProduction");
+const { runBedlinerSync } = require("../services/productionSyncRunner");
 
 router.use(auth);
 
@@ -49,23 +47,15 @@ router.post(
   "/sync-bedliner-daily",
   allowRoles("superadmin", "admin", "manager"),
   async (_req, res) => {
-    try {
-      const result = await syncBedlinerDailyProduction();
+    const result = await runBedlinerSync({ trigger: "manual" });
 
-      res.json({
-        ok: true,
-        message: "Bedliner daily production sync completed",
-        synced: result.synced,
-      });
-    } catch (err) {
-      console.error("Bedliner daily sync failed:", err);
-
-      res.status(500).json({
-        ok: false,
-        error: "Bedliner daily production sync failed",
-        details: err.message,
-      });
+    if (result.outcome === "skipped") {
+      return res.status(409).json({ ok: false, error: "Bedliner production sync already in progress." });
     }
+    if (result.outcome === "failed") {
+      return res.status(500).json({ ok: false, error: "Bedliner daily production sync failed", errorCode: result.errorCode, retries: result.retriesConsumed });
+    }
+    return res.json({ ok: true, message: "Bedliner daily production sync completed", synced: result.synced });
   }
 );
 

@@ -419,3 +419,89 @@ Workspaces is the reusable departmental framework. IT is the default template, w
 - Restored and verified the agent work-preferences and shared workspace catalogue schema foundations.
 - Recovery validation skips already-present relations, checks the live PM2 process and non-5xx authenticated endpoints, and does not treat historical pre-migration PM2 log entries as fresh failures.
 - Follow-on batch: requester/beneficiary workflow, governed IT assignees, simplified assignee selector, and default IT Helpdesk landing with governed Finance switching.
+
+## 2026-11-17 - Scripts 1039/1040 + catalogue-first ticketing checkpoint
+
+### Script 1039 - combined ticket/catalogue discovery + Finance My Work attempt
+- Scope recorded existing user-added ticket/catalogue files as the current baseline while attempting a Finance My Work expansion.
+- Baseline backend syntax checks passed for Finance Workspace, Finance task reminders, and tickets; baseline frontend production build passed.
+- Intended Finance My Work expansion: add Journals, Reconciliations, and Finance Email Actions to the employee My Work endpoint/dashboard, with schema-safe undefined-table/column fallbacks and dedicated UI lanes.
+- Script 1039 DID NOT complete that Finance implementation. The exact run stopped at `MY_WORK_NORMALIZATION_ANCHOR_MISSING`, rolled back the Finance source files, and ended `IMPLEMENTATION_STATUS=FAILED_RESTORED`.
+- Therefore do not mark Finance Email Actions / new Finance My Work lanes as delivered by Script 1039. Treat them as pending/requires current-source implementation.
+- Important baseline discovered by the later exact-source scan: current `/finance-workspace/my-work` already includes Finance tickets, Month-End tasks, Journals, and Reconciliations in `allItems`, plus an `emailAttention` collection for unacknowledged Finance correspondence.
+
+### Script 1040 - Finance My Work exact-source preflight
+- Read-only source preflight only. `PREFLIGHT_STATUS=PASS`.
+- Confirmed `/finance-workspace/my-work` exists in `backend/src/routes/financeWorkspace.js`.
+- Confirmed current My Work aggregation includes: Finance tickets, Month-End close tasks, Finance Journals, and Finance Reconciliations.
+- Confirmed normalized risk/timing flags: overdue, due within 24 hours, due today, due this week, 50%+ elapsed, returned, awaiting review, and evidence required.
+- Confirmed separate Finance correspondence `emailAttention` query for assigned, unacknowledged, non-closed email correspondence.
+- Confirmed current `FinanceEmployeeDashboard` groups tickets, Month-End, Journals, and Reconciliations and includes an Email Attention section and KPI section.
+- No source, database, build, Git, or deployment change was performed by Script 1040.
+
+### Catalogue/ticketing work completed after the 1039 baseline
+- Managed Incident Catalogue established as the classification authority for Report an Incident.
+- Normal Incident entry is catalogue-first; direct Incident form access without governed managed identity is guarded.
+- Legacy Incident Common Issues and editable Incident Category/Sub-category/Item controls were removed from the governed managed Incident flow.
+- Major Incident controls remain separate and preserved.
+- Incident catalogue reuses the existing Service Request icon library, preferring governed `icon_key` and semantic shared fallbacks.
+- Production Service Catalogue outage was traced to missing `workspace_catalogue_items.is_popular`; targeted production migration was applied and the popular managed Service Request query returned seven records.
+- Exactly-one-Other rule: every active Incident and Service Request catalogue branch must have exactly one governed `Other` item. Application-side `/workspace-catalogue/ensure-other` governance and a migration are being prepared; database migration execution remains pending until preflight/verification.
+- Workspace Catalogue Manager is the authority for adding/removing catalogue items. Ticket forms consume managed catalogue identity rather than inventing classification locally.
+
+### Next controlled work
+1. Validate current exactly-one-Other migration against live local catalogue rows without writes.
+2. Execute locally only after missing/duplicate/canonical Other rows are known and rollback is available.
+3. Run Incident + Service Request catalogue regression, including Other, Major Incident, shared icons, For Myself, For Someone Else, attachment, review, and ticket POST 201.
+4. Reconcile Finance My Work current source before any new Finance extension, because Script 1039's attempted patch rolled back and Script 1040 shows the source has already evolved beyond Script 1039's original anchor.
+5. Build once after functional validation, then generate curated pre-GitLab evidence. Never use broad `git add .` or `git add -A` in the current dirty repository.
+### Tracker/context update safety rule - 2026-11-17
+- Future Helpdesk tracker/context scripts must update only canonical live files.
+- Never modify historical snapshots under `Folders for scripts backups`, `Batch backups`, `backups`, `reports`, release staging folders, `node_modules`, `dist`, `build`, or `.git`.
+- Repository task-tracker updates must preserve existing tracker filenames, sections, and history.
+
+## Script 1034 fixed-v3 checkpoint - 20261121_230947
+- Promoted advanced FinanceTeamDirectory to primary Team Administration when source anchor matched.
+- Conservative mojibake cleanup used code-point mappings; no blind transcoding.
+- Applied 2026-11-20-finance-kpi-link-schema-compatibility.sql through runMigration.js.
+- Preserved Finance versus IT workspace isolation and shared ticket business logic.
+- Finance-native Ticket Detail remains required before deployment if current route remains generic.
+- Backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1034-20261121_230947
+
+
+
+## Script 1036 fixed-v2 checkpoint - 20261121_232854
+- Finance-native ticket route /finance-workspace/tickets/:id implemented.
+- Non-FIN tickets are redirected to generic /tickets/:id.
+- Finance-owned links now use the Finance-native detail route.
+- Shared ticket APIs remain authoritative for conversation/history; Finance task-control uses financeWorkspaceApi.
+- Final mojibake repair executed only when suspicious score decreased.
+- Backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1036-fixed-v2-20261121_232854
+
+
+
+## Script 1037 fixed-v2 checkpoint - 20261121_234652
+- Removed final FinanceWorkspace mojibake using exact semantic context replacements from the forensic report.
+- Verified Finance Workspace mojibake score zero and Finance-native ticket detail route/FIN guard.
+- Backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1037-fixed-v2-20261121_234652
+
+
+
+## Script 1039 checkpoint - 20261122_003923
+- Added real Graph-backed Finance SharePoint evidence service and metadata schema.
+- Added Finance evidence upload/list endpoints and SharePoint links in governance + Finance ticket detail.
+- Finance correspondence now exposes Open Email and Mark as Ticket while preserving idempotent conversion and Finance-native ticket routing.
+- Existing Graph delta mailbox monitor and sender automation architecture preserved.
+- Real site/drive remain environment-configured via FINANCE_SHAREPOINT_SITE_ID / FINANCE_SHAREPOINT_DRIVE_ID.
+- Backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1039-20261122_003923
+
+
+
+## Emergency recovery 1054 - 20261123_094547
+- Employee Incident and Service Request submission aligned with governed support-group queue; no mandatory employee-selected agent.
+- Operations users retain proposed-assignee workflow.
+- Restored workspaceQueryService as required backend dependency in production package.
+- Targeted TicketCreate mojibake repaired in change workflow strings.
+- Production deployment remains changed-files-only with server backup before overwrite.
+- Local backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1054-20261123_094547
+

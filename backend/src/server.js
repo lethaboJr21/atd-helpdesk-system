@@ -11,8 +11,10 @@ const { Server } = require("socket.io");
 const pool = require("./db/pool");
 const auth = require("./middleware/auth");
 const jsonErrorHandler = require("./middleware/jsonErrorHandler");
+const pulse = require("./middleware/atd-pulse-node");
 
 const authRoutes = require("./routes/auth");
+const lineIntakeRoutes = require("./routes/lineIntake");
 const ticketRoutes = require("./routes/tickets");
 const statsRoutes = require("./routes/stats");
 const productionRoutes = require("./routes/production");
@@ -46,9 +48,12 @@ const profileMediaRoutes = require("./routes/profileMedia");
 const archiveRuleRoutes = require("./routes/archiveRules");
 const { startTicketReminderJob } = require("./services/ticketReminders");
 const { startCompanyCommunicationsScheduler } = require("./services/companyCommunications");
+const { startFinanceTaskReminderScheduler } = require("./services/financeTaskReminders");
+const { startScheduledReportScheduler } = require("./services/financeScheduledReportService");
 const { startProductionSyncScheduler } = require("./services/productionSyncScheduler");
 const { EMAIL_PROVIDER, verifyEmailProvider } = require("./services/email");
 const { startEmailTicketIntakeScheduler } = require("./services/emailTicketIntake");
+const { startCrossWorkspacePurgeScheduler } = require("./services/crossWorkspaceAccess");
 
 const app = express();
 const server = http.createServer(app);
@@ -96,6 +101,7 @@ app.use(cors(corsOptions));
 app.options("*", cors(corsOptions));
 app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || "2mb" }));
 app.use(express.urlencoded({ extended: true, limit: process.env.URLENCODED_BODY_LIMIT || "2mb" }));
+app.use(pulse.requestTracker());
 
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -111,9 +117,17 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests. Please try again shortly.", code: "API_RATE_LIMITED" },
 });
+const lineIntakeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: Number(process.env.LINE_INTAKE_RATE_LIMIT || 12),
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many line-intake attempts. Please try again later.", code: "LINE_INTAKE_RATE_LIMITED" },
+});
 
 app.use("/api/auth/login", loginLimiter);
 app.use("/api", apiLimiter);
+app.use("/api/line-intake", lineIntakeLimiter, lineIntakeRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/terms", termsRoutes);
 app.use("/api/employee-experience", employeeExperienceRoutes);
@@ -148,6 +162,13 @@ app.use("/api/production/events", productionEventRoutes);
 
 app.use("/api/knowledge", require("./routes/knowledge"));
 app.use("/api/profile-media", auth, profileMediaRoutes);
+app.use("/api/pulse", require("./routes/pulse"));
+app.use("/api/it-dashboard", require("./routes/itDashboard"));
+app.use("/api/hr-workspace", require("./routes/hrWorkspace"));
+app.use("/api/project-management", require("./routes/projectManagement"));
+app.use("/api/project-review", require("./routes/projectReview"));
+app.use("/api/dashboard-standardisation", require("./routes/dashboardStandardisation"));
+app.use("/api/cross-workspace-access", auth, require("./routes/crossWorkspaceAccess"));
 
 app.get("/api", (_request, response) => response.json({
   ok: true,
@@ -172,9 +193,23 @@ app.get("/api/health", async (_request, response) => {
   });
 });
 
+app.get("/api/pulse-test-error", (request, response, next) => {
+  const err = new Error("Simulated Diagnostic Error: ATD Helpdesk Database Pool Latency Spike");
+  err.status = 500;
+  err.code = "PULSE_DIAGNOSTIC_TEST";
+  next(err);
+});
+
 app.use(jsonErrorHandler);
 app.use((error, request, response, next) => {
   if (response.headersSent) return next(error);
+
+  // Dispatch snapshot to ATD Pulse
+  try {
+    const pulseHubUrl = process.env.PULSE_HUB_URL || "http://127.0.0.1:3099/api/errors/ingest";
+    pulse.dispatchSnapshot(pulseHubUrl, "atd-helpdesk", error, request, error.status >= 500 ? "CRITICAL" : "ERROR");
+  } catch (_e) {}
+
   console.error("Unhandled API error:", {
     method: request.method,
     path: request.originalUrl,
@@ -217,8 +252,14 @@ function startBackgroundJobs() {
   catch (error) { console.error("Production sync scheduler startup failed:", error.message); }
   try { startEmailTicketIntakeScheduler(); }
   catch (error) { console.error("Email-to-ticket scheduler startup failed:", error.message); }
-  try { startCompanyCommunicationsScheduler(); }
+  try { startFinanceTaskReminderScheduler(); }
+catch (error) { console.error("Finance task reminder scheduler startup failed:", error.message); }
+try { startCompanyCommunicationsScheduler(); }
   catch (error) { console.error("Company communications scheduler startup failed:", error.message); }
+  try { startCrossWorkspacePurgeScheduler(); }
+  catch (error) { console.error("Cross-workspace purge scheduler startup failed:", error.message); }
+  try { startScheduledReportScheduler(); }
+  catch (error) { console.error("Scheduled report scheduler startup failed:", error.message); }
 }
 
 server.listen(PORT, "127.0.0.1", async () => {

@@ -79,7 +79,7 @@ const DEFAULT_FIELDS = {
 
 /**
  * Locked single-type create form.
- * Type comes from route / query / state ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â never a tab switcher.
+ * Type comes from route / query / state ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’â€¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â never a tab switcher.
  */
 export default function TicketCreatePage({ lockedType = null }) {
   const navigate = useNavigate();
@@ -126,6 +126,8 @@ export default function TicketCreatePage({ lockedType = null }) {
   const module = moduleForTicketType(ticketType);
   const Icon = catalogue?.icon || module.icon;
   const linkedAsset = location.state?.asset || null;
+  const requestedWorkspace = params.get("workspace") || location.state?.workspace || "";
+  const workspaceTicketContext = location.state?.workspaceTicketContext || null;
 
   const prefillTitle =
     params.get("title") ||
@@ -144,6 +146,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     params.get("subCategory") || location.state?.subCategory || "";
   const prefillItemCategory =
     params.get("itemCategory") || location.state?.itemCategory || "";
+  const prefillDescription = location.state?.prefillDescription || "";
 
   const [groups, setGroups] = useState([]);
   const [agents, setAgents] = useState([]);
@@ -171,9 +174,9 @@ export default function TicketCreatePage({ lockedType = null }) {
   const [form, setForm] = useState({
     requesterId: "",
     title: prefillTitle,
-    description: "",
+    description: prefillDescription,
     priority: cataloguePriority,
-    workspace: module.workspace,
+    workspace: requestedWorkspace || module.workspace,
     assignedGroupId: "",
     assignedToUserId: "",
     // Incident
@@ -187,6 +190,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     businessImpact: "",
     impactedLocations: "",
     customersImpacted: "",
+    pdmSupervisorUnavailableReason: "",
     // Asset
     assetItem: prefillAssetItem,
     quantity: 1,
@@ -214,6 +218,28 @@ export default function TicketCreatePage({ lockedType = null }) {
 
   const update = (field, value) =>
     setForm((current) => ({ ...current, [field]: value }));
+
+  const isPdmWorkspace = ["pdm", "process engineering", "process engineering (pdm)"].includes(
+    String(requestedWorkspace || form.workspace || module.workspace).trim().toLowerCase()
+  );
+  const isItWorkspace = ["it", "it helpdesk", "it service desk", "it service request"].includes(
+    String(requestedWorkspace || form.workspace || module.workspace).trim().toLowerCase()
+  );
+  const isProductionUser = String(user?.department || "").trim().toLowerCase() === "production";
+  const autoRouteTicket = isPdmWorkspace || (isItWorkspace && (employee || isProductionUser));
+  const pdmProxyMode =
+    isPdmWorkspace && requestingForSomeoneElse && params.get("pdmProxy") === "true";
+  const incidentCataloguePath = isPdmWorkspace
+    ? `/incidents/new?workspace=PDM${pdmProxyMode ? "&beneficiary=other&pdmProxy=true" : ""}`
+    : `/incidents/catalogue?beneficiary=${beneficiary}`;
+
+  const pdmSupervisorRequesters = useMemo(
+    () => requesters.filter((item) =>
+      String(item.department || "").trim().toLowerCase() === "production" &&
+      String(item.job_title || "").trim().toLowerCase().includes("supervisor")
+    ),
+    [requesters]
+  );
 
   const addFiles = (incoming) => {
     const notes = [];
@@ -260,7 +286,7 @@ export default function TicketCreatePage({ lockedType = null }) {
   useEffect(() => {
     setForm((current) => ({
       ...current,
-      workspace: module.workspace,
+      workspace: requestedWorkspace || module.workspace,
       assignedToUserId: "",
       title:
         prefillTitle &&
@@ -285,14 +311,9 @@ export default function TicketCreatePage({ lockedType = null }) {
     prefillSubCategory,
     prefillItemCategory,
     module.workspace,
+    requestedWorkspace,
     catalogItem?.name,
   ]);
-
-  useEffect(() => {
-    if (ticketType !== "incident") return;
-    const suggested = form.isMajorIncident ? "Critical" : suggestPriority(form.impact, form.urgency);
-    setForm((current) => current.priority === suggested ? current : { ...current, priority: suggested });
-  }, [form.impact, form.urgency, form.isMajorIncident, ticketType]);
 
   useEffect(() => {
     let cancelled = false;
@@ -612,6 +633,33 @@ export default function TicketCreatePage({ lockedType = null }) {
     catalogItem?.managedCatalogueItemId,
     params,
   ]);
+  useEffect(() => {
+    if (!resolvedWorkspaceCatalogueItem?.priority_locked) return;
+    const defaultPriority = resolvedWorkspaceCatalogueItem.default_priority || "Medium";
+    setForm((current) => current.priority === defaultPriority
+      ? current
+      : { ...current, priority: defaultPriority });
+  }, [
+    resolvedWorkspaceCatalogueItem?.id,
+    resolvedWorkspaceCatalogueItem?.priority_locked,
+    resolvedWorkspaceCatalogueItem?.default_priority,
+  ]);
+  const cataloguePriorityLocked = Boolean(
+    lockCataloguePriority || resolvedWorkspaceCatalogueItem?.priority_locked
+  );
+  useEffect(() => {
+    if (ticketType !== "incident" || cataloguePriorityLocked) return;
+    const suggested = form.isMajorIncident ? "Critical" : suggestPriority(form.impact, form.urgency);
+    setForm((current) => current.priority === suggested ? current : { ...current, priority: suggested });
+  }, [form.impact, form.urgency, form.isMajorIncident, ticketType, cataloguePriorityLocked]);
+  const incidentPriorityOptions = useMemo(
+    () => [...new Set([
+      ...(fields.incident.priority || []),
+      resolvedWorkspaceCatalogueItem?.default_priority,
+      form.priority,
+    ].filter(Boolean))],
+    [fields.incident.priority, resolvedWorkspaceCatalogueItem?.default_priority, form.priority]
+  );
   const incidentSuggestedSummary = useMemo(() => {
     if (ticketType !== "incident") return "";
     return String(
@@ -624,6 +672,18 @@ export default function TicketCreatePage({ lockedType = null }) {
     ).trim();
   }, [ticketType, resolvedWorkspaceCatalogueItem, form.itemCategory, form.subCategory, form.category]);
 
+  // OTHER_CATEGORY_SELECTION: one catalogue-level Other item; requester selects a high-level category.
+  const selectedCatalogueIsOther = Boolean(
+    resolvedWorkspaceCatalogueItem &&
+      (resolvedWorkspaceCatalogueItem.is_other === true ||
+        (!isPdmWorkspace && String(resolvedWorkspaceCatalogueItem.item_name || "").trim().toLowerCase() === "other"))
+  );
+  const otherCategoryOptions = [
+    "Hardware / Equipment",
+    "Application Software",
+    "Network",
+    "Office Applications",
+  ];
   const requestDetails = useMemo(() => {
     const details = {};
 
@@ -644,7 +704,7 @@ export default function TicketCreatePage({ lockedType = null }) {
       null;
 
       details.catalogCategory =
-      resolvedWorkspaceCatalogueItem?.category ||
+      (selectedCatalogueIsOther ? form.category : resolvedWorkspaceCatalogueItem?.category) ||
       catalogItem?.categoryName ||
       form.category ||
       null;
@@ -747,8 +807,23 @@ export default function TicketCreatePage({ lockedType = null }) {
       details.scope = form.projectScope.trim();
       details.deliverables = form.projectDeliverables.trim();
     }
+    if (workspaceTicketContext?.projectId) {
+      details.projectWorkspaceId = String(workspaceTicketContext.projectId);
+      details.projectWorkspaceName = String(workspaceTicketContext.projectName || "");
+    }
+    if (workspaceTicketContext?.source) {
+      details.originatingWorkspace = String(workspaceTicketContext.source);
+    }
+    if (workspaceTicketContext?.station) {
+      details.lineStation = String(workspaceTicketContext.station);
+    }
+    if (pdmProxyMode) {
+      details.pdmSupervisorLoginUnavailable = true;
+      details.pdmSupervisorLoginUnavailableReason = form.pdmSupervisorUnavailableReason.trim();
+    }
     return details;
-  }, [form, ticketType, catalogItem, prefillTitle, params, resolvedWorkspaceCatalogueItem]);
+  }, [form, ticketType, catalogItem, prefillTitle, params, resolvedWorkspaceCatalogueItem, workspaceTicketContext, pdmProxyMode]);
+
 
   // SCRIPT_989_CLASSIFICATION_SUMMARY_SYNC
   const priorSuggestedSummaryRef = useRef("");
@@ -769,13 +844,13 @@ export default function TicketCreatePage({ lockedType = null }) {
       case "Emergency":
         return {
           tone: "red",
-          title: "Emergency change ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â CAB approval required",
+          title: "Emergency change - CAB approval required",
           body: "Use only for production-restoring changes. IT will fast-track CAB review after submission.",
         };
       case "Major":
         return {
           tone: "amber",
-          title: "Major change ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â CAB approval required",
+          title: "Major change - CAB approval required",
           body: "High-impact changes are held in Waiting Approval until CAB (or change manager) authorises rollout.",
         };
       case "Standard":
@@ -795,9 +870,31 @@ export default function TicketCreatePage({ lockedType = null }) {
 
   const submit = async (event) => {
     event.preventDefault();
+    const catalogueSummary = resolvedWorkspaceCatalogueItem?.item_name || form.itemCategory || prefillTitle;
+    const ticketTitle = form.title.trim() || (
+      autoRouteTicket && ["incident", "service_request"].includes(ticketType) ? catalogueSummary : ""
+    );
+    const generatedDescription = autoRouteTicket &&
+      ["incident", "service_request"].includes(ticketType) &&
+      resolvedWorkspaceCatalogueItem
+      ? `Reported issue: ${[
+        resolvedWorkspaceCatalogueItem.category,
+        resolvedWorkspaceCatalogueItem.sub_category,
+        resolvedWorkspaceCatalogueItem.item_name,
+      ].filter(Boolean).join(" / ")}. No additional details were provided at intake.`
+      : "";
+    const ticketDescription = descriptionBody || generatedDescription;
 
     if (requestingForSomeoneElse && !form.requesterId) {
       setError("Select the employee this ticket is for before submitting.");
+      return;
+    }
+    if (isPdmWorkspace && requestingForSomeoneElse && !pdmProxyMode) {
+      setError("Only Production operators may submit a PDM report on behalf of a supervisor.");
+      return;
+    }
+    if (pdmProxyMode && form.pdmSupervisorUnavailableReason.trim().length < 10) {
+      setError("Explain why the supervisor cannot access their email account (at least 10 characters).");
       return;
     }
 
@@ -805,17 +902,20 @@ export default function TicketCreatePage({ lockedType = null }) {
     setDuplicateTicket(null);
     setReviewing(false);
 
-    if (!form.title.trim()) {
+    if (!ticketTitle) {
       return setError("A short summary is required.");
     }
 
-    if (!form.description.trim()) {
+    if (ticketType === "incident" && selectedCatalogueIsOther && !otherCategoryOptions.includes(form.category)) {
+      return setError("Select whether the Other incident is Hardware / Equipment, Application Software, Network, or Office Applications.");
+    }
+    if (!ticketDescription) {
       return setError("A detailed description is required.");
     }
-    if (!form.assignedToUserId) {
-      return setError("Select an eligible agent before reviewing this request.");
+    if (!autoRouteTicket && !form.assignedToUserId) {
+      if (!employee) return setError("Select an eligible agent before reviewing this request.");
     }
-    if (!form.assignedGroupId) {
+    if (!autoRouteTicket && !form.assignedGroupId) {
       return setError("Select a support team for the chosen agent.");
     }
 
@@ -866,7 +966,7 @@ export default function TicketCreatePage({ lockedType = null }) {
       if (!form.projectScope.trim()) return setError("Project scope is required.");
       if (!form.projectDeliverables.trim()) return setError("Project deliverables are required.");
     }
-    if (!reviewing) {
+    if (!reviewing && !autoRouteTicket) {
       setReviewing(true);
       window.scrollTo({ top: 0, behavior: "smooth" });
       return;
@@ -882,7 +982,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     try {
       const category =
         ticketType === "incident"
-          ? form.category
+          ? resolvedWorkspaceCatalogueItem?.category || form.category
           : ticketType === "service_request"
             ? catalogItem?.ticketCategory ||
               catalogItem?.categoryName ||
@@ -891,11 +991,11 @@ export default function TicketCreatePage({ lockedType = null }) {
               ? "Hardware Provisioning"
               : ticketType === "project"
                 ? "Project Management"
-                : form.category || "Change";
+                : ticketType === "incident" ? resolvedWorkspaceCatalogueItem?.category || "Incident" : form.category || "Change";
 
       const subCategory =
         ticketType === "incident"
-          ? form.subCategory || null
+          ? resolvedWorkspaceCatalogueItem?.sub_category || form.subCategory || null
           : ticketType === "service_request"
             ? catalogItem?.ticketSubCategory ||
               catalogItem?.name ||
@@ -909,7 +1009,7 @@ export default function TicketCreatePage({ lockedType = null }) {
 
       const itemCategory =
         ticketType === "incident"
-          ? form.itemCategory || null
+          ? resolvedWorkspaceCatalogueItem?.item_name || form.itemCategory || null
           : ticketType === "asset_request"
             ? form.assetItem || null
             : null;
@@ -918,9 +1018,9 @@ export default function TicketCreatePage({ lockedType = null }) {
         {
           ticketType,
           requesterId: form.requesterId || undefined,
-          title: form.title.trim(),
-          description: descriptionBody,
-          priority: employee && !form.isMajorIncident && ["High", "Critical"].includes(form.priority) ? "Medium" : form.priority,
+          title: ticketTitle,
+          description: ticketDescription,
+          priority: employee && !isPdmWorkspace && !form.isMajorIncident && ["High", "Critical"].includes(form.priority) ? "Medium" : form.priority,
           workspace: form.workspace,
           assignedGroupId: form.assignedGroupId || null,
           assignedToUserId: form.assignedToUserId,
@@ -934,7 +1034,11 @@ export default function TicketCreatePage({ lockedType = null }) {
                 ? form.changeImpact
                 : undefined,
           urgency: ticketType === "incident" ? form.urgency : undefined,
-          source: "Portal",
+          source: pdmProxyMode
+            ? "PDM Operator Proxy"
+            : isPdmWorkspace
+              ? "PDM Line Issue"
+              : workspaceTicketContext?.source || "Portal",
           requestDetails,
         },
         files
@@ -947,7 +1051,7 @@ export default function TicketCreatePage({ lockedType = null }) {
       if (submitError?.response?.status === 409 && existing) {
         setDuplicateTicket(existing);
         setError(
-          "A similar ticket was created moments ago ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â it may already be in progress."
+          "A similar ticket was created moments ago - it may already be in progress."
         );
       } else {
         setError(message(submitError, "The ticket could not be created."));
@@ -966,6 +1070,7 @@ export default function TicketCreatePage({ lockedType = null }) {
     setReviewing(false);
     setForm((current) => ({
       ...current,
+      requesterId: pdmProxyMode ? "" : current.requesterId,
       title: "",
       description: "",
       priority: "Medium",
@@ -976,6 +1081,7 @@ export default function TicketCreatePage({ lockedType = null }) {
       businessImpact: "",
       impactedLocations: "",
       customersImpacted: "",
+      pdmSupervisorUnavailableReason: "",
       category: "",
       subCategory: "",
       itemCategory: "",
@@ -1117,10 +1223,10 @@ export default function TicketCreatePage({ lockedType = null }) {
         ? "Hardware Provisioning"
         : ticketType === "project"
           ? "Project Management"
-          : form.category || "Change";
+          : ticketType === "incident" ? resolvedWorkspaceCatalogueItem?.category || "Incident" : form.category || "Change";
   const reviewSubCategory =
     ticketType === "incident"
-      ? form.subCategory || null
+      ? resolvedWorkspaceCatalogueItem?.sub_category || null
       : ticketType === "service_request"
         ? resolvedWorkspaceCatalogueItem?.sub_category || catalogItem?.ticketSubCategory || catalogItem?.name || prefillTitle || null
         : ticketType === "asset_request"
@@ -1230,6 +1336,17 @@ export default function TicketCreatePage({ lockedType = null }) {
       </OperationsShell>
     );
   }
+  if (ticketType === "incident" && !resolvedWorkspaceCatalogueItem && !isPdmWorkspace) {
+    return (
+      <OperationsShell breadcrumb="Home > Report an Incident" title="Report an Incident" contentClassName="ticket-create-page bg-[var(--portal-bg)] px-4 py-4 lg:px-6">
+        <div className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-soft">
+          <h1 className="text-xl font-black text-slate-950">Choose an Incident from the catalogue</h1>
+          <p className="mt-2 text-sm text-slate-600">Incident category, sub-category and item are governed by Workspace Catalogue Manager and cannot be selected manually on this form.</p>
+          <button type="button" onClick={() => navigate(incidentCataloguePath)} className="mt-5 rounded-xl bg-[#172b57] px-5 py-3 text-sm font-bold text-white">Open Incident Catalogue</button>
+        </div>
+      </OperationsShell>
+    );
+  }
   return (
     <OperationsShell
       breadcrumb={`Home > ${module.label}`}
@@ -1266,6 +1383,11 @@ export default function TicketCreatePage({ lockedType = null }) {
             </div>
 
             <div className="p-6 sm:p-8">
+              {created.catalogueNotice ? (
+                <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-800">
+                  {created.catalogueNotice}
+                </p>
+              ) : null}
               <h2 className="text-xs font-bold uppercase tracking-[0.14em] text-slate-400">
                 What happens next
               </h2>
@@ -1387,19 +1509,32 @@ export default function TicketCreatePage({ lockedType = null }) {
             ) : null}
 
             {requestingForSomeoneElse ? (
-              <Field label="Requester">
+              <Field label={pdmProxyMode ? "Production supervisor this report is for" : "Requester"}>
                 <select
                   value={form.requesterId}
                   onChange={(event) => update("requesterId", event.target.value)}
                   className="input"
                 >
-                  <option value="">Select active employee</option>
-                  {requesters.map((item) => (
+                  <option value="">{pdmProxyMode ? "Select active Production supervisor" : "Select active employee"}</option>
+                  {(pdmProxyMode ? pdmSupervisorRequesters : requesters).map((item) => (
                     <option key={item.id} value={item.id}>
                       {item.name} ({item.email})
                     </option>
                   ))}
                 </select>
+              </Field>
+            ) : null}
+            {pdmProxyMode ? (
+              <Field label="Why can't the supervisor access their email account?">
+                <textarea
+                  rows={3}
+                  value={form.pdmSupervisorUnavailableReason}
+                  onChange={(event) => update("pdmSupervisorUnavailableReason", event.target.value)}
+                  className="input"
+                  minLength={10}
+                  required={!autoRouteTicket}
+                  placeholder="Describe the email sign-in problem preventing the supervisor from reporting this issue."
+                />
               </Field>
             ) : null}
 
@@ -1443,7 +1578,7 @@ export default function TicketCreatePage({ lockedType = null }) {
               </div>
             ) : null}
 
-            <Field label="Short Summary">
+            {!isPdmWorkspace ? <Field label="Short Summary">
               <input
                 value={form.title}
                 onChange={(event) => update("title", event.target.value)}
@@ -1451,7 +1586,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                 readOnly={lockCatalogueTitle}
                 aria-describedby={lockCatalogueTitle ? "catalogue-title-lock" : undefined}
                 className="input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700"
-                required
+                required={!autoRouteTicket}
                 placeholder={
                   ticketType === "incident"
                     ? "e.g. Cannot connect to VPN"
@@ -1465,47 +1600,14 @@ export default function TicketCreatePage({ lockedType = null }) {
                   Short Summary is governed by the selected catalogue item.
                 </p>
               ) : null}
-            </Field>
-            {ticketType === "incident" ? (<div className="mb-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-400">
-                    Common issues
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {GUIDED_INCIDENTS.map((guide) => {
-                      const GuideIcon = guide.icon;
-                      const active =
-                        form.category === guide.category &&
-                        form.subCategory === guide.subCategory;
-                      return (
-                        <button
-                          key={guide.key}
-                          type="button"
-                          title={guide.description}
-                          onClick={() =>
-                            navigate(guidedIncidentPath(guide), {
-                              replace: true,
-                            })
-                          }
-                          className={
-                            active
-                              ? "inline-flex items-center gap-2 rounded-full border border-[#172b57]/30 bg-[#172b57]/[0.08] px-3 py-1.5 text-xs font-bold text-[#172b57]"
-                              : "inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:border-[#172b57]/30 hover:text-[#172b57]"
-                          }
-                        >
-                          <GuideIcon className="h-3.5 w-3.5" />
-                          {guide.title}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>) : null}
+            </Field> : (
+              <p className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs text-cyan-900">
+                Summary is generated from the selected PDM catalogue item.
+              </p>
+            )}
 
-            <Field
-              label={
-                ticketType === "change"
-                  ? "Description"
-                  : "Detailed Description"
-              }
+            {!isPdmWorkspace ? <Field
+              label={autoRouteTicket ? "Additional details (optional)" : ticketType === "change" ? "Description" : "Detailed Description"}
             >
               <textarea
                 rows={ticketType === "change" ? 4 : 5}
@@ -1523,26 +1625,56 @@ export default function TicketCreatePage({ lockedType = null }) {
                         : "Provide the details IT needs to fulfil this request..."
                 }
               />
-            </Field>
+            </Field> : null}
 
             {ticketType === "incident" ? (
               <Section title="Classification">
-                <CategoryCascade
-                  tree={incidentCategories}
-                  category={form.category}
-                  subCategory={form.subCategory}
-                  itemCategory={form.itemCategory}
-                  required
-                  onChange={({ category, subCategory, itemCategory }) =>
-                    setForm((current) => ({
-                      ...current,
-                      category,
-                      subCategory,
-                      itemCategory,
-                    }))
-                  }
-                />
-                <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+  <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-500">Incident catalogue item</p>
+  <h3 className="mt-2 text-base font-black text-slate-950">{resolvedWorkspaceCatalogueItem?.item_name || "Select an Incident from the catalogue"}</h3>
+  <p className="mt-1 text-sm text-slate-600">{resolvedWorkspaceCatalogueItem ? [resolvedWorkspaceCatalogueItem.category, resolvedWorkspaceCatalogueItem.sub_category].filter(Boolean).join(" / ") : "A governed catalogue item is required before the Incident can be submitted."}</p>
+  {isPdmWorkspace ? (
+    <div className="mt-4">
+      <CategoryCascade
+        tree={incidentCategories}
+        category={form.category}
+        subCategory={form.subCategory}
+        itemCategory={form.itemCategory}
+        required
+        onChange={({ category, subCategory, itemCategory }) =>
+          setForm((current) => ({
+            ...current,
+            category,
+            subCategory,
+            itemCategory,
+          }))
+        }
+      />
+      <p className="mt-2 text-xs text-slate-500">Choose the application, machine, or process issue from the managed PDM line catalogue.</p>
+    </div>
+  ) : (
+    <button type="button" onClick={() => navigate(incidentCataloguePath)} className="mt-3 inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700">Choose another Incident</button>
+  )}
+</div>
+                {selectedCatalogueIsOther ? (
+                  <Field label="Category">
+                    <select
+                      value={form.category}
+                      onChange={(event) => update("category", event.target.value)}
+                      className="input"
+                      required
+                    >
+                      <option value="">Select the type of issue</option>
+                      {otherCategoryOptions.map((option) => (
+                        <option key={option} value={option}>{option}</option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-slate-500">The catalogue item remains Other. Choose the closest category so IT can route and review the unlisted issue.</p>
+                  </Field>
+                ) : null}
+                <div className={`mt-4 grid gap-4 ${isPdmWorkspace ? "md:grid-cols-1" : "md:grid-cols-3"}`}>
+                  {!isPdmWorkspace ? (
+                    <>
                   <SegmentedField
                     label="Impact"
                     hint="How many people are affected?"
@@ -1557,24 +1689,27 @@ export default function TicketCreatePage({ lockedType = null }) {
                     value={form.urgency}
                     onChange={(value) => update("urgency", value)}
                   />
+                    </>
+                  ) : null}
                   <Field label="Priority">
                     <select
                       value={form.priority}
                       onChange={(event) => update("priority", event.target.value)}
-                      disabled={lockCataloguePriority || form.isMajorIncident}
-                      aria-describedby={lockCataloguePriority ? "catalogue-priority-lock" : undefined}
+                      disabled={cataloguePriorityLocked || form.isMajorIncident}
+                      aria-describedby={cataloguePriorityLocked ? "catalogue-priority-lock" : undefined}
                       className="input disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-700"
                     >
-                      {(fields.incident.priority || []).map((value) => (
+                      {incidentPriorityOptions.map((value) => (
                         <option key={value}>{value}</option>
                       ))}
                     </select>
                     <p className="mt-1 text-xs text-slate-500">
-                      {lockCataloguePriority ? "Priority is governed by the selected catalogue item." : "Suggested from impact and urgency - adjust if needed."}
+                      {cataloguePriorityLocked ? "Priority is governed by the selected catalogue item." : "Suggested from impact and urgency - adjust if needed."}
                     </p>
                   </Field>
                 </div>
 
+                {!isPdmWorkspace && (
                 <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
                   <label className="flex items-start gap-3">
                     <input
@@ -1647,8 +1782,9 @@ export default function TicketCreatePage({ lockedType = null }) {
                         </Field>
                       </div>
                     </div>
-                  ) : null}
+                    ) : null}
                 </div>
+                )}
               </Section>
             ) : null}
 
@@ -1827,7 +1963,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                   </Field>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  Pick a window outside business hours where possible ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â IT
+                  Pick a window outside business hours where possible - IT
                   confirms the final schedule with you.
                 </p>
               </Section>
@@ -1942,13 +2078,25 @@ export default function TicketCreatePage({ lockedType = null }) {
               </Field>
             ) : null}
 
+            {autoRouteTicket ? (
+              <section className="rounded-2xl border border-sky-200 bg-sky-50/60 p-4 sm:p-5">
+                <h2 className="text-sm font-bold text-slate-800">Automatic support routing</h2>
+                <p className="mt-1 text-xs text-slate-600">
+                  {isPdmWorkspace
+                    ? "This line issue will be routed to the PDM Line Support group."
+                    : isProductionUser
+                      ? "Production Network issues are routed to the IT support group."
+                      : "Your request will be routed to the appropriate IT support group."}
+                </p>
+              </section>
+            ) : (
             <section className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4 sm:p-5">
               <div>
                 <h2 className="text-sm font-bold text-slate-800">
                   Select an agent <span className="text-red-600">*</span>
                 </h2>
                 <p className="mt-1 text-xs text-slate-500">
-                  Choose the eligible agent who should receive this request. An agent must be selected before review or submission.
+                  Helpdesk operations may propose an eligible agent. Employee requests are submitted to the governed support-group queue for acceptance.
                 </p>
               </div>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -1972,7 +2120,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                   </select>
                   {!loadingAgents && agents.length === 0 ? (
                     <p className="mt-1 text-xs font-semibold text-red-700">
-                      No eligible agents are available for this classification. Contact the Helpdesk before submitting.
+                      No eligible agents are currently listed. The request can still enter the governed support-group queue.
                     </p>
                   ) : (
                     <p className="mt-1 text-xs text-slate-500">
@@ -2016,6 +2164,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                 </Field>
               </div>
             </section>
+            )}
             <Field label="Attachments">
               <label
                 onDragOver={(event) => {
@@ -2098,10 +2247,14 @@ export default function TicketCreatePage({ lockedType = null }) {
               </button>
               <button
                 type="submit"
-                disabled={submitting || !form.assignedToUserId || !form.assignedGroupId}
+                disabled={submitting || (!autoRouteTicket && (!form.assignedToUserId || !form.assignedGroupId))}
                 className="rounded-xl bg-[#172b57] px-6 py-3 font-bold text-white transition hover:bg-[#1f376c] disabled:opacity-60"
               >
-                {submitting ? "Preparing review..." : "Review request"}
+                {submitting
+                  ? "Submitting..."
+                  : autoRouteTicket
+                    ? isPdmWorkspace ? "Submit line issue" : "Submit ticket"
+                    : "Review request"}
               </button>
             </div>
           </form>
@@ -2120,10 +2273,12 @@ export default function TicketCreatePage({ lockedType = null }) {
                   ticketType === "service_request"
                     ? catalogItem?.categoryName || "Service Catalog"
                     : ticketType === "asset_request"
-                      ? form.assetItem || "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
-                      : [form.category, form.subCategory]
+                      ? form.assetItem || "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’â€¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â"
+                      : ticketType === "incident"
+                        ? [resolvedWorkspaceCatalogueItem?.category, resolvedWorkspaceCatalogueItem?.sub_category].filter(Boolean)
+                        : [form.category, form.subCategory]
                           .filter(Boolean)
-                          .join(" Ãƒâ€š -  ") || "ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â"
+                          .join(" ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ -  ") || "ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’â€¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â"
                 }
               />
               <RailRow
@@ -2150,7 +2305,7 @@ export default function TicketCreatePage({ lockedType = null }) {
                     label="Window"
                     value={
                       form.plannedStart && form.plannedEnd
-                        ? `${form.plannedStart.replace("T", " ")} ÃƒÂ¢Ã¢â‚¬Â Ã¢â‚¬â„¢ ${form.plannedEnd.replace("T", " ")}`
+                        ? `${form.plannedStart.replace("T", " ")} ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’â€¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’â€¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’â€¦Ãƒâ€šÃ‚Â¾ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ ${form.plannedEnd.replace("T", " ")}`
                         : "Not set"
                     }
                   />

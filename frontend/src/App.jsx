@@ -15,12 +15,14 @@ import { useAuth } from "./hooks/useAuth";
 
 import AdminAuditPage from "./pages/AdminAuditPage";
 import AdminHealthPage from "./pages/AdminHealthPage";
+import WorkflowObservabilityPage from "./pages/WorkflowObservabilityPage";
 import AdminMicrosoftDirectory from "./pages/AdminMicrosoftDirectory";
 import AdminSettings from "./pages/AdminSettings";
 import AdminUsers from "./pages/AdminUsers";
 import AccessRequestsPage from "./pages/AccessRequestsPage";
 import AssetsPage from "./pages/AssetsPage";
 import Dashboard from "./pages/Dashboard";
+import CompanyCommunicationsPage from "./pages/CompanyCommunicationsPage";
 import EmployeeAccessPreview from "./pages/EmployeeAccessPreview";
 import EmployeeDashboard from "./pages/EmployeeDashboard";
 import LoginPage from "./pages/LoginPage";
@@ -41,10 +43,21 @@ import GroupManagementPage from "./pages/GroupManagementPage";
 import Workspaces from "./pages/Workspaces";
 import WorkspaceCatalogueManager from "./pages/WorkspaceCatalogueManager";
 import WorkspaceDashboard from "./pages/WorkspaceDashboard";
-import FinanceWorkspace from "./pages/FinanceWorkspace";
-import ProcessEngineeringWorkspace from "./pages/ProcessEngineeringWorkspace";
+import FinanceWorkspace from "./pages/FinanceWorkspace";
+import FinanceTicketDetailPage from "./pages/FinanceTicketDetailPage";
+import PdmOperationsDashboard from "./pages/PdmOperationsDashboard";
 import KnowledgePage from "./pages/KnowledgePage";
 import RequestCatalogPage from "./pages/RequestCatalogPage";
+import IncidentCatalogPage from "./pages/IncidentCatalogPage";
+import ErrorLoggerPage from "./pages/ErrorLoggerPage";
+import ItDashboardPage from "./pages/ItDashboardPage";
+import LineAssistancePage from "./pages/LineAssistancePage";
+import GuestLineIntakePage, { GuestLineApprovalPage } from "./pages/GuestLineIntakePage";
+import HrWorkspacePage from "./pages/HrWorkspacePage";
+import ProjectManagementPage from "./pages/ProjectManagementPage";
+import ProjectReviewPage from "./pages/ProjectReviewPage";
+import AtdPulseErrorBoundary from "./components/pulse/AtdPulseErrorBoundary";
+import { setupPulseFrontend } from "./utils/setupPulseFrontend";
 import { formPathForType } from "./data/requestModules";
 
 const MODULE_BASES = {
@@ -307,6 +320,8 @@ function AppRoutes({ moduleBase }) {
       <Route path="/waiting-approval" element={<WaitingApproval />} />
       <Route path="/terms" element={<TermsAcceptancePage />} />
       <Route path="/onboarding" element={<FirstLoginOnboardingPage />} />
+      <Route path="/guest-line-assistance" element={<GuestLineIntakePage />} />
+      <Route path="/guest-line-assistance/approve" element={<GuestLineApprovalPage />} />
 
       <Route
         path="/"
@@ -374,6 +389,15 @@ function AppRoutes({ moduleBase }) {
       />
 
       <Route
+        path="/incidents/catalogue"
+        element={
+          <PrivateRoute>
+            <IncidentCatalogPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
         path="/incidents/new"
         element={
           <PrivateRoute>
@@ -434,6 +458,7 @@ function AppRoutes({ moduleBase }) {
           </PrivateRoute>
         }
       />
+        <Route path="/finance-workspace/tickets/:id" element={<PrivateRoute><FinanceWorkspaceRoute><FinanceTicketDetailPage /></FinanceWorkspaceRoute></PrivateRoute>} />
 
       <Route
         path="/tickets/:id"
@@ -506,6 +531,17 @@ function AppRoutes({ moduleBase }) {
       />
 
       <Route
+        path="/company-communications"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <CompanyCommunicationsPage />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
         path="/admin/users"
         element={
           <PrivateRoute>
@@ -552,7 +588,7 @@ function AppRoutes({ moduleBase }) {
           path="/process-engineering-workspace"
           element={
             <PrivateRoute>
-              <ProcessEngineeringWorkspace />
+              <PdmOperationsDashboard />
             </PrivateRoute>
           }
         />      <Route
@@ -562,6 +598,15 @@ function AppRoutes({ moduleBase }) {
             <FinanceWorkspaceRoute>
               <FinanceWorkspace />
             </FinanceWorkspaceRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/line-assistance"
+        element={
+          <PrivateRoute>
+            <LineAssistancePage />
           </PrivateRoute>
         }
       />
@@ -621,29 +666,93 @@ function AppRoutes({ moduleBase }) {
       />
 
       <Route
+        path="/admin/workflow-observability"
+        element={
+          <PrivateRoute>
+            <RoleRoute allowedRoles={["admin", "superadmin"]}>
+              <WorkflowObservabilityPage />
+            </RoleRoute>
+          </PrivateRoute>
+        }
+      />
+
+      <Route
+        path="/error-logger"
+        element={
+          <PrivateRoute>
+            <RoleRoute allowedRoles={["admin", "superadmin"]}>
+              <ErrorLoggerPage />
+            </RoleRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/admin/project-review"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <ProjectReviewPage />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/it-dashboard"
+        element={
+          <PrivateRoute>
+            <AdminRoute>
+              <ItDashboardPage />
+            </AdminRoute>
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/hr-workspace"
+        element={
+          <PrivateRoute>
+            <HrWorkspacePage />
+          </PrivateRoute>
+        }
+      />
+      <Route
+        path="/project-workspace"
+        element={
+          <PrivateRoute>
+            <ProjectManagementPage />
+          </PrivateRoute>
+        }
+      />
+
+      <Route
         path="*"
         element={<Navigate to="/" replace />}
       />
 </Routes>
-  );
+   );
 }
 
 export default function App() {
   const moduleBase = getModuleBase();
 
+  useEffect(() => {
+    setupPulseFrontend();
+  }, []);
+
   return (
-    <AuthProvider>
-      <ToastProvider>
-      <BrowserRouter
-        basename={moduleBase}
-        future={{
-          v7_startTransition: true,
-          v7_relativeSplatPath: true,
-        }}
-      >
-        <AppRoutes moduleBase={moduleBase} />
-      </BrowserRouter>
-      </ToastProvider>
-    </AuthProvider>
+    <AtdPulseErrorBoundary>
+      <AuthProvider>
+        <ToastProvider>
+        <BrowserRouter
+          basename={moduleBase}
+          future={{
+            v7_startTransition: true,
+            v7_relativeSplatPath: true,
+          }}
+        >
+          <AppRoutes moduleBase={moduleBase} />
+        </BrowserRouter>
+        </ToastProvider>
+      </AuthProvider>
+    </AtdPulseErrorBoundary>
   );
 }
