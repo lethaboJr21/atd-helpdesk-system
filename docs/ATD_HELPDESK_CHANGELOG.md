@@ -6,3 +6,10 @@
 - Updated Incident guidance to describe support-group routing and agent acceptance.
 - Production catalogue-category mapping migration had already been restored.
 
+
+## 2026-11-23 - Incident catalogue and optional agent recovery
+- Restored the live Incident catalogue from the validated local managed Incident catalogue.
+- Agent selection is optional for employees. Choosing an agent proposes that agent; leaving it blank uses the support-group queue.
+- Service Request and Incident routing continue to use managed catalogue IDs.
+- Production rows are backed up before catalogue synchronization.
+
