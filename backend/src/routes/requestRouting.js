@@ -13,12 +13,12 @@ router.get("/resolve",async(req,res,next)=>{try{const ruleKey=clean(req.query.ru
 router.post("/validate",async(req,res,next)=>{try{
   const ruleKey=clean(req.body.ruleKey,120);
   const assigneeId=req.body.assignedToUserId?Number(req.body.assignedToUserId):null;
-  const submissionMode=clean(req.body.submissionMode,30)||"propose_assignee";
+  const submissionMode=clean(req.body.submissionMode,30)||"group_queue";
   if(!["group_queue","propose_assignee"].includes(submissionMode))return res.status(400).json({code:"SUBMISSION_MODE_INVALID",error:"Choose a valid governed routing mode."});
   if(submissionMode==="propose_assignee"&&(!Number.isInteger(assigneeId)||assigneeId<1))return res.status(400).json({code:"AGENT_REQUIRED",error:"Select an eligible agent for the proposed-assignee workflow."});
   const rule=await ruleByKey(ruleKey);
   if(!rule)return res.status(404).json({code:"ROUTING_RULE_NOT_FOUND",error:"The selected routing option is unavailable."});
-  const eligible=await pool.query(`SELECT 1 FROM support_group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1 AND u.id=$2 AND u.approved=TRUE AND u.status='active' AND u.archived_at IS NULL AND COALESCE(u.account_type,'person')='person' AND COALESCE(u.microsoft_account_enabled,TRUE)=TRUE AND u.role IN ('agent','operator','manager','admin','superadmin')`,[rule.target_group_id,assigneeId]);
+  const eligible=submissionMode==="propose_assignee"?await pool.query(`SELECT 1 FROM support_group_members gm JOIN users u ON u.id=gm.user_id WHERE gm.group_id=$1 AND u.id=$2 AND u.approved=TRUE AND u.status='active' AND u.archived_at IS NULL AND COALESCE(u.account_type,'person')='person' AND COALESCE(u.microsoft_account_enabled,TRUE)=TRUE AND u.role IN ('agent','operator','manager','admin','superadmin')`,[rule.target_group_id,assigneeId]):{rowCount:1};
   if(!eligible.rowCount)return res.status(400).json({code:"AGENT_NOT_ELIGIBLE",error:"The selected person is not an eligible active member of the routed support group."});
   return res.json({valid:true,mode:await mode(),submissionMode,routing:{targetGroupId:rule.target_group_id,targetGroupName:rule.target_group_name,category:rule.category,subCategory:rule.sub_category,itemCategory:rule.item_category},proposedAssigneeUserId:submissionMode==="propose_assignee"?assigneeId:null});
 }catch(error){return next(error);}});
