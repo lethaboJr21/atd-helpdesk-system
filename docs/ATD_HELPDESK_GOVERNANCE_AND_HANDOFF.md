@@ -550,3 +550,11 @@ Preserve all existing tracker filenames, sections and history. Continue major im
 - Employee Impact and Urgency are disabled and calculated from Priority.
 - Backend canonicalizes employee Impact and Urgency from governed Priority.
 
+
+## 2026-11-24 - Ticket submission runtime contract recovery
+- Root cause: production tickets.js imported resolveUserWorkspace from financeAccess.js, but production financeAccess.js did not export the function.
+- Restore the matching financeAccess.js contract and validate POST /api/tickets route loading before restart.
+- Public Apache frontend root is /var/www/helpdesk; validated build source is /var/www/atd-helpdesk/frontend/dist.
+- Employee form now includes optional Preferred IT Agent and disabled Priority-calculated Impact/Urgency.
+- Incident catalogue is restored to 25 active unique items with one canonical Other.
+- Next programme: superadmin-only platform layout, authorized workspace navigation, IT management dashboard first, leadership account matching, reporting registry, then remaining departmental dashboards.
