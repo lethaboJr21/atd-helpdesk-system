@@ -118,7 +118,7 @@ function assignmentLabel(ticket){
   if(!ticket)return "Unassigned";
   const agent=ticket.assigned_to_name||(ticket.assigned_to_user_id?`User #${ticket.assigned_to_user_id}`:"Unassigned");
   const group=ticket.assigned_group_name||(ticket.assigned_group_id?`Group #${ticket.assigned_group_id}`:"No group");
-  return `${agent} · ${group}`;
+  return `${agent} Â· ${group}`;
 }
 function emitTicketChange(req,changeType,ticket){
   const io=req.app.get("io");
@@ -653,8 +653,8 @@ router.post("/",optionalAttachments,async(req,res)=>{
   const category=text(req.body.category,120)||null;
   const subCategory=text(req.body.subCategory||req.body.sub_category,120)||null;
   const itemCategory=text(req.body.itemCategory||req.body.item_category,120)||null;
-  const impact=level(req.body.impact,["Low","Medium","High"]);
-  const urgency=level(req.body.urgency,["Low","Medium","High"]);
+  let impact=level(req.body.impact,["Low","Medium","High"]);
+let urgency=level(req.body.urgency,["Low","Medium","High"]);
   const source=text(req.body.source,50)||"Portal";
   const financeWorkspace=normaliseWorkspaceCode(workspace)==="FIN";
   const financeMetadata=req.body.financeMetadata&&typeof req.body.financeMetadata==="object"&&!Array.isArray(req.body.financeMetadata)
@@ -752,6 +752,7 @@ router.post("/",optionalAttachments,async(req,res)=>{
       ticketPriority=catalogueLink.defaults.priority;
     }
     ticketPriority=ticketGovernance.requesterPriority(req.user,ticketPriority,{allowHigh:pdmIntake.allowHigh});
+if(String(req.user?.role||"").toLowerCase()==="user"){const m={Low:["Low","Low"],Medium:["Medium","Medium"],High:["High","High"],Critical:["High","High"]}[ticketPriority]||["Medium","Medium"];impact=m[0];urgency=m[1];}
     if(catalogueLink&&catalogueLink.defaults.priorityLocked&&catalogueLink.defaults.priority){
       ticketPriority=catalogueLink.defaults.priority;
     }
@@ -1096,7 +1097,7 @@ router.post("/:id/assign",allowTicketOperations,async(req,res)=>{
   }
 });
 /**
- * Requester-driven assignment — employees may pick or change the agent on
+ * Requester-driven assignment â€” employees may pick or change the agent on
  * their own active tickets. The group follows the agent's membership so the
  * assignment always stays valid.
  */

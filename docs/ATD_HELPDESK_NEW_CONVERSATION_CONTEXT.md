@@ -526,3 +526,9 @@ Workspaces is the reusable departmental framework. IT is the default template, w
 - Blank selection uses the support-group queue; selecting an eligible agent uses proposed-assignee routing.
 - Production Incident catalogue remains 25 active unique items with one canonical Other.
 
+
+## 2026-11-24 - Employee form final repair v2
+- Preferred Agent selector retained for auto-routed tickets.
+- Employee Impact and Urgency are disabled and calculated from Priority.
+- Backend canonicalizes employee Impact and Urgency from governed Priority.
+
