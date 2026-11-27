@@ -33,3 +33,12 @@
 - Employee form now includes optional Preferred IT Agent and disabled Priority-calculated Impact/Urgency.
 - Incident catalogue is restored to 25 active unique items with one canonical Other.
 - Next programme: superadmin-only platform layout, authorized workspace navigation, IT management dashboard first, leadership account matching, reporting registry, then remaining departmental dashboards.
+
+## 2026-11-27 - Finance membership and manager authority release gate
+- Production Finance membership repair completed: 25 active Finance employees now have active FIN workspace membership.
+- Finance employees keep global role user; workspace role uses the existing employee-equivalent role agent without granting Helpdesk Operations access.
+- Exact Finance managers aligned by authoritative email: bonganit@atdalliance.co.za, suphapornp@atdalliance.co.za, theeraphat@atdalliance.co.za, and jeffreym@atdalliance.co.za.
+- Existing Finance manager ATD-Wilawan Suwannasri was preserved.
+- Live Script 1125 gate passed: MISSING_FIN_MEMBERSHIP=0, Finance route present, IT Helpdesk jump present, API healthy.
+- Rollback snapshots: /tmp/atd1126_finance_membership_backup_20261127_125240.json and /tmp/atd1127_finance_manager_backup_20261127_125718.json.
+- Next: implement review authority/timestamps, countdown/absence/reminders, collaboration/multi-KPI, and email/form/mojibake batches.

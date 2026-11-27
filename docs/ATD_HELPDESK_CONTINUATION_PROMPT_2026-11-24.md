@@ -74,3 +74,12 @@ Keep one modular ATD Helpdesk platform with bounded workspace modules. Centraliz
 - docs/ATD_HELPDESK_NEW_CONVERSATION_CONTEXT.md
 - docs/ATD_HELPDESK_CONTINUATION_PROMPT_2026-11-24.md
 Merge duplicate backlog information into the main development tracker. Leave redirect notes in superseded tracker files.
+
+## 2026-11-27 - Finance membership and manager authority release gate
+- Production Finance membership repair completed: 25 active Finance employees now have active FIN workspace membership.
+- Finance employees keep global role user; workspace role uses the existing employee-equivalent role agent without granting Helpdesk Operations access.
+- Exact Finance managers aligned by authoritative email: bonganit@atdalliance.co.za, suphapornp@atdalliance.co.za, theeraphat@atdalliance.co.za, and jeffreym@atdalliance.co.za.
+- Existing Finance manager ATD-Wilawan Suwannasri was preserved.
+- Live Script 1125 gate passed: MISSING_FIN_MEMBERSHIP=0, Finance route present, IT Helpdesk jump present, API healthy.
+- Rollback snapshots: /tmp/atd1126_finance_membership_backup_20261127_125240.json and /tmp/atd1127_finance_manager_backup_20261127_125718.json.
+- Next: implement review authority/timestamps, countdown/absence/reminders, collaboration/multi-KPI, and email/form/mojibake batches.

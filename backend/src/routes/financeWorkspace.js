@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const auth = require("../middleware/auth");
 const allowRoles = require("../middleware/roles");
 const financeAccess = require("../middleware/financeAccess");
@@ -21,8 +21,11 @@ const { warnSchemaDrift } = require("../utils/schemaDriftWarning");
 const router = express.Router();
 const financeSharePointEvidenceRouter=require("./financeSharePointEvidence");
 router.use("/evidence",financeSharePointEvidenceRouter);
+
 router.use(auth);
 router.use(financeAccess.requireEntry);
+// FINANCE_SUBMISSION_AUTH_MOUNT_1130
+router.use("/submission-workflow",require("./financeSubmissionWorkflow"));
 
 async function assertKpiOwnerScope(req, ownerUserId) {
   const ownerId = Number(ownerUserId);
@@ -364,3 +367,4 @@ router.use("/reviewer-kpi",require("./financeReviewerKpi"));
 router.use("/scoring-parameters",require("./financeScoringParameters"));
 
 module.exports = router;
+

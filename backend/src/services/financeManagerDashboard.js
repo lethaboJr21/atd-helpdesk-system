@@ -1,4 +1,4 @@
-const pool = require("../db/pool");
+﻿const pool = require("../db/pool");
 
 const TARGET_KPI_SCORE = 80;
 
@@ -147,7 +147,7 @@ async function getReviewQueues() {
 async function getEvidenceQueue() {
   const r = await pool.query(
     `SELECT e.id,e.record_type workItemType,e.record_id workItemId,
-            COALESCE(e.evidence_name, 'Evidence #' || e.id) title,
+            COALESCE(e.title,e.file_name,e.evidence_reference,'Evidence #' || e.id) title,
             COALESCE(e.evidence_reference, '') evidenceDescription,
             e.review_status evidenceState,
             u.name assigneeName,
@@ -411,3 +411,4 @@ async function buildManagerDashboard({ managerUserId, period }) {
 }
 
 module.exports = { buildManagerDashboard, TARGET_KPI_SCORE };
+

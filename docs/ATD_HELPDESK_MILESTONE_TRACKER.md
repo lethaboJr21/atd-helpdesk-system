@@ -357,3 +357,67 @@ Canonical reference: Helpdesk Ticket workflow.pdf.
 - Production deployment remains changed-files-only with server backup before overwrite.
 - Local backup: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\Batch backups\script-1054-20261123_094547
 
+
+## Finance Workspace implementation checkpoint - 2026-11-26
+
+### Confirmed current state
+- Script 1082 read-only preflight passed. The live workspace membership constraint permits only manager, agent, or viewer.
+- Script 1084 comparison passed. lethabotest@gmail.com is an active approved global user in Finance with active Finance responsibility, no IT support-group membership, and no Operations Dashboard entitlement.
+- The Operations Dashboard exposure occurred when Finance staff were treated as global agents. Global portal role and workspace membership must remain separate.
+- Finance employees must remain global users and receive FIN workspace agent membership only.
+- Active Finance managers must remain global users and receive FIN workspace manager membership.
+- Finance employees and Finance managers must land automatically in Finance Workspace.
+- Finance employees must see Finance My Work, not Helpdesk Operations Dashboard.
+- Finance managers must retain Finance review/management scope and may switch to IT Helpdesk Employee View, where they remain ordinary users with no IT operational rights.
+- jeffreym@atdalliance.co.za remains platform superadmin with all-workspace governance and a future governed employee-view session function.
+- Finance access audit source requires VARCHAR(80); current 30-character width rejects department_position_responsibility.
+- SharePoint Graph authentication and drive/root read passed. Employee submission upload/read/delete canary remains required in the implementation validation.
+- KPI items and weights remain undeclared. Employee KPI creation/rating controls must remain disabled and KPI self-scoring protection must not be weakened.
+
+### Active implementation batch
+- Script 1086 is the current guarded local implementation for Finance employee and manager access.
+- The verified live repository root is: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk
+- Ignore nested .git metadata beneath Batch backups when locating the live repository.
+- Script 1086 has not yet completed. No successful implementation or deployment may be claimed until its report ends FINAL_RESULT=PASS.
+
+### Pending tasks in execution order
+1. Complete Script 1086 locally: FIN employee/manager memberships, Finance automatic landing, Finance employee dashboard isolation, manager IT Employee View switch, Finance audit-width repair, nodemon exclusions, frontend build and database verification.
+2. Implement Finance submission workflow: SharePoint evidence versioning, submission history, effective-deadline snapshot, provisional Timeliness 50% only when on time, and Awaiting First Review state.
+3. Implement first-review workflow: nominated reviewer email and in-app notification with direct authorised submission link, comments, approve/forward, or return for correction.
+4. Implement Finance manager final sign-off: direct link, first-review evidence/comments, final approval or return, manager comments, and Quality rating.
+5. Implement employee lifecycle communications: assignment, due-date amendment, submission receipt, correction, first approval, manager sign-off required, final outcome, and overdue reminders.
+6. Validate role isolation: Finance employee cannot open Operations Dashboard/Ticket Workspace; Finance manager switching to IT uses employee-level access; non-Finance users are denied Finance Workspace; superadmin remains governed.
+7. Validate SharePoint upload/read/download/version/history and email links against actual Finance tickets.
+8. Update canonical trackers after every batch; do not modify historical backups, release folders, reports, node_modules, dist, build, or .git.
+9. Deploy only after local implementation report, frontend build, backend checks, database verification, role tests, SharePoint canary, and email-link tests pass.
+10. After deployment verify public Finance employee and manager experiences, production health, audit records, direct links, and rollback readiness.
+
+### Failed/superseded scripts
+- Scripts 1074 through 1085 are superseded and must not be rerun.
+- Script 1086 supersedes the earlier access implementations.
+- Never patch a failed script. Deliver a complete replacement with its paired preflight and regression protections.
+
+### Handoff rule
+A new AI model must read these canonical files before proposing changes:
+1. docs/ATD_HELPDESK_NEW_CONVERSATION_CONTINUATION_PROMPT.md
+2. docs/ATD_HELPDESK_NEW_CONVERSATION_CONTEXT.md
+3. docs/ATD_HELPDESK_DEVELOPMENT_TRACKER.md
+4. docs/ATD_HELPDESK_MILESTONE_TRACKER.md
+Then inspect the latest Script 1086 report in reports/. If Script 1086 has not passed, continue from that exact blocker. Do not repeat completed discovery and do not run a standalone preflight.
+
+## Script 1114 Finance production identity/membership/audit repair - 2026-11-27T09:16:17
+- Restored lethabotest@gmail.com Finance department identity and active FIN agent membership while preserving global user role.
+- Created governed finance_access_decisions audit table with source VARCHAR(80) and supporting index.
+- Verified Finance review schema, Finance manager membership, API health and protected Finance routes; no PM2 restart required.
+- PRODUCTION_BACKUP=/home/atddev/atd-helpdesk-backups/finance-1114-20261127071615
+- Report: C:\Users\jeffrey.motepe\OneDrive - ATD-Alliance\Documents\atd-helpdesk-deployment\atd-helpdesk\reports\ATD_HELPDESK_SCRIPT_1114_FINANCE_IDENTITY_MEMBERSHIP_AUDIT_REPAIR_20261127_091602.txt
+
+
+## 2026-11-27 - Finance membership and manager authority release gate
+- Production Finance membership repair completed: 25 active Finance employees now have active FIN workspace membership.
+- Finance employees keep global role user; workspace role uses the existing employee-equivalent role agent without granting Helpdesk Operations access.
+- Exact Finance managers aligned by authoritative email: bonganit@atdalliance.co.za, suphapornp@atdalliance.co.za, theeraphat@atdalliance.co.za, and jeffreym@atdalliance.co.za.
+- Existing Finance manager ATD-Wilawan Suwannasri was preserved.
+- Live Script 1125 gate passed: MISSING_FIN_MEMBERSHIP=0, Finance route present, IT Helpdesk jump present, API healthy.
+- Rollback snapshots: /tmp/atd1126_finance_membership_backup_20261127_125240.json and /tmp/atd1127_finance_manager_backup_20261127_125718.json.
+- Next: implement review authority/timestamps, countdown/absence/reminders, collaboration/multi-KPI, and email/form/mojibake batches.
